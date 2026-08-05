@@ -1,0 +1,376 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum UserRole {
+  SYSTEM_OWNER
+  UNIVERSITY_SUPER_ADMIN
+  ADMIN
+  STUDENT
+}
+
+enum SessionStatus {
+  ACTIVE
+  CLOSED
+}
+
+enum AttendanceStatus {
+  PRESENT
+  LATE
+  ABSENT
+}
+
+enum SubscriptionStatus {
+  TRIAL
+  ACTIVE
+  PAST_DUE
+  CANCELLED
+  EXPIRED
+}
+
+enum BillingCycle {
+  MONTHLY
+  YEARLY
+}
+
+enum PaymentStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  REFUNDED
+}
+
+enum InvoiceStatus {
+  DRAFT
+  SENT
+  PAID
+  OVERDUE
+  CANCELLED
+}
+
+model User {
+
+  id              String   @id @default(uuid())
+
+  universityId    String   @unique
+
+  fullName        String
+
+  email           String   @unique
+
+  passwordHash    String
+
+  role            UserRole @default(STUDENT)
+
+  isVerified      Boolean  @default(false)
+
+  organizationId  String
+
+  organization    Organization @relation(fields: [organizationId], references: [id])
+
+  studentProfile  StudentProfile?
+
+  adminProfile    AdminProfile?
+
+  createdSessions Session[]    @relation("SessionCreator")
+
+  createdCourses  Course[]     @relation("CourseCreator")
+
+  attendances     Attendance[] @relation("StudentAttendance")
+
+  createdAt       DateTime @default(now())
+
+  updatedAt       DateTime @updatedAt
+
+}
+
+model SubscriptionPlan {
+
+  id              String       @id @default(uuid())
+
+  name            String       @unique
+
+  description     String?
+
+  monthlyPrice    Decimal      @db.Decimal(10, 2)
+
+  yearlyPrice     Decimal      @db.Decimal(10, 2)
+
+  maxUsers        Int
+
+  maxRobots       Int
+
+  maxCourses      Int
+
+  features        Json?
+
+  isActive        Boolean      @default(true)
+
+  createdAt       DateTime     @default(now())
+
+  updatedAt       DateTime     @updatedAt
+
+  subscriptions   Subscription[]
+
+}
+
+model Organization {
+
+  id                    String             @id @default(uuid())
+
+  name                  String
+
+  code                  String             @unique
+
+  email                 String?
+
+  phone                 String?
+
+  website               String?
+
+  logo                  String?
+
+  address               String?
+
+  subscriptionId        String?            @unique
+
+  subscription          Subscription?      @relation(fields: [subscriptionId], references: [id])
+
+  createdAt             DateTime           @default(now())
+
+  updatedAt             DateTime           @updatedAt
+
+  users                 User[]
+
+  sessions              Session[]
+
+  courses               Course[]
+
+  payments              Payment[]
+
+  invoices              Invoice[]
+
+}
+
+model Subscription {
+
+  id                    String             @id @default(uuid())
+
+  planId                String
+
+  plan                  SubscriptionPlan   @relation(fields: [planId], references: [id])
+
+  status                SubscriptionStatus @default(TRIAL)
+
+  billingCycle          BillingCycle       @default(MONTHLY)
+
+  currentPeriodStart    DateTime           @default(now())
+
+  currentPeriodEnd      DateTime
+
+  trialEndsAt           DateTime?
+
+  cancelledAt           DateTime?
+
+  createdAt             DateTime           @default(now())
+
+  updatedAt             DateTime           @updatedAt
+
+  organization          Organization?
+
+}
+
+model Payment {
+
+  id                String        @id @default(uuid())
+
+  organizationId    String
+
+  organization      Organization  @relation(fields: [organizationId], references: [id])
+
+  amount            Decimal       @db.Decimal(10, 2)
+
+  currency          String        @default("USD")
+
+  status            PaymentStatus @default(PENDING)
+
+  paymentMethod     String?
+
+  transactionId     String?       @unique
+
+  description       String?
+
+  paidAt            DateTime?
+
+  createdAt         DateTime      @default(now())
+
+  updatedAt         DateTime      @updatedAt
+
+  invoice           Invoice?      @relation(fields: [invoiceId], references: [id])
+
+  invoiceId         String?
+
+}
+
+model Invoice {
+
+  id                String        @id @default(uuid())
+
+  organizationId    String
+
+  organization      Organization  @relation(fields: [organizationId], references: [id])
+
+  invoiceNumber     String        @unique
+
+  amount            Decimal       @db.Decimal(10, 2)
+
+  tax               Decimal       @default(0) @db.Decimal(10, 2)
+
+  total             Decimal       @db.Decimal(10, 2)
+
+  currency          String        @default("USD")
+
+  status            InvoiceStatus @default(DRAFT)
+
+  dueDate           DateTime
+
+  paidAt            DateTime?
+
+  notes             String?
+
+  createdAt         DateTime      @default(now())
+
+  updatedAt         DateTime      @updatedAt
+
+  payments          Payment[]
+
+}
+
+model StudentProfile {
+
+  id              String @id @default(uuid())
+
+  userId          String @unique
+
+  department      String
+
+  level           Int
+
+  section         String
+
+  groupName       String
+
+  academicYear    String
+
+  user            User @relation(fields: [userId], references: [id])
+
+}
+
+model AdminProfile {
+
+  id            String @id @default(uuid())
+
+  userId        String @unique
+
+  jobTitle      String
+
+  office        String?
+
+  faceEnabled   Boolean @default(false)
+
+  user          User @relation(fields: [userId], references: [id])
+
+}
+
+model Course {
+
+  id              String   @id @default(uuid())
+
+  courseCode      String
+
+  courseName      String
+
+  description     String?
+
+  semester        String
+
+  department      String?
+
+  credits         Int?
+
+  createdById     String
+
+  createdBy       User     @relation("CourseCreator", fields: [createdById], references: [id])
+
+  organizationId  String
+
+  organization    Organization @relation(fields: [organizationId], references: [id])
+
+  sessions        Session[]
+
+  createdAt       DateTime @default(now())
+
+  updatedAt       DateTime @updatedAt
+
+  @@unique([courseCode, organizationId])
+
+}
+
+model Session {
+
+  id              String        @id @default(uuid())
+
+  title           String
+
+  createdById     String
+
+  createdBy       User          @relation("SessionCreator", fields: [createdById], references: [id])
+
+  courseId        String?
+
+  course          Course?       @relation(fields: [courseId], references: [id])
+
+  organizationId  String
+
+  organization    Organization  @relation(fields: [organizationId], references: [id])
+
+  qrSecret        String        @default(uuid())
+
+  status          SessionStatus @default(ACTIVE)
+
+  startTime       DateTime      @default(now())
+
+  endTime         DateTime?
+
+  attendances     Attendance[]
+
+  createdAt       DateTime      @default(now())
+
+}
+
+model Attendance {
+
+  id         String           @id @default(uuid())
+
+  studentId  String
+
+  student    User             @relation("StudentAttendance", fields: [studentId], references: [id])
+
+  sessionId  String
+
+  session    Session          @relation(fields: [sessionId], references: [id])
+
+  scanTime   DateTime         @default(now())
+
+  status     AttendanceStatus @default(PRESENT)
+
+  @@unique([studentId, sessionId])
+
+}
+
