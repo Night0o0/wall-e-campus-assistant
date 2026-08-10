@@ -1,82 +1,66 @@
 import { Request, Response } from "express";
 import { CourseService } from "../services/course.service.js";
+import { asyncHandler } from "../utils/asyncHandler.js";
 
 const courseService = new CourseService();
 
-export const createCourse = async (req: Request, res: Response) => {
-    try {
-        const adminId = req.user!.id;
-        const orgId = req.user!.organizationId;
-        const course = await courseService.createCourse(req.body, adminId, orgId);
-        res.status(201).json(course);
-    } catch (error: any) {
-        res.status(400).json({ error: error.message });
-    }
-};
+export const createCourse = asyncHandler(async (req: Request, res: Response) => {
+  const course = await courseService.createCourse(
+    req.body,
+    req.user!.id,
+    req.user!.organizationId
+  );
+  res.status(201).json(course);
+});
 
-export const getMyCourses = async (req: Request, res: Response) => {
-    try {
-        const adminId = req.user!.id;
-        const orgId = req.user!.organizationId;
-        const courses = await courseService.getMyCourses(adminId, orgId);
-        res.status(200).json(courses);
-    } catch (error: any) {
-        res.status(400).json({ error: error.message });
-    }
-};
+export const getMyCourses = asyncHandler(async (req: Request, res: Response) => {
+  const courses = await courseService.getMyCourses(
+    req.user!.id,
+    req.user!.organizationId
+  );
+  res.status(200).json(courses);
+});
 
-export const getOrgCourses = async (req: Request, res: Response) => {
-    try {
-        const orgId = req.user!.organizationId;
-        const courses = await courseService.getOrgCourses(orgId);
-        res.status(200).json(courses);
-    } catch (error: any) {
-        res.status(400).json({ error: error.message });
-    }
-};
+export const getOrgCourses = asyncHandler(
+  async (req: Request, res: Response) => {
+    const courses = await courseService.getOrgCourses(req.user!.organizationId);
+    res.status(200).json(courses);
+  }
+);
 
-export const getCourse = async (req: Request, res: Response) => {
-    try {
-        const courseId = req.params.id as string;
-        const orgId = req.user!.organizationId;
-        const course = await courseService.getCourse(courseId, orgId);
-        res.status(200).json(course);
-    } catch (error: any) {
-        res.status(400).json({ error: error.message });
-    }
-};
+export const getCourse = asyncHandler(async (req: Request, res: Response) => {
+  const course = await courseService.getCourse(
+    req.params.id as string,
+    req.user!.organizationId
+  );
+  res.status(200).json(course);
+});
 
-export const getCourseWithSessions = async (req: Request, res: Response) => {
-    try {
-        const courseId = req.params.id as string;
-        const orgId = req.user!.organizationId;
-        const course = await courseService.getCourseWithSessions(courseId, orgId);
-        res.status(200).json(course);
-    } catch (error: any) {
-        res.status(400).json({ error: error.message });
-    }
-};
+export const getCourseWithSessions = asyncHandler(
+  async (req: Request, res: Response) => {
+    const course = await courseService.getCourseWithSessions(
+      req.params.id as string,
+      req.user!.organizationId
+    );
+    res.status(200).json(course);
+  }
+);
 
-export const updateCourse = async (req: Request, res: Response) => {
-    try {
-        const courseId = req.params.id as string;
-        const adminId = req.user!.id;
-        const orgId = req.user!.organizationId;
-        const course = await courseService.updateCourse(courseId, req.body, adminId, orgId);
-        res.status(200).json(course);
-    } catch (error: any) {
-        res.status(400).json({ error: error.message });
-    }
-};
+export const updateCourse = asyncHandler(async (req: Request, res: Response) => {
+  const course = await courseService.updateCourse(
+    req.params.id as string,
+    req.body,
+    req.user!.id,
+    req.user!.organizationId
+  );
+  res.status(200).json(course);
+});
 
-export const deleteCourse = async (req: Request, res: Response) => {
-    try {
-        const courseId = req.params.id as string;
-        const adminId = req.user!.id;
-        const orgId = req.user!.organizationId;
-        await courseService.deleteCourse(courseId, adminId, orgId);
-        res.status(200).json({ message: "Course deleted successfully" });
-    } catch (error: any) {
-        res.status(400).json({ error: error.message });
-    }
-};
+export const deleteCourse = asyncHandler(async (req: Request, res: Response) => {
+  await courseService.deleteCourse(
+    req.params.id as string,
+    req.user!.id,
+    req.user!.organizationId
+  );
+  res.status(200).json({ message: "Course deleted successfully" });
+});

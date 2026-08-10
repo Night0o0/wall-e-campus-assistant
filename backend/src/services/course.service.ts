@@ -1,5 +1,6 @@
 import { CourseRepository } from "../repositories/course.repository.js";
 import { CreateCourseInput, UpdateCourseInput } from "../types/course.types.js";
+import { conflict, forbidden, notFound } from "../utils/AppError.js";
 
 const courseRepo = new CourseRepository();
 
@@ -9,7 +10,7 @@ export class CourseService {
         // Check if course code already exists in this organization
         const existingCourse = await courseRepo.findByCode(data.courseCode, organizationId);
         if (existingCourse) {
-            throw new Error("Course code already exists in this organization");
+            throw conflict("Course code already exists in this organization");
         }
 
         return courseRepo.create({
@@ -21,24 +22,17 @@ export class CourseService {
 
     async getCourse(courseId: string, organizationId: string) {
         const course = await courseRepo.findById(courseId);
-        if (!course) {
-            throw new Error("Course not found");
-        }
-        // Verify course belongs to the same organization
-        if (course.organizationId !== organizationId) {
-            throw new Error("Course not found");
+        // Same error for missing and out-of-org so the API can't be used to probe other tenants
+        if (!course || course.organizationId !== organizationId) {
+            throw notFound("Course not found");
         }
         return course;
     }
 
     async getCourseWithSessions(courseId: string, organizationId: string) {
         const course = await courseRepo.findWithSessions(courseId);
-        if (!course) {
-            throw new Error("Course not found");
-        }
-        // Verify course belongs to the same organization
-        if (course.organizationId !== organizationId) {
-            throw new Error("Course not found");
+        if (!course || course.organizationId !== organizationId) {
+            throw notFound("Course not found");
         }
         return course;
     }
@@ -53,14 +47,11 @@ export class CourseService {
 
     async updateCourse(courseId: string, data: UpdateCourseInput, adminId: string, organizationId: string) {
         const course = await courseRepo.findById(courseId);
-        if (!course) {
-            throw new Error("Course not found");
-        }
-        if (course.organizationId !== organizationId) {
-            throw new Error("Course not found");
+        if (!course || course.organizationId !== organizationId) {
+            throw notFound("Course not found");
         }
         if (course.createdById !== adminId) {
-            throw new Error("Unauthorized to modify this course");
+            throw forbidden("Unauthorized to modify this course");
         }
 
         return courseRepo.update(courseId, data);
@@ -68,19 +59,16 @@ export class CourseService {
 
     async deleteCourse(courseId: string, adminId: string, organizationId: string) {
         const course = await courseRepo.findWithSessions(courseId);
-        if (!course) {
-            throw new Error("Course not found");
-        }
-        if (course.organizationId !== organizationId) {
-            throw new Error("Course not found");
+        if (!course || course.organizationId !== organizationId) {
+            throw notFound("Course not found");
         }
         if (course.createdById !== adminId) {
-            throw new Error("Unauthorized to delete this course");
+            throw forbidden("Unauthorized to delete this course");
         }
         // Check if course has active sessions
         const hasActiveSessions = course.sessions.some(session => session.status === 'ACTIVE');
         if (hasActiveSessions) {
-            throw new Error("Cannot delete course with active sessions");
+            throw conflict("Cannot delete course with active sessions");
         }
 
         return courseRepo.delete(courseId);

@@ -111,6 +111,41 @@ export class CourseRepository {
         });
     }
 
+    /**
+     * A course together with the two things that decide who may export its
+     * students: who created it, and which instructors teach it.
+     *
+     * There is no CourseInstructor model in this schema — a LectureSchedule row
+     * IS the teaching assignment (see the note on LectureSchedule). Only active
+     * schedules count, so an instructor removed from the timetable loses the
+     * course with it.
+     */
+    async findByIdForExport(id: string) {
+        return prisma.course.findUnique({
+            where: { id },
+            select: {
+                id: true,
+                courseCode: true,
+                courseName: true,
+                department: true,
+                semester: true,
+                organizationId: true,
+                createdById: true,
+                lectureSchedules: {
+                    where: { isActive: true },
+                    select: {
+                        instructorId: true,
+                        faculty: true,
+                        department: true,
+                        level: true,
+                        semester: true,
+                        section: true,
+                    },
+                },
+            },
+        });
+    }
+
     async findWithSessions(id: string) {
         return prisma.course.findUnique({
             where: { id },

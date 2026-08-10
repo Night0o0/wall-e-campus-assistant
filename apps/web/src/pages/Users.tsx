@@ -1,318 +1,337 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import {
   Users as UsersIcon,
-  Search,
-  Filter,
-  Plus,
-  UserCheck,
-  UserX,
   Shield,
   GraduationCap,
-  Eye,
-  Edit,
+  UserX,
+  UserCheck,
+  Plus,
+  Pencil,
   Trash2,
-  Mail,
+  KeyRound,
+  Power,
 } from 'lucide-react'
-import { Header } from '../components/layout/Header'
-import { formatDate } from '../lib/utils'
+import { Page } from '../components/layout/Page'
+import { SummaryTile } from '../components/ui/SummaryTile'
+import { DataTable, type Column } from '../components/ui/DataTable'
+import { SearchInput } from '../components/ui/SearchInput'
+import { Button } from '../components/ui/Button'
+import { Badge, RoleBadge } from '../components/ui/Badge'
+import { ConfirmDialog } from '../components/ui/ConfirmDialog'
+import { UserFormModal } from '../components/users/UserFormModal'
+import { ResetPasswordModal } from '../components/users/ResetPasswordModal'
+import {
+  useUsers,
+  useUserStats,
+  useDeleteUser,
+  useUpdateUser,
+  useOrganizations,
+} from '../hooks/queries'
+import { useDebounce } from '../hooks/useDebounce'
+import { useAuth } from '../context/AuthContext'
+import { formatDate, formatNumber, initials } from '../lib/utils'
+import type { User } from '../types/api'
 
-// Mock data for users
-const users = [
-  {
-    id: '1',
-    name: 'Ahmed Hassan',
-    email: 'ahmed.hassan@cu.edu.eg',
-    role: 'ADMIN',
-    organization: 'Cairo University',
-    status: 'active',
-    verified: true,
-    createdAt: '2025-03-15',
-  },
-  {
-    id: '2',
-    name: 'Sara Mohamed',
-    email: 'sara.m@alexu.edu.eg',
-    role: 'UNIVERSITY_SUPER_ADMIN',
-    organization: 'Alexandria University',
-    status: 'active',
-    verified: true,
-    createdAt: '2025-05-22',
-  },
-  {
-    id: '3',
-    name: 'Mohamed Ali',
-    email: 'mohamed.ali@asu.edu.eg',
-    role: 'STUDENT',
-    organization: 'Ain Shams University',
-    status: 'active',
-    verified: true,
-    createdAt: '2026-01-10',
-  },
-  {
-    id: '4',
-    name: 'Fatma Ibrahim',
-    email: 'fatma.i@helwan.edu.eg',
-    role: 'ADMIN',
-    organization: 'Helwan University',
-    status: 'inactive',
-    verified: false,
-    createdAt: '2026-07-28',
-  },
-  {
-    id: '5',
-    name: 'Omar Khaled',
-    email: 'omar.k@mans.edu.eg',
-    role: 'STUDENT',
-    organization: 'Mansoura University',
-    status: 'active',
-    verified: true,
-    createdAt: '2026-02-15',
-  },
-  {
-    id: '6',
-    name: 'Nour Ahmed',
-    email: 'nour.a@cu.edu.eg',
-    role: 'STUDENT',
-    organization: 'Cairo University',
-    status: 'active',
-    verified: true,
-    createdAt: '2026-03-20',
-  },
+const ROLE_OPTIONS = [
+  { value: '', label: 'All roles' },
+  { value: 'SYSTEM_OWNER', label: 'System Owner' },
+  { value: 'UNIVERSITY_SUPER_ADMIN', label: 'Super Admin' },
+  { value: 'ADMIN', label: 'Admin' },
+  { value: 'STUDENT', label: 'Student' },
 ]
 
-const roleColors: Record<string, string> = {
-  SYSTEM_OWNER: 'bg-purple-100 text-purple-700',
-  UNIVERSITY_SUPER_ADMIN: 'bg-primary-100 text-primary-700',
-  ADMIN: 'bg-accent-100 text-accent-700',
-  STUDENT: 'bg-slate-100 text-slate-700',
-}
-
-const roleLabels: Record<string, string> = {
-  SYSTEM_OWNER: 'System Owner',
-  UNIVERSITY_SUPER_ADMIN: 'Super Admin',
-  ADMIN: 'Admin',
-  STUDENT: 'Student',
-}
-
 export function Users() {
-  const [searchTerm, setSearchTerm] = useState('')
-  const [roleFilter, setRoleFilter] = useState('all')
+  const { user: currentUser } = useAuth()
+  const [searchParams, setSearchParams] = useSearchParams()
 
-  const filteredUsers = users.filter((user) => {
-    const matchesSearch =
-      user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      user.email.toLowerCase().includes(searchTerm.toLowerCase())
-    const matchesRole = roleFilter === 'all' || user.role === roleFilter
-    return matchesSearch && matchesRole
-  })
+  const [page, setPage] = useState(1)
+  const [search, setSearch] = useState('')
+  const [role, setRole] = useState('')
+  const organizationId = searchParams.get('organizationId') ?? ''
 
-  const stats = {
-    total: users.length,
-    admins: users.filter((u) => u.role === 'ADMIN' || u.role === 'UNIVERSITY_SUPER_ADMIN').length,
-    students: users.filter((u) => u.role === 'STUDENT').length,
-    inactive: users.filter((u) => u.status === 'inactive').length,
-  }
+  const [creating, setCreating] = useState(false)
+  const [editing, setEditing] = useState<User | null>(null)
+  const [resetting, setResetting] = useState<User | null>(null)
+  const [deleting, setDeleting] = useState<User | null>(null)
+  const [toggling, setToggling] = useState<User | null>(null)
 
-  return (
-    <div className="min-h-screen">
-      <Header title="User Management" subtitle="Manage users across all organizations" />
+  const debouncedSearch = useDebounce(search)
 
-      <div className="p-6 space-y-6">
-        {/* Stats Cards */}
-        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
-          <div className="rounded-xl bg-white p-6 card-shadow">
-            <div className="flex items-center gap-4">
-              <div className="rounded-lg bg-primary-100 p-3">
-                <UsersIcon className="h-6 w-6 text-primary-600" />
-              </div>
-              <div>
-                <p className="text-sm text-slate-500">Total Users</p>
-                <p className="text-2xl font-bold text-slate-900">{stats.total.toLocaleString()}</p>
-              </div>
-            </div>
+  const params = useMemo(
+    () => ({
+      page,
+      limit: 10,
+      search: debouncedSearch,
+      role,
+      organizationId,
+    }),
+    [page, debouncedSearch, role, organizationId]
+  )
+
+  const { data, isLoading, error, refetch } = useUsers(params)
+  const { data: stats } = useUserStats()
+  const { data: organizations } = useOrganizations({ limit: 100 })
+
+  const deleteUser = useDeleteUser(() => setDeleting(null))
+  const updateUser = useUpdateUser(() => setToggling(null))
+
+  const activeOrg = organizations?.data.find((org) => org.id === organizationId)
+
+  const columns: Column<User>[] = [
+    {
+      key: 'user',
+      header: 'User',
+      render: (user) => (
+        <div className="flex items-center gap-3">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary-100">
+            <span className="text-sm font-semibold text-primary-700">
+              {initials(user.fullName)}
+            </span>
           </div>
-          <div className="rounded-xl bg-white p-6 card-shadow">
-            <div className="flex items-center gap-4">
-              <div className="rounded-lg bg-accent-100 p-3">
-                <Shield className="h-6 w-6 text-accent-600" />
-              </div>
-              <div>
-                <p className="text-sm text-slate-500">Admins</p>
-                <p className="text-2xl font-bold text-slate-900">{stats.admins}</p>
-              </div>
-            </div>
-          </div>
-          <div className="rounded-xl bg-white p-6 card-shadow">
-            <div className="flex items-center gap-4">
-              <div className="rounded-lg bg-success-50 p-3">
-                <GraduationCap className="h-6 w-6 text-success-600" />
-              </div>
-              <div>
-                <p className="text-sm text-slate-500">Students</p>
-                <p className="text-2xl font-bold text-slate-900">{stats.students}</p>
-              </div>
-            </div>
-          </div>
-          <div className="rounded-xl bg-white p-6 card-shadow">
-            <div className="flex items-center gap-4">
-              <div className="rounded-lg bg-danger-50 p-3">
-                <UserX className="h-6 w-6 text-danger-600" />
-              </div>
-              <div>
-                <p className="text-sm text-slate-500">Inactive</p>
-                <p className="text-2xl font-bold text-slate-900">{stats.inactive}</p>
-              </div>
-            </div>
+          <div className="min-w-0">
+            <p className="truncate text-sm font-medium text-slate-900">
+              {user.fullName}
+            </p>
+            <p className="truncate text-xs text-slate-500">{user.email}</p>
           </div>
         </div>
+      ),
+    },
+    {
+      key: 'universityId',
+      header: 'ID',
+      className: 'whitespace-nowrap',
+      render: (user) => (
+        <span className="font-mono text-xs text-slate-600">
+          {user.universityId}
+        </span>
+      ),
+    },
+    {
+      key: 'role',
+      header: 'Role',
+      render: (user) => <RoleBadge role={user.role} />,
+    },
+    {
+      key: 'organization',
+      header: 'Organization',
+      render: (user) => (
+        <span className="text-sm text-slate-900">
+          {user.organization?.name ?? '—'}
+        </span>
+      ),
+    },
+    {
+      key: 'status',
+      header: 'Status',
+      render: (user) => (
+        <Badge tone={user.isActive ? 'success' : 'neutral'}>
+          {user.isActive ? 'Active' : 'Inactive'}
+        </Badge>
+      ),
+    },
+    {
+      key: 'verified',
+      header: 'Verified',
+      render: (user) =>
+        user.isVerified ? (
+          <UserCheck className="h-5 w-5 text-success-500" />
+        ) : (
+          <UserX className="h-5 w-5 text-slate-300" />
+        ),
+    },
+    {
+      key: 'joined',
+      header: 'Joined',
+      render: (user) => (
+        <span className="text-sm text-slate-500">{formatDate(user.createdAt)}</span>
+      ),
+    },
+    {
+      key: 'actions',
+      header: '',
+      align: 'right',
+      render: (user) => {
+        const isSelf = user.id === currentUser?.id
 
-        {/* Table Section */}
-        <div className="rounded-xl bg-white card-shadow">
-          {/* Table Header */}
-          <div className="flex items-center justify-between border-b border-slate-200 p-6">
-            <div className="flex items-center gap-4">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                <input
-                  type="text"
-                  placeholder="Search users..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="h-10 w-80 rounded-lg border border-slate-200 bg-slate-50 pl-10 pr-4 text-sm text-slate-900 placeholder:text-slate-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
-                />
-              </div>
-              <select
-                value={roleFilter}
-                onChange={(e) => setRoleFilter(e.target.value)}
-                className="h-10 rounded-lg border border-slate-200 bg-slate-50 px-4 text-sm text-slate-700 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
-              >
-                <option value="all">All Roles</option>
-                <option value="UNIVERSITY_SUPER_ADMIN">Super Admin</option>
-                <option value="ADMIN">Admin</option>
-                <option value="STUDENT">Student</option>
-              </select>
-            </div>
-            <button className="flex items-center gap-2 rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700 transition-colors">
-              <Plus className="h-4 w-4" />
-              Add User
+        return (
+          <div className="flex items-center justify-end gap-1">
+            <button
+              onClick={() => setEditing(user)}
+              aria-label={`Edit ${user.fullName}`}
+              className="rounded-lg p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
+            >
+              <Pencil className="h-4 w-4" />
+            </button>
+            <button
+              onClick={() => setResetting(user)}
+              aria-label={`Reset password for ${user.fullName}`}
+              className="rounded-lg p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
+            >
+              <KeyRound className="h-4 w-4" />
+            </button>
+            <button
+              onClick={() => setToggling(user)}
+              disabled={isSelf}
+              aria-label={`${user.isActive ? 'Deactivate' : 'Activate'} ${user.fullName}`}
+              title={isSelf ? "You can't deactivate yourself" : undefined}
+              className="rounded-lg p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <Power className="h-4 w-4" />
+            </button>
+            <button
+              onClick={() => setDeleting(user)}
+              disabled={isSelf}
+              aria-label={`Delete ${user.fullName}`}
+              title={isSelf ? "You can't delete yourself" : undefined}
+              className="rounded-lg p-2 text-slate-400 transition-colors hover:bg-danger-50 hover:text-danger-600 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <Trash2 className="h-4 w-4" />
             </button>
           </div>
+        )
+      },
+    },
+  ]
 
-          {/* Table */}
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-slate-200 bg-slate-50">
-                  <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
-                    User
-                  </th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
-                    Role
-                  </th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
-                    Organization
-                  </th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
-                    Status
-                  </th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
-                    Verified
-                  </th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
-                    Joined
-                  </th>
-                  <th className="px-6 py-4 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">
-                    Actions
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-200">
-                {filteredUsers.map((user) => (
-                  <tr key={user.id} className="hover:bg-slate-50 transition-colors">
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-3">
-                        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary-100">
-                          <span className="text-sm font-semibold text-primary-700">
-                            {user.name.split(' ').map(n => n[0]).join('')}
-                          </span>
-                        </div>
-                        <div>
-                          <p className="text-sm font-medium text-slate-900">{user.name}</p>
-                          <p className="text-xs text-slate-500">{user.email}</p>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <span
-                        className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${roleColors[user.role]}`}
-                      >
-                        {roleLabels[user.role]}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4">
-                      <p className="text-sm text-slate-900">{user.organization}</p>
-                    </td>
-                    <td className="px-6 py-4">
-                      <span
-                        className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium capitalize ${
-                          user.status === 'active'
-                            ? 'bg-success-50 text-success-600'
-                            : 'bg-slate-100 text-slate-600'
-                        }`}
-                      >
-                        {user.status}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4">
-                      {user.verified ? (
-                        <UserCheck className="h-5 w-5 text-success-500" />
-                      ) : (
-                        <UserX className="h-5 w-5 text-slate-400" />
-                      )}
-                    </td>
-                    <td className="px-6 py-4">
-                      <p className="text-sm text-slate-500">{formatDate(user.createdAt)}</p>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="flex items-center justify-end gap-2">
-                        <button className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors">
-                          <Mail className="h-4 w-4" />
-                        </button>
-                        <button className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors">
-                          <Eye className="h-4 w-4" />
-                        </button>
-                        <button className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors">
-                          <Edit className="h-4 w-4" />
-                        </button>
-                        <button className="rounded-lg p-2 text-slate-400 hover:bg-danger-50 hover:text-danger-600 transition-colors">
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          {/* Pagination */}
-          <div className="flex items-center justify-between border-t border-slate-200 px-6 py-4">
-            <p className="text-sm text-slate-500">
-              Showing <span className="font-medium text-slate-900">1</span> to{' '}
-              <span className="font-medium text-slate-900">{filteredUsers.length}</span> of{' '}
-              <span className="font-medium text-slate-900">{users.length}</span> results
-            </p>
-            <div className="flex items-center gap-2">
-              <button className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed" disabled>
-                Previous
-              </button>
-              <button className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed" disabled>
-                Next
-              </button>
-            </div>
-          </div>
-        </div>
+  return (
+    <Page
+      title="User Management"
+      subtitle="Every account across all organizations."
+      actions={
+        <Button icon={Plus} onClick={() => setCreating(true)}>
+          Add User
+        </Button>
+      }
+    >
+      <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
+        <SummaryTile
+          icon={UsersIcon}
+          tone="primary"
+          label="Total Users"
+          value={stats ? formatNumber(stats.total) : '—'}
+        />
+        <SummaryTile
+          icon={Shield}
+          tone="accent"
+          label="Admins"
+          value={stats ? formatNumber(stats.admins) : '—'}
+        />
+        <SummaryTile
+          icon={GraduationCap}
+          tone="success"
+          label="Students"
+          value={stats ? formatNumber(stats.students) : '—'}
+        />
+        <SummaryTile
+          icon={UserX}
+          tone="danger"
+          label="Inactive"
+          value={stats ? formatNumber(stats.inactive) : '—'}
+        />
       </div>
-    </div>
-  )
-}
+
+      {activeOrg && (
+        <div className="flex items-center gap-2 rounded-lg bg-primary-50 px-4 py-3">
+          <span className="text-sm text-primary-700">
+            Filtered to <strong>{activeOrg.name}</strong>
+          </span>
+          <button
+            onClick={() => {
+              searchParams.delete('organizationId')
+              setSearchParams(searchParams)
+              setPage(1)
+            }}
+            className="text-sm font-medium text-primary-700 underline hover:text-primary-800"
+          >
+            Clear
+          </button>
+        </div>
+      )}
+
+      <DataTable
+        columns={columns}
+        rows={data?.data ?? []}
+        rowKey={(user) => user.id}
+        isLoading={isLoading}
+        error={error}
+        onRetry={() => refetch()}
+        meta={data?.meta}
+        onPageChange={setPage}
+        emptyTitle="No users found"
+        emptyMessage="Try adjusting your search or filters."
+        toolbar={
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+            <SearchInput
+              value={search}
+              onChange={(value) => {
+                setSearch(value)
+                setPage(1)
+              }}
+              placeholder="Search by name, email or ID…"
+              className="sm:w-80"
+            />
+            <select
+              value={role}
+              onChange={(event) => {
+                setRole(event.target.value)
+                setPage(1)
+              }}
+              className="h-10 rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
+            >
+              {ROLE_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </div>
+        }
+      />
+
+      <UserFormModal open={creating} onClose={() => setCreating(false)} />
+      <UserFormModal
+        open={Boolean(editing)}
+        user={editing}
+        onClose={() => setEditing(null)}
+      />
+      <ResetPasswordModal
+        open={Boolean(resetting)}
+        user={resetting}
+        onClose={() => setResetting(null)}
+      />
+
+      <ConfirmDialog
+        open={Boolean(toggling)}
+        title={toggling?.isActive ? 'Deactivate user' : 'Activate user'}
+        message={
+          toggling?.isActive
+            ? `${toggling?.fullName} will be signed out and blocked from signing in again.`
+            : `${toggling?.fullName} will be able to sign in again.`
+        }
+        confirmLabel={toggling?.isActive ? 'Deactivate' : 'Activate'}
+        destructive={toggling?.isActive}
+        loading={updateUser.isPending}
+        onConfirm={() =>
+          toggling &&
+          updateUser.mutate({
+            id: toggling.id,
+            data: { isActive: !toggling.isActive },
+          })
+        }
+        onClose={() => setToggling(null)}
+      />
+
+      <ConfirmDialog
+        open={Boolean(deleting)}
+        title="Delete user"
+        message={`Permanently delete ${deleting?.fullName}? Accounts with attendance or course history must be deactivated instead.`}
+        confirmLabel="Delete"
+        destructive
+        loading={deleteUser.isPending}
+        onConfirm={() => deleting && deleteUser.mutate(deleting.id)}
+        onClose={() => setDeleting(null)}
+      />
+    </Page>
+  )}

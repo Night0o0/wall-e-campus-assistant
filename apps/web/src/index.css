@@ -24,25 +24,32 @@
   --color-accent-900: #164e63;
   
   --color-success-50: #ecfdf5;
+  --color-success-100: #d1fae5;
   --color-success-500: #10b981;
   --color-success-600: #059669;
-  
+  --color-success-700: #047857;
+
   --color-warning-50: #fffbeb;
+  --color-warning-100: #fef3c7;
   --color-warning-500: #f59e0b;
   --color-warning-600: #d97706;
-  
+  --color-warning-700: #b45309;
+
   --color-danger-50: #fef2f2;
+  --color-danger-100: #fee2e2;
   --color-danger-500: #ef4444;
   --color-danger-600: #dc2626;
-  
+  --color-danger-700: #b91c1c;
+
   --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
 }
 
-* {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
-}
+/*
+ * No hand-written `* { margin: 0; padding: 0 }` reset here.
+ * Tailwind's Preflight already does it inside `@layer base`, where utilities
+ * can override it. An unlayered copy outranks every layered utility, which
+ * silently kills every m-* and p-* class in the app.
+ */
 
 body {
   font-family: var(--font-sans);

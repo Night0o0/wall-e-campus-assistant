@@ -1,62 +1,58 @@
 import { Request, Response } from "express";
 import { AttendanceService } from "../services/attendance.service.js";
+import { asyncHandler } from "../utils/asyncHandler.js";
 
 const attendanceService = new AttendanceService();
 
-export const scanAttendance = async (req: Request, res: Response) => {
-    try {
-        const { token } = req.body;
-        const studentId = req.user!.id;
-        const orgId = req.user!.organizationId;
-        const attendance = await attendanceService.scanAttendance(token, studentId, orgId);
-        res.status(201).json({
-            message: "Attendance recorded successfully",
-            attendance
-        });
-    } catch (error: any) {
-        res.status(400).json({ error: error.message });
-    }
-};
+export const scanAttendance = asyncHandler(
+  async (req: Request, res: Response) => {
+    const { token } = req.body;
+    const attendance = await attendanceService.scanAttendance(
+      token,
+      req.user!.id,
+      req.user!.organizationId
+    );
 
-export const getSessionAttendance = async (req: Request, res: Response) => {
-    try {
-        const sessionId = req.params.sessionId;
-        const orgId = req.user!.organizationId;
-        const attendances = await attendanceService.getSessionAttendance(sessionId, orgId);
-        res.status(200).json(attendances);
-    } catch (error: any) {
-        res.status(400).json({ error: error.message });
-    }
-};
+    res.status(201).json({
+      message: "Attendance recorded successfully",
+      attendance,
+    });
+  }
+);
 
-export const getMyAttendance = async (req: Request, res: Response) => {
-    try {
-        const studentId = req.user!.id;
-        const attendances = await attendanceService.getMyAttendance(studentId);
-        res.status(200).json(attendances);
-    } catch (error: any) {
-        res.status(400).json({ error: error.message });
-    }
-};
+export const getSessionAttendance = asyncHandler(
+  async (req: Request, res: Response) => {
+    const attendances = await attendanceService.getSessionAttendance(
+      req.params.sessionId as string,
+      req.user!.organizationId
+    );
+    res.status(200).json(attendances);
+  }
+);
 
-export const getSessionStats = async (req: Request, res: Response) => {
-    try {
-        const sessionId = req.params.sessionId;
-        const orgId = req.user!.organizationId;
-        const stats = await attendanceService.getSessionStats(sessionId, orgId);
-        res.status(200).json(stats);
-    } catch (error: any) {
-        res.status(400).json({ error: error.message });
-    }
-};
+export const getMyAttendance = asyncHandler(
+  async (req: Request, res: Response) => {
+    const attendances = await attendanceService.getMyAttendance(req.user!.id);
+    res.status(200).json(attendances);
+  }
+);
 
-export const getAdminAnalytics = async (req: Request, res: Response) => {
-    try {
-        const adminId = req.user!.id;
-        const orgId = req.user!.organizationId;
-        const analytics = await attendanceService.getAdminAnalytics(adminId, orgId);
-        res.status(200).json(analytics);
-    } catch (error: any) {
-        res.status(400).json({ error: error.message });
-    }
-};
+export const getSessionStats = asyncHandler(
+  async (req: Request, res: Response) => {
+    const stats = await attendanceService.getSessionStats(
+      req.params.sessionId as string,
+      req.user!.organizationId
+    );
+    res.status(200).json(stats);
+  }
+);
+
+export const getAdminAnalytics = asyncHandler(
+  async (req: Request, res: Response) => {
+    const analytics = await attendanceService.getAdminAnalytics(
+      req.user!.id,
+      req.user!.organizationId
+    );
+    res.status(200).json(analytics);
+  }
+);

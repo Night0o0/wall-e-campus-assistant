@@ -54,323 +54,471 @@ enum InvoiceStatus {
   CANCELLED
 }
 
+enum ProfileStatus {
+  INCOMPLETE
+  COMPLETED
+}
+
+/**
+ * Weekday a recurring lecture falls on. Declared Sunday-first: the academic
+ * week starts on Sunday here, and Prisma orders enums by declaration order, so
+ * `orderBy: { dayOfWeek: "asc" }` already reads as a timetable.
+ */
+enum DayOfWeek {
+  SUNDAY
+  MONDAY
+  TUESDAY
+  WEDNESDAY
+  THURSDAY
+  FRIDAY
+  SATURDAY
+}
+
+/**
+ * What a notification is about. The lecture reminders are named after the lead
+ * time they carry so a row is self-describing in the database; the lead times
+ * themselves live in one place only — src/config/notification.config.ts.
+ */
+enum NotificationType {
+  LECTURE_ADMIN_24H
+  LECTURE_ADMIN_30M
+  LECTURE_STUDENT_10M
+}
+
+/**
+ * PENDING is generated but not yet due, SENT was handed to the delivery
+ * provider, FAILED exhausted its attempts, CANCELLED means the lecture behind
+ * it was deactivated or moved before the reminder went out.
+ */
+enum NotificationStatus {
+  PENDING
+  SENT
+  FAILED
+  CANCELLED
+}
+
+enum DevicePlatform {
+  ANDROID
+  IOS
+  WEB
+}
+
+/**
+ * Where a student's academic data came from. Everything is SELF_REPORTED while
+ * students fill their own profile in; a future university-database import sets
+ * UNIVERSITY_SYNC so the two can be told apart without a schema change.
+ */
+enum ProfileDataSource {
+  SELF_REPORTED
+  UNIVERSITY_SYNC
+}
+
 model User {
+  id             String       @id @default(uuid())
+  universityId   String       @unique
+  fullName       String
+  email          String       @unique
+  passwordHash   String
+  role           UserRole     @default(STUDENT)
+  isVerified     Boolean      @default(false)
+  isActive       Boolean      @default(true)
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
 
-  id              String   @id @default(uuid())
+  studentProfile   StudentProfile?
+  adminProfile     AdminProfile?
+  createdSessions  Session[]         @relation("SessionCreator")
+  createdCourses   Course[]          @relation("CourseCreator")
+  attendances      Attendance[]      @relation("StudentAttendance")
+  lectureSchedules LectureSchedule[] @relation("ScheduleInstructor")
+  notifications    Notification[]
+  deviceTokens     DeviceToken[]
 
-  universityId    String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  fullName        String
-
-  email           String   @unique
-
-  passwordHash    String
-
-  role            UserRole @default(STUDENT)
-
-  isVerified      Boolean  @default(false)
-
-  organizationId  String
-
-  organization    Organization @relation(fields: [organizationId], references: [id])
-
-  studentProfile  StudentProfile?
-
-  adminProfile    AdminProfile?
-
-  createdSessions Session[]    @relation("SessionCreator")
-
-  createdCourses  Course[]     @relation("CourseCreator")
-
-  attendances     Attendance[] @relation("StudentAttendance")
-
-  createdAt       DateTime @default(now())
-
-  updatedAt       DateTime @updatedAt
-
+  @@index([organizationId])
+  @@index([role])
+  @@index([createdAt])
 }
 
 model SubscriptionPlan {
+  id           String   @id @default(uuid())
+  name         String   @unique
+  description  String?
+  monthlyPrice Decimal  @db.Decimal(10, 2)
+  yearlyPrice  Decimal  @db.Decimal(10, 2)
+  maxUsers     Int
+  maxRobots    Int
+  maxCourses   Int
+  features     Json?
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
-  id              String       @id @default(uuid())
-
-  name            String       @unique
-
-  description     String?
-
-  monthlyPrice    Decimal      @db.Decimal(10, 2)
-
-  yearlyPrice     Decimal      @db.Decimal(10, 2)
-
-  maxUsers        Int
-
-  maxRobots       Int
-
-  maxCourses      Int
-
-  features        Json?
-
-  isActive        Boolean      @default(true)
-
-  createdAt       DateTime     @default(now())
-
-  updatedAt       DateTime     @updatedAt
-
-  subscriptions   Subscription[]
-
+  subscriptions Subscription[]
 }
 
 model Organization {
+  id             String        @id @default(uuid())
+  name           String
+  code           String        @unique
+  email          String?
+  phone          String?
+  website        String?
+  logo           String?
+  address        String?
+  subscriptionId String?       @unique
+  subscription   Subscription? @relation(fields: [subscriptionId], references: [id])
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
 
-  id                    String             @id @default(uuid())
+  users            User[]
+  sessions         Session[]
+  courses          Course[]
+  payments         Payment[]
+  invoices         Invoice[]
+  lectureSchedules LectureSchedule[]
+  notifications    Notification[]
+  deviceTokens     DeviceToken[]
 
-  name                  String
-
-  code                  String             @unique
-
-  email                 String?
-
-  phone                 String?
-
-  website               String?
-
-  logo                  String?
-
-  address               String?
-
-  subscriptionId        String?            @unique
-
-  subscription          Subscription?      @relation(fields: [subscriptionId], references: [id])
-
-  createdAt             DateTime           @default(now())
-
-  updatedAt             DateTime           @updatedAt
-
-  users                 User[]
-
-  sessions              Session[]
-
-  courses               Course[]
-
-  payments              Payment[]
-
-  invoices              Invoice[]
-
+  @@index([createdAt])
 }
 
 model Subscription {
+  id                 String             @id @default(uuid())
+  planId             String
+  plan               SubscriptionPlan   @relation(fields: [planId], references: [id])
+  status             SubscriptionStatus @default(TRIAL)
+  billingCycle       BillingCycle       @default(MONTHLY)
+  currentPeriodStart DateTime           @default(now())
+  currentPeriodEnd   DateTime
+  trialEndsAt        DateTime?
+  cancelledAt        DateTime?
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
 
-  id                    String             @id @default(uuid())
+  organization Organization?
 
-  planId                String
-
-  plan                  SubscriptionPlan   @relation(fields: [planId], references: [id])
-
-  status                SubscriptionStatus @default(TRIAL)
-
-  billingCycle          BillingCycle       @default(MONTHLY)
-
-  currentPeriodStart    DateTime           @default(now())
-
-  currentPeriodEnd      DateTime
-
-  trialEndsAt           DateTime?
-
-  cancelledAt           DateTime?
-
-  createdAt             DateTime           @default(now())
-
-  updatedAt             DateTime           @updatedAt
-
-  organization          Organization?
-
+  @@index([planId])
+  @@index([status])
 }
 
 model Payment {
+  id             String        @id @default(uuid())
+  organizationId String
+  organization   Organization  @relation(fields: [organizationId], references: [id])
+  amount         Decimal       @db.Decimal(10, 2)
+  currency       String        @default("USD")
+  status         PaymentStatus @default(PENDING)
+  paymentMethod  String?
+  transactionId  String?       @unique
+  description    String?
+  paidAt         DateTime?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  invoice        Invoice?      @relation(fields: [invoiceId], references: [id])
+  invoiceId      String?
 
-  id                String        @id @default(uuid())
-
-  organizationId    String
-
-  organization      Organization  @relation(fields: [organizationId], references: [id])
-
-  amount            Decimal       @db.Decimal(10, 2)
-
-  currency          String        @default("USD")
-
-  status            PaymentStatus @default(PENDING)
-
-  paymentMethod     String?
-
-  transactionId     String?       @unique
-
-  description       String?
-
-  paidAt            DateTime?
-
-  createdAt         DateTime      @default(now())
-
-  updatedAt         DateTime      @updatedAt
-
-  invoice           Invoice?      @relation(fields: [invoiceId], references: [id])
-
-  invoiceId         String?
-
+  @@index([organizationId])
+  @@index([status])
+  @@index([paidAt])
+  @@index([invoiceId])
 }
 
 model Invoice {
+  id             String        @id @default(uuid())
+  organizationId String
+  organization   Organization  @relation(fields: [organizationId], references: [id])
+  invoiceNumber  String        @unique
+  amount         Decimal       @db.Decimal(10, 2)
+  tax            Decimal       @default(0) @db.Decimal(10, 2)
+  total          Decimal       @db.Decimal(10, 2)
+  currency       String        @default("USD")
+  status         InvoiceStatus @default(DRAFT)
+  dueDate        DateTime
+  paidAt         DateTime?
+  notes          String?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
 
-  id                String        @id @default(uuid())
+  payments Payment[]
 
-  organizationId    String
-
-  organization      Organization  @relation(fields: [organizationId], references: [id])
-
-  invoiceNumber     String        @unique
-
-  amount            Decimal       @db.Decimal(10, 2)
-
-  tax               Decimal       @default(0) @db.Decimal(10, 2)
-
-  total             Decimal       @db.Decimal(10, 2)
-
-  currency          String        @default("USD")
-
-  status            InvoiceStatus @default(DRAFT)
-
-  dueDate           DateTime
-
-  paidAt            DateTime?
-
-  notes             String?
-
-  createdAt         DateTime      @default(now())
-
-  updatedAt         DateTime      @updatedAt
-
-  payments          Payment[]
-
+  @@index([organizationId])
+  @@index([status])
+  @@index([dueDate])
 }
 
+/**
+ * A student's own academic record. Created empty (INCOMPLETE) the moment a
+ * student registers, then filled in by the student — no approval step.
+ * Every column is nullable on purpose: the row exists before the data does.
+ * `status` is derived, never set by the client — see StudentService.
+ * The university ID is NOT stored here; it lives on User.universityId, which is
+ * already unique and collected at registration.
+ */
 model StudentProfile {
+  id     String @id @default(uuid())
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  id              String @id @default(uuid())
+  // Academic. `level` is the academic level (year of study).
+  faculty      String?
+  department   String?
+  level        Int?
+  semester     String?
+  section      String?
+  groupName    String?
+  academicYear String?
 
-  userId          String @unique
+  // Personal
+  phoneNumber String?
+  nationalId  String?
+  dateOfBirth DateTime? @db.Date
 
-  department      String
+  status      ProfileStatus @default(INCOMPLETE)
+  completedAt DateTime?
 
-  level           Int
+  /// Reconciliation keys for a future university-database integration. A sync
+  /// job matches on externalStudentId (the SIS primary key) or nationalId,
+  /// then stamps dataSource and lastSyncedAt. Indexed, not unique: a match is
+  /// resolved by the importer, and neither key is guaranteed present.
+  dataSource        ProfileDataSource @default(SELF_REPORTED)
+  externalStudentId String?
+  lastSyncedAt      DateTime?
 
-  section         String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  groupName       String
-
-  academicYear    String
-
-  user            User @relation(fields: [userId], references: [id])
-
+  @@index([status])
+  @@index([nationalId])
+  @@index([externalStudentId])
 }
 
 model AdminProfile {
-
-  id            String @id @default(uuid())
-
-  userId        String @unique
-
-  jobTitle      String
-
-  office        String?
-
-  faceEnabled   Boolean @default(false)
-
-  user          User @relation(fields: [userId], references: [id])
-
+  id          String  @id @default(uuid())
+  userId      String  @unique
+  jobTitle    String
+  office      String?
+  faceEnabled Boolean @default(false)
+  user        User    @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model Course {
-
-  id              String   @id @default(uuid())
-
-  courseCode      String
-
-  courseName      String
-
-  description     String?
-
-  semester        String
-
-  department      String?
-
-  credits         Int?
-
-  createdById     String
-
-  createdBy       User     @relation("CourseCreator", fields: [createdById], references: [id])
-
-  organizationId  String
-
-  organization    Organization @relation(fields: [organizationId], references: [id])
-
-  sessions        Session[]
-
-  createdAt       DateTime @default(now())
-
-  updatedAt       DateTime @updatedAt
+  id               String            @id @default(uuid())
+  courseCode       String
+  courseName       String
+  description      String?
+  semester         String
+  department       String?
+  credits          Int?
+  createdById      String
+  createdBy        User              @relation("CourseCreator", fields: [createdById], references: [id])
+  organizationId   String
+  organization     Organization      @relation(fields: [organizationId], references: [id])
+  sessions         Session[]
+  lectureSchedules LectureSchedule[]
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
 
   @@unique([courseCode, organizationId])
-
+  @@index([organizationId])
+  @@index([createdById])
 }
 
 model Session {
+  id             String        @id @default(uuid())
+  title          String
+  createdById    String
+  createdBy      User          @relation("SessionCreator", fields: [createdById], references: [id])
+  courseId       String?
+  course         Course?       @relation(fields: [courseId], references: [id])
+  organizationId String
+  organization   Organization  @relation(fields: [organizationId], references: [id])
+  qrSecret       String        @default(uuid())
+  status         SessionStatus @default(ACTIVE)
+  startTime      DateTime      @default(now())
+  endTime        DateTime?
+  attendances    Attendance[]
+  createdAt      DateTime      @default(now())
 
-  id              String        @id @default(uuid())
-
-  title           String
-
-  createdById     String
-
-  createdBy       User          @relation("SessionCreator", fields: [createdById], references: [id])
-
-  courseId        String?
-
-  course          Course?       @relation(fields: [courseId], references: [id])
-
-  organizationId  String
-
-  organization    Organization  @relation(fields: [organizationId], references: [id])
-
-  qrSecret        String        @default(uuid())
-
-  status          SessionStatus @default(ACTIVE)
-
-  startTime       DateTime      @default(now())
-
-  endTime         DateTime?
-
-  attendances     Attendance[]
-
-  createdAt       DateTime      @default(now())
-
+  @@index([organizationId])
+  @@index([createdById])
+  @@index([courseId])
+  @@index([status])
+  @@index([createdAt])
 }
 
 model Attendance {
-
-  id         String           @id @default(uuid())
-
-  studentId  String
-
-  student    User             @relation("StudentAttendance", fields: [studentId], references: [id])
-
-  sessionId  String
-
-  session    Session          @relation(fields: [sessionId], references: [id])
-
-  scanTime   DateTime         @default(now())
-
-  status     AttendanceStatus @default(PRESENT)
+  id        String           @id @default(uuid())
+  studentId String
+  student   User             @relation("StudentAttendance", fields: [studentId], references: [id])
+  sessionId String
+  session   Session          @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  scanTime  DateTime         @default(now())
+  status    AttendanceStatus @default(PRESENT)
 
   @@unique([studentId, sessionId])
-
+  @@index([sessionId])
+  @@index([studentId])
 }
 
+/**
+ * One recurring weekly lecture in the academic timetable — "Electronics, every
+ * Sunday 10:00-12:00 in B-204, taught by Dr. X to Engineering / Mechatronics /
+ * level 2 / semester 1 / section A".
+ * This is NOT a Session. A Session is one attendance-taking occurrence that an
+ * admin opens on the day; a LectureSchedule is the standing plan behind it.
+ * The academic address (faculty, department, level, semester, section) is
+ * stored as plain columns because that is exactly how StudentProfile stores it
+ * — there is no normalized Faculty/Department model in this schema yet, and a
+ * schedule has to be matchable against a profile field for field.
+ * `instructor` is a User with role ADMIN. There is no separate professor role;
+ * the teaching title lives on AdminProfile.jobTitle.
+ */
+model LectureSchedule {
+  id             String       @id @default(uuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+
+  courseId String
+  course   Course @relation(fields: [courseId], references: [id])
+
+  instructorId String
+  instructor   User   @relation("ScheduleInstructor", fields: [instructorId], references: [id])
+
+  // Academic address. Mirrors StudentProfile's fields, including its
+  // free-text faculty/department/section.
+  faculty    String
+  department String
+  level      Int
+  /// 1 = First Semester, 2 = Second Semester.
+  semester   Int
+  section    String
+
+  dayOfWeek DayOfWeek
+  /// Wall-clock "HH:MM", 24-hour, zero-padded — a weekly lecture has no date,
+  /// and zero-padding makes string comparison a correct time comparison.
+  startTime String
+  endTime   String
+  room      String
+
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  notifications Notification[]
+
+  @@index([organizationId])
+  @@index([courseId])
+  @@index([instructorId])
+  @@index([department])
+  @@index([level])
+  @@index([semester])
+  @@index([section])
+  @@index([dayOfWeek])
+  @@index([isActive])
+  /// The student timetable lookup: every column it filters on, in order.
+  @@index([organizationId, isActive, faculty, department, level, semester, section])
+  /// Conflict detection: one index per clash rule.
+  @@index([organizationId, instructorId, dayOfWeek, isActive])
+  @@index([organizationId, room, dayOfWeek, isActive])
+}
+
+/**
+ * One reminder aimed at one person for one lecture occurrence.
+ *
+ * There is no LectureOccurrence table: a LectureSchedule is a recurring weekly
+ * slot, and the concrete "Sunday 12 October, 12:00" instant it produces is
+ * carried here as `occurrenceStartsAt`. That single column is what turns a
+ * repeating lecture into something a reminder can be deduplicated against —
+ * see the unique constraint below — without a second scheduling model.
+ *
+ * `scheduledFor` is when the reminder should go out (occurrence start minus the
+ * rule's lead time); `occurrenceStartsAt` is when the lecture itself begins.
+ * The pair is kept separate so a lead time can be changed later without losing
+ * the identity of the occurrence already notified about.
+ *
+ * `title`/`body` are rendered once, at generation time, and stored — a reminder
+ * has to read the same in the notification tray as it did when it was sent,
+ * even if the room or the course name is edited afterwards.
+ */
+model Notification {
+  id             String       @id @default(uuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+
+  /// The recipient. Always in `organizationId` — a reminder never crosses tenants.
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  /// Nullable so this table can carry non-lecture notifications later. Every
+  /// row the lecture generator writes has it set.
+  lectureScheduleId String?
+  lectureSchedule   LectureSchedule? @relation(fields: [lectureScheduleId], references: [id], onDelete: Cascade)
+
+  /// The exact start instant of the lecture occurrence being reminded about.
+  occurrenceStartsAt DateTime?
+
+  type  NotificationType
+  title String
+  body  String
+  /// Delivery payload for the mobile client (course, room, times, ids).
+  data  Json?
+
+  scheduledFor  DateTime
+  sentAt        DateTime?
+  readAt        DateTime?
+  status        NotificationStatus @default(PENDING)
+  failureReason String?
+
+  /// Delivery bookkeeping for the polling worker. `lockedBy` holds the id of
+  /// the worker run that claimed the row, so a claim can be read back safely
+  /// even when two workers poll at the same moment.
+  attempts Int       @default(0)
+  lockedAt DateTime?
+  lockedBy String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  /// Idempotency, enforced by the database rather than by a read-then-write in
+  /// the generator: the same person can hold only one reminder of one type for
+  /// one occurrence of one lecture, however often the generator runs.
+  @@unique([userId, lectureScheduleId, occurrenceStartsAt, type], name: "notification_occurrence_identity")
+  /// The worker's claim query.
+  @@index([status, scheduledFor])
+  /// The inbox and the unread badge.
+  @@index([userId, readAt])
+  @@index([userId, createdAt])
+  @@index([organizationId])
+  @@index([lectureScheduleId])
+}
+
+/**
+ * A mobile/web push registration. Written now so the Flutter client has
+ * somewhere to register when push is wired up; nothing sends to it yet — the
+ * delivery side goes through PushNotificationProvider, which is a no-op until a
+ * real provider is configured.
+ */
+model DeviceToken {
+  id             String       @id @default(uuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  /// Provider-issued and globally unique: the same handset re-registering after
+  /// a reinstall must move the token to the new owner, not duplicate it.
+  token      String         @unique
+  platform   DevicePlatform
+  isActive   Boolean        @default(true)
+  lastSeenAt DateTime       @default(now())
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId, isActive])
+  @@index([organizationId])
+}

@@ -1,0 +1,278 @@
+===============================================================================
+WALL-E CAMPUS ASSISTANT - UI PAGE PLAN PER ACCOUNT TYPE
+===============================================================================
+Scope   : STUDENT, ADMIN (teaching staff), UNIVERSITY_SUPER_ADMIN
+Status  : PLAN ONLY. None of these pages exist yet - the web console currently
+          admits SYSTEM_OWNER accounts only (apps/web ProtectedRoute).
+          Every page below is backed by a WORKING backend API except the two
+          gaps described at the end of this file.
+Totals  : Student 5 pages | Admin 6 pages | Super Admin 7 pages
+          (+1 shared Login page used by all three roles)
+
+
+-------------------------------------------------------------------------------
+SHARED
+-------------------------------------------------------------------------------
+Login  ->  POST /api/auth/login
+           Fields: email, password. Returns a JWT (default 7d expiry).
+           After login the role decides where the user lands.
+
+
+===============================================================================
+1) STUDENT - 5 PAGES
+===============================================================================
+
++---------------------+------------------------------+--------------------------------------------------+
+| PAGE                | FUNCTION                     | DATA IT CONTAINS                                 |
++---------------------+------------------------------+--------------------------------------------------+
+| My Profile          | Fill in / edit own academic  | Faculty, department, level, semester, section,   |
+|                     | record. No approval step.    | group name, academic year, phone number,         |
+|                     |                              | national ID, date of birth, and the derived      |
+|                     |                              | status badge INCOMPLETE / COMPLETED.             |
++---------------------+------------------------------+--------------------------------------------------+
+| My Timetable        | Weekly lecture grid, matched | Per lecture: course code + name, instructor      |
+|                     | from the student's own       | name and job title, day of week, start-end time, |
+|                     | profile (no filters sent).   | room. Plus the matched cohort criteria.          |
++---------------------+------------------------------+--------------------------------------------------+
+| Scan QR             | Scan the projected code to   | Camera scanner, decoded session token, result    |
+|                     | register attendance.         | message (success / expired / already scanned).   |
++---------------------+------------------------------+--------------------------------------------------+
+| My Attendance       | Own attendance history.      | Session title, date/time, status PRESENT or      |
+|                     |                              | LATE, scan time, per-course totals.              |
++---------------------+------------------------------+--------------------------------------------------+
+| Notifications       | Lecture reminders inbox.     | Title, body, the lecture it refers to, scheduled |
+|                     |                              | time, sent time, read/unread, unread count badge |
++---------------------+------------------------------+--------------------------------------------------+
+
+APIs used:
+  GET/PATCH /api/students/me/profile
+  GET       /api/students/me/schedule
+  POST      /api/attendance/scan
+  GET       /api/attendance/history
+  GET       /api/notifications
+  GET       /api/notifications/unread-count
+  PATCH     /api/notifications/:id/read
+  PATCH     /api/notifications/read-all
+  POST      /api/notifications/device-tokens        (mobile only, future)
+
+
+===============================================================================
+2) ADMIN (TEACHING STAFF) - 6 PAGES
+===============================================================================
+Note: ADMIN is the role for professors, doctors, lecturers and engineers.
+      There is no separate professor role; the academic title is stored on
+      AdminProfile.jobTitle.
+
++---------------------+------------------------------+--------------------------------------------------+
+| PAGE                | FUNCTION                     | DATA IT CONTAINS                                 |
++---------------------+------------------------------+--------------------------------------------------+
+| My Teaching         | The lectures THIS instructor | Course, day, start-end time, room, section,      |
+| Timetable           | teaches - nobody else's.     | level, semester, active flag.                    |
++---------------------+------------------------------+--------------------------------------------------+
+| My Courses          | Courses they are assigned to | Course code, name, description, credits,         |
+|                     | or created.                  | semester, department, session count.             |
++---------------------+------------------------------+--------------------------------------------------+
+| Sessions            | Open, monitor and close      | Session title, linked course, status ACTIVE or   |
+|                     | attendance sessions.         | CLOSED, start/end time, live attendee count.     |
++---------------------+------------------------------+--------------------------------------------------+
+| Live QR Display     | Full-screen rotating QR code | QR image refreshed about every 25 seconds        |
+|                     | projected in the lecture     | (the token itself expires after 30 seconds),     |
+|                     | hall.                        | session title, live scan counter.                |
++---------------------+------------------------------+--------------------------------------------------+
+| Attendance &        | Live roster, statistics, and | Student name, university ID, scan time, PRESENT  |
+| Excel Export        | the .xlsx roster download.   | / LATE, totals present/late/absent, and the      |
+|                     |                              | export button producing a real .xlsx file.       |
++---------------------+------------------------------+--------------------------------------------------+
+| Notifications       | Instructor reminders inbox.  | 24-hour and 30-minute lecture reminders, title,  |
+|                     |                              | body, read/unread, unread count.                 |
++---------------------+------------------------------+--------------------------------------------------+
+
+APIs used:
+  GET   /api/admin/schedule
+  GET   /api/courses            /api/courses/my        /api/courses/:id
+  POST  /api/sessions
+  GET   /api/sessions           /api/sessions/:id      /api/sessions/:id/qr
+  PATCH /api/sessions/:id/close
+  GET   /api/attendance/session/:sessionId
+  GET   /api/attendance/session/:sessionId/stats
+  GET   /api/attendance/analytics
+  GET   /api/courses/:id/students/export      <-- Excel export (.xlsx)
+  GET   /api/notifications  (+ unread-count, :id/read, read-all)
+
+Export rule: an ADMIN can only export a course they are ASSIGNED to - meaning
+they instruct an active LectureSchedule for it, or they created the course.
+Any other course in their own university returns 403.
+
+
+===============================================================================
+3) UNIVERSITY_SUPER_ADMIN - 7 PAGES
+===============================================================================
+
++---------------------+------------------------------+--------------------------------------------------+
+| PAGE                | FUNCTION                     | DATA IT CONTAINS                                 |
++---------------------+------------------------------+--------------------------------------------------+
+| Dashboard           | University-wide overview.    | Counts of students, staff, courses, lectures,    |
+| ** GAP 1 **         |                              | today's sessions, attendance rate.               |
++---------------------+------------------------------+--------------------------------------------------+
+| Timetable           | Full CRUD over the whole     | Every lecture in the university: course,         |
+| Management          | university timetable, with   | instructor, cohort (faculty/department/level/    |
+|                     | instructor and room clash    | semester/section), day, time, room, active flag. |
+|                     | detection.                   | Deactivate = soft delete.                        |
++---------------------+------------------------------+--------------------------------------------------+
+| Courses             | Create / edit / delete any   | Full course list with creator, code, name,       |
+|                     | course in the university.    | credits, semester, department, session count.    |
++---------------------+------------------------------+--------------------------------------------------+
+| Sessions &          | View any session and its     | All sessions, rosters, per-session statistics,   |
+| Attendance          | attendance.                  | admin analytics.                                 |
++---------------------+------------------------------+--------------------------------------------------+
+| Students & Staff    | Directory of the university's| Name, university ID, email, role, active flag,   |
+| ** GAP 2 **         | accounts.                    | profile status, department, level, section.      |
++---------------------+------------------------------+--------------------------------------------------+
+| Exports             | Roster export for ANY course | Same .xlsx as the admin export, but with no      |
+|                     | in the university.           | assignment restriction inside the organization.  |
++---------------------+------------------------------+--------------------------------------------------+
+| Notifications       | Own inbox, plus the          | Reminder list, unread count. In non-production   |
+|                     | development simulation tools.| only: generate / simulate / dispatch reminders.  |
++---------------------+------------------------------+--------------------------------------------------+
+
+APIs used:
+  POST  /api/schedules
+  GET   /api/schedules          /api/schedules/:id
+  PATCH /api/schedules/:id      /api/schedules/:id/deactivate
+  GET   /api/courses  (+ POST, PATCH, DELETE)
+  GET   /api/sessions, /api/attendance/*
+  GET   /api/courses/:id/students/export
+  GET   /api/notifications  (+ /dev/generate, /dev/simulate, /dev/dispatch)
+
+
+===============================================================================
+THE TWO GAPS - PAGES WITH NO BACKEND ENDPOINT YET
+===============================================================================
+
+Both gaps affect the UNIVERSITY_SUPER_ADMIN role only. Everything else listed
+above is already backed by a working, tested API.
+
+
+-------------------------------------------------------------------------------
+GAP 1 - DASHBOARD / UNIVERSITY METRICS
+-------------------------------------------------------------------------------
+WHAT IS MISSING
+    There is no endpoint that returns statistics for ONE university.
+
+WHY
+    The only metrics endpoint is:
+
+        GET /api/metrics/overview
+
+    and in backend/src/routes/metrics.routes.ts the entire router is mounted
+    behind:
+
+        router.use(authenticate, requireOwner);
+
+    requireOwner means SYSTEM_OWNER only. A UNIVERSITY_SUPER_ADMIN calling it
+    receives 403 Forbidden.
+
+THE DEEPER PROBLEM
+    Simply relaxing the guard would NOT be correct. /metrics/overview is a
+    PLATFORM-WIDE aggregate - it counts users, organizations and revenue across
+    every university on the platform. Opening it to a university super admin
+    would leak other universities' numbers, breaking tenant isolation.
+
+WHAT NEEDS TO BE BUILT
+    A new, organization-scoped endpoint, for example:
+
+        GET /api/admin/overview          (or /api/organizations/me/metrics)
+
+    Rules it must follow, matching the rest of the codebase:
+      - guard with requireRole("UNIVERSITY_SUPER_ADMIN", "SYSTEM_OWNER")
+      - read organizationId from req.user, NEVER from the query string or body
+      - every count filtered by that organizationId
+
+    Suggested payload:
+        totalStudents, totalStaff, totalCourses, activeLectures,
+        sessionsToday, activeSessions, attendanceRateThisWeek,
+        studentsWithIncompleteProfile
+
+    Estimated work: one controller + one service + one repository method.
+    No database migration required - all the data already exists.
+
+INTERIM WORKAROUND
+    The dashboard can be assembled client-side from endpoints that are already
+    organization-scoped: /api/courses, /api/schedules and /api/sessions each
+    return only the caller's university. This costs several requests and cannot
+    produce attendance rates efficiently, so it is a stopgap, not a solution.
+
+
+-------------------------------------------------------------------------------
+GAP 2 - STUDENTS & STAFF DIRECTORY
+-------------------------------------------------------------------------------
+WHAT IS MISSING
+    There is no endpoint that lists the users of ONE university.
+
+WHY
+    The only user-listing endpoint is:
+
+        GET /api/users
+
+    and in backend/src/routes/user.routes.ts the whole router is again behind:
+
+        router.use(authenticate, requireOwner);
+
+    So a UNIVERSITY_SUPER_ADMIN receives 403.
+
+THE DEEPER PROBLEM - THIS ONE IS A SECURITY TRAP
+    Do NOT fix this by loosening the role guard. In
+    backend/src/repositories/user.repository.ts the query builder contains:
+
+        if (query.organizationId) where.organizationId = query.organizationId;
+
+    The organization is taken from the CLIENT-SUPPLIED query string. That is
+    safe today because only SYSTEM_OWNER can reach it, and the owner is
+    legitimately allowed to browse any tenant. The moment that route is opened
+    to university super admins, any of them could pass another university's
+    organizationId and read its entire user list.
+
+    This is exactly the pattern the rest of the codebase avoids: organizationId
+    is never accepted from a request, it is always read from the token-backed
+    user record.
+
+WHAT NEEDS TO BE BUILT
+    A separate organization-scoped listing endpoint, for example:
+
+        GET /api/admin/users?role=STUDENT&search=...&page=1&limit=20
+
+    Rules it must follow:
+      - guard with requireRole("UNIVERSITY_SUPER_ADMIN", "SYSTEM_OWNER")
+      - FORCE organizationId = req.user.organizationId, applied last so a query
+        string parameter cannot override it (the same technique already used in
+        ScheduleService.resolveScope for the ADMIN instructorId filter)
+      - never select passwordHash (reuse safeUserSelect)
+      - do not expose nationalId in a list view
+
+    Suggested payload per row:
+        id, fullName, universityId, email, role, isActive, isVerified,
+        profile status, department, level, section
+
+    Estimated work: one route + controller + service + one repository method.
+    No database migration required.
+
+INTERIM WORKAROUND
+    None that is safe. There is currently no way for a university super admin
+    to list their own students. The roster Excel export
+    (GET /api/courses/:id/students/export) is the closest available data, but
+    it is per-course, not university-wide.
+
+
+===============================================================================
+SUMMARY
+===============================================================================
+  Student            5 pages   - all endpoints exist
+  Admin              6 pages   - all endpoints exist
+  Super Admin        7 pages   - 5 ready, 2 blocked (Dashboard, Directory)
+  Shared login       1 page
+
+  Both gaps need new ORGANIZATION-SCOPED endpoints. Neither needs a database
+  migration. Neither should be fixed by relaxing the guard on the existing
+  SYSTEM_OWNER route - in the case of GAP 2 that would open a cross-tenant
+  data leak.
+===============================================================================

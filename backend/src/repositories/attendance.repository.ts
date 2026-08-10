@@ -86,6 +86,29 @@ export class AttendanceRepository {
         };
     }
 
+    /**
+     * How many of a course's finished sessions each student turned up to.
+     *
+     * Only CLOSED sessions are counted, here and in the denominator: a session
+     * that is still open is one students can still scan into, and counting it
+     * would show everybody at 0% for a lecture that is in progress.
+     *
+     * PRESENT and LATE both count as attended — an Attendance row exists only
+     * because somebody scanned, and arriving late is not the same as missing it.
+     */
+    async countAttendedByCourse(courseId: string, organizationId: string) {
+        const rows = await prisma.attendance.groupBy({
+            by: ['studentId'],
+            where: {
+                status: { not: 'ABSENT' },
+                session: { courseId, organizationId, status: 'CLOSED' },
+            },
+            _count: { _all: true },
+        });
+
+        return new Map(rows.map((row) => [row.studentId, row._count._all]));
+    }
+
     async getAdminAnalytics(adminId: string, organizationId: string) {
         // Get all sessions by this admin within their organization
         const sessions = await prisma.session.findMany({

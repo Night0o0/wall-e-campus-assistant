@@ -11,6 +11,7 @@ import {
     updateCourse, 
     deleteCourse 
 } from "../controllers/course.controller.js";
+import { exportCourseStudents } from "../controllers/export.controller.js";
 
 const router = Router();
 
@@ -31,6 +32,17 @@ router.get("/:id", getCourse);
 
 // Get a course with its sessions
 router.get("/:id/sessions", getCourseWithSessions);
+
+// Export the course's student roster as .xlsx. Staff only — a student cannot
+// download their classmates' details. Which courses a given member of staff may
+// export is decided inside StudentExportService, not here: an ADMIN gets only
+// the courses they are assigned to, and every role is confined to its own
+// organization.
+router.get(
+    "/:id/students/export",
+    requireRole('ADMIN', 'UNIVERSITY_SUPER_ADMIN', 'SYSTEM_OWNER'),
+    exportCourseStudents
+);
 
 // Update a course (Admin who created it)
 router.patch("/:id", requireRole('ADMIN', 'UNIVERSITY_SUPER_ADMIN', 'SYSTEM_OWNER'), validate(updateCourseSchema), updateCourse);

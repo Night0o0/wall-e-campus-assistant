@@ -54,6 +54,17 @@ export class SessionRepository {
         });
     }
 
+    /**
+     * The denominator of a course's attendance percentage: sessions that have
+     * finished. An open session is one students can still scan into, so it is
+     * not something anybody can yet have missed.
+     */
+    async countClosedByCourse(courseId: string, organizationId: string) {
+        return prisma.session.count({
+            where: { courseId, organizationId, status: 'CLOSED' },
+        });
+    }
+
     async updateStatus(id: string, status: 'ACTIVE' | 'CLOSED', endTime?: Date) {
         return prisma.session.update({
             where: { id },

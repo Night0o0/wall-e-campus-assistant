@@ -1,5 +1,6 @@
 import { SessionRepository } from "../repositories/session.repository.js";
 import { generateQrToken } from "../utils/qr.util.js";
+import { conflict, forbidden, notFound } from "../utils/AppError.js";
 
 const sessionRepo = new SessionRepository();
 
@@ -11,12 +12,9 @@ export class SessionService {
 
     async getSession(sessionId: string, organizationId: string) {
         const session = await sessionRepo.findById(sessionId);
-        if (!session) {
-            throw new Error("Session not found");
-        }
-        // Verify session belongs to the same organization
-        if (session.organizationId !== organizationId) {
-            throw new Error("Session not found");
+        // Same error for missing and out-of-org so the API can't be used to probe other tenants
+        if (!session || session.organizationId !== organizationId) {
+            throw notFound("Session not found");
         }
         return session;
     }
@@ -31,17 +29,14 @@ export class SessionService {
 
     async closeSession(sessionId: string, adminId: string, organizationId: string) {
         const session = await sessionRepo.findById(sessionId);
-        if (!session) {
-            throw new Error("Session not found");
-        }
-        if (session.organizationId !== organizationId) {
-            throw new Error("Session not found");
+        if (!session || session.organizationId !== organizationId) {
+            throw notFound("Session not found");
         }
         if (session.createdById !== adminId) {
-            throw new Error("Unauthorized to modify this session");
+            throw forbidden("Unauthorized to modify this session");
         }
         if (session.status !== 'ACTIVE') {
-            throw new Error("Session is not active");
+            throw conflict("Session is not active");
         }
 
         return sessionRepo.updateStatus(sessionId, 'CLOSED', new Date());
@@ -49,14 +44,11 @@ export class SessionService {
 
     async getQrToken(sessionId: string, organizationId: string) {
         const session = await sessionRepo.findById(sessionId);
-        if (!session) {
-            throw new Error("Session not found");
-        }
-        if (session.organizationId !== organizationId) {
-            throw new Error("Session not found");
+        if (!session || session.organizationId !== organizationId) {
+            throw notFound("Session not found");
         }
         if (session.status !== 'ACTIVE') {
-            throw new Error("Cannot generate QR for inactive session");
+            throw conflict("Cannot generate QR for inactive session");
         }
 
         const token = generateQrToken(session.id, session.qrSecret);

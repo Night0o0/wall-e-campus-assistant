@@ -1,0 +1,12 @@
+{
+  // The build tsconfig compiles `src` into `dist` and must not pick the tests
+  // up. This one type-checks them, and nothing else: no outDir, no emit.
+  "extends": "./tsconfig.json",
+
+  "compilerOptions": {
+    "noEmit": true,
+    "rootDir": "."
+  },
+
+  "include": ["src", "tests", "vitest.config.ts"]
+}

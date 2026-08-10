@@ -2,34 +2,51 @@ import { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
 import { env } from "../config/env.js";
 import prisma from "../lib/prisma.js";
+import { forbidden, unauthorized } from "../utils/AppError.js";
+
+export interface AuthenticatedUser {
+  id: string;
+  universityId: string;
+  fullName: string;
+  email: string;
+  role: string;
+  isVerified: boolean;
+  isActive: boolean;
+  organizationId: string;
+}
 
 declare global {
   namespace Express {
     interface Request {
-      user?: {
-        id: string;
-        universityId: string;
-        fullName: string;
-        email: string;
-        role: string;
-        isVerified: boolean;
-        organizationId: string;
-      };
+      user?: AuthenticatedUser;
     }
   }
 }
 
-export const authenticate = async (req: Request, res: Response, next: NextFunction) => {
+export const authenticate = async (
+  req: Request,
+  _res: Response,
+  next: NextFunction
+) => {
+  const authHeader = req.headers.authorization;
+
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    next(unauthorized("No token provided or invalid format"));
+    return;
+  }
+
+  const token = authHeader.slice("Bearer ".length).trim();
+
+  let decoded: { id: string };
+
   try {
-    const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith("Bearer ")) {
-      res.status(401).json({ message: "No token provided or invalid format" });
-      return;
-    }
+    decoded = jwt.verify(token, env.JWT_SECRET) as { id: string };
+  } catch {
+    next(unauthorized("Invalid or expired token"));
+    return;
+  }
 
-    const token = authHeader.split(" ")[1];
-    const decoded = jwt.verify(token, env.JWT_SECRET) as { id: string };
-
+  try {
     const user = await prisma.user.findUnique({
       where: { id: decoded.id },
       select: {
@@ -39,35 +56,45 @@ export const authenticate = async (req: Request, res: Response, next: NextFuncti
         email: true,
         role: true,
         isVerified: true,
+        isActive: true,
         organizationId: true,
-      }
+      },
     });
 
     if (!user) {
-      res.status(401).json({ message: "User not found" });
+      next(unauthorized("User not found"));
+      return;
+    }
+
+    // A deactivated account must stop working immediately, even while its
+    // token is still within its validity window.
+    if (!user.isActive) {
+      next(unauthorized("This account has been deactivated"));
       return;
     }
 
     req.user = user;
     next();
   } catch (error) {
-    res.status(401).json({ message: "Invalid or expired token" });
-    return;
+    next(error);
   }
 };
 
 export const requireRole = (...roles: string[]) => {
-  return (req: Request, res: Response, next: NextFunction) => {
+  return (req: Request, _res: Response, next: NextFunction) => {
     if (!req.user) {
-      res.status(401).json({ message: "Unauthorized" });
+      next(unauthorized());
       return;
     }
 
     if (!roles.includes(req.user.role)) {
-      res.status(403).json({ message: "Forbidden: insufficient permissions" });
+      next(forbidden());
       return;
     }
 
     next();
   };
 };
+
+/** Convenience guard for platform-owner-only routes. */
+export const requireOwner = requireRole("SYSTEM_OWNER");

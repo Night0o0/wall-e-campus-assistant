@@ -1,305 +1,300 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
 import {
   Building2,
-  Search,
-  Filter,
-  Plus,
-  MoreHorizontal,
   Users,
   BookOpen,
   CreditCard,
+  Plus,
   Eye,
-  Edit,
+  Pencil,
   Trash2,
 } from 'lucide-react'
-import { Header } from '../components/layout/Header'
-import { formatCurrency, formatDate } from '../lib/utils'
+import { Page } from '../components/layout/Page'
+import { SummaryTile } from '../components/ui/SummaryTile'
+import { DataTable, type Column } from '../components/ui/DataTable'
+import { SearchInput } from '../components/ui/SearchInput'
+import { Button } from '../components/ui/Button'
+import { Badge, StatusBadge } from '../components/ui/Badge'
+import { ConfirmDialog } from '../components/ui/ConfirmDialog'
+import { OrganizationFormModal } from '../components/organizations/OrganizationFormModal'
+import {
+  useOrganizations,
+  useDeleteOrganization,
+  useOverview,
+} from '../hooks/queries'
+import { useDebounce } from '../hooks/useDebounce'
+import { billingEnabled } from '../lib/features'
+import { cn, formatCurrency, formatDate, formatNumber } from '../lib/utils'
+import type { Organization, OrganizationStatus } from '../types/api'
 
-// Mock data for organizations
-const organizations = [
-  {
-    id: '1',
-    name: 'Cairo University',
-    code: 'CU',
-    email: 'admin@cu.edu.eg',
-    phone: '+20 2 1234 5678',
-    plan: 'Pro',
-    status: 'active',
-    users: 12500,
-    courses: 450,
-    revenue: 4990,
-    createdAt: '2025-03-15',
-  },
-  {
-    id: '2',
-    name: 'Alexandria University',
-    code: 'AU',
-    email: 'admin@alexu.edu.eg',
-    phone: '+20 3 9876 5432',
-    plan: 'Basic',
-    status: 'active',
-    users: 8200,
-    courses: 320,
-    revenue: 2990,
-    createdAt: '2025-05-22',
-  },
-  {
-    id: '3',
-    name: 'Ain Shams University',
-    code: 'ASU',
-    email: 'admin@asu.edu.eg',
-    phone: '+20 2 5555 1234',
-    plan: 'Pro',
-    status: 'active',
-    users: 6800,
-    courses: 280,
-    revenue: 4990,
-    createdAt: '2025-06-10',
-  },
-  {
-    id: '4',
-    name: 'Helwan University',
-    code: 'HU',
-    email: 'admin@helwan.edu.eg',
-    phone: '+20 2 4444 9999',
-    plan: 'Basic',
-    status: 'trial',
-    users: 4500,
-    courses: 180,
-    revenue: 0,
-    createdAt: '2026-07-28',
-  },
-  {
-    id: '5',
-    name: 'Mansoura University',
-    code: 'MU',
-    email: 'admin@mans.edu.eg',
-    phone: '+20 50 2222 3333',
-    plan: 'Enterprise',
-    status: 'active',
-    users: 15200,
-    courses: 520,
-    revenue: 9990,
-    createdAt: '2025-02-05',
-  },
+// Every option here describes a subscription state, so the whole filter is
+// meaningless while billing is off.
+const STATUS_OPTIONS: Array<{ value: string; label: string }> = [
+  { value: '', label: 'All statuses' },
+  { value: 'ACTIVE', label: 'Active' },
+  { value: 'TRIAL', label: 'Trial' },
+  { value: 'PAST_DUE', label: 'Past due' },
+  { value: 'CANCELLED', label: 'Cancelled' },
+  { value: 'EXPIRED', label: 'Expired' },
+  { value: 'NONE', label: 'No plan' },
 ]
 
-const planColors: Record<string, string> = {
-  Free: 'bg-slate-100 text-slate-700',
-  Basic: 'bg-accent-100 text-accent-700',
-  Pro: 'bg-primary-100 text-primary-700',
-  Enterprise: 'bg-purple-100 text-purple-700',
-}
-
-const statusColors: Record<string, string> = {
-  active: 'bg-success-50 text-success-600',
-  trial: 'bg-warning-50 text-warning-600',
-  expired: 'bg-danger-50 text-danger-600',
-  cancelled: 'bg-slate-100 text-slate-600',
-}
+// Columns that only carry meaning once a subscription exists.
+const BILLING_COLUMNS = new Set(['plan', 'status', 'revenue'])
 
 export function Organizations() {
-  const [searchTerm, setSearchTerm] = useState('')
+  const [page, setPage] = useState(1)
+  const [search, setSearch] = useState('')
+  const [status, setStatus] = useState('')
+  const [editing, setEditing] = useState<Organization | null>(null)
+  const [creating, setCreating] = useState(false)
+  const [deleting, setDeleting] = useState<Organization | null>(null)
 
-  const filteredOrgs = organizations.filter(
-    (org) =>
-      org.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      org.code.toLowerCase().includes(searchTerm.toLowerCase())
+  const debouncedSearch = useDebounce(search)
+
+  const params = useMemo(
+    () => ({ page, limit: 10, search: debouncedSearch, status }),
+    [page, debouncedSearch, status]
+  )
+
+  const { data, isLoading, error, refetch, isFetching } = useOrganizations(params)
+  const { data: overview } = useOverview()
+
+  const deleteOrg = useDeleteOrganization(() => setDeleting(null))
+
+  const columns: Column<Organization>[] = ([
+    {
+      key: 'organization',
+      header: 'Organization',
+      render: (org) => (
+        <div className="flex items-center gap-3">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary-100">
+            <span className="text-xs font-bold text-primary-700">{org.code}</span>
+          </div>
+          <div className="min-w-0">
+            <Link
+              to={`/organizations/${org.id}`}
+              className="block truncate text-sm font-medium text-slate-900 hover:text-primary-600"
+            >
+              {org.name}
+            </Link>
+            <p className="truncate text-xs text-slate-500">{org.email ?? '—'}</p>
+          </div>
+        </div>
+      ),
+    },
+    {
+      key: 'plan',
+      header: 'Plan',
+      render: (org) =>
+        org.planName ? (
+          <Badge tone="primary">{org.planName}</Badge>
+        ) : (
+          <span className="text-sm text-slate-400">—</span>
+        ),
+    },
+    {
+      key: 'status',
+      header: 'Status',
+      render: (org) => <StatusBadge status={org.status as OrganizationStatus} />,
+    },
+    {
+      key: 'users',
+      header: 'Users',
+      render: (org) => (
+        <span className="text-sm text-slate-900">
+          {formatNumber(org._count.users)}
+        </span>
+      ),
+    },
+    {
+      key: 'courses',
+      header: 'Courses',
+      render: (org) => (
+        <span className="text-sm text-slate-900">
+          {formatNumber(org._count.courses)}
+        </span>
+      ),
+    },
+    {
+      key: 'revenue',
+      header: 'Revenue',
+      render: (org) => (
+        <span className="text-sm font-medium text-slate-900">
+          {formatCurrency(org.revenue)}
+        </span>
+      ),
+    },
+    {
+      key: 'joined',
+      header: 'Joined',
+      render: (org) => (
+        <span className="text-sm text-slate-500">{formatDate(org.createdAt)}</span>
+      ),
+    },
+    {
+      key: 'actions',
+      header: '',
+      align: 'right',
+      render: (org) => (
+        <div className="flex items-center justify-end gap-1">
+          <Link
+            to={`/organizations/${org.id}`}
+            aria-label={`View ${org.name}`}
+            className="rounded-lg p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
+          >
+            <Eye className="h-4 w-4" />
+          </Link>
+          <button
+            onClick={() => setEditing(org)}
+            aria-label={`Edit ${org.name}`}
+            className="rounded-lg p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
+          >
+            <Pencil className="h-4 w-4" />
+          </button>
+          <button
+            onClick={() => setDeleting(org)}
+            aria-label={`Delete ${org.name}`}
+            className="rounded-lg p-2 text-slate-400 transition-colors hover:bg-danger-50 hover:text-danger-600"
+          >
+            <Trash2 className="h-4 w-4" />
+          </button>
+        </div>
+      ),
+    },
+  ] satisfies Column<Organization>[]).filter(
+    (column) => billingEnabled || !BILLING_COLUMNS.has(column.key)
   )
 
   return (
-    <div className="min-h-screen">
-      <Header title="Organizations" subtitle="Manage all registered universities and institutions" />
-
-      <div className="p-6 space-y-6">
-        {/* Stats Cards */}
-        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
-          <div className="rounded-xl bg-white p-6 card-shadow">
-            <div className="flex items-center gap-4">
-              <div className="rounded-lg bg-primary-100 p-3">
-                <Building2 className="h-6 w-6 text-primary-600" />
-              </div>
-              <div>
-                <p className="text-sm text-slate-500">Total Organizations</p>
-                <p className="text-2xl font-bold text-slate-900">{organizations.length}</p>
-              </div>
-            </div>
-          </div>
-          <div className="rounded-xl bg-white p-6 card-shadow">
-            <div className="flex items-center gap-4">
-              <div className="rounded-lg bg-success-50 p-3">
-                <Users className="h-6 w-6 text-success-600" />
-              </div>
-              <div>
-                <p className="text-sm text-slate-500">Total Users</p>
-                <p className="text-2xl font-bold text-slate-900">
-                  {organizations.reduce((acc, org) => acc + org.users, 0).toLocaleString()}
-                </p>
-              </div>
-            </div>
-          </div>
-          <div className="rounded-xl bg-white p-6 card-shadow">
-            <div className="flex items-center gap-4">
-              <div className="rounded-lg bg-accent-100 p-3">
-                <BookOpen className="h-6 w-6 text-accent-600" />
-              </div>
-              <div>
-                <p className="text-sm text-slate-500">Total Courses</p>
-                <p className="text-2xl font-bold text-slate-900">
-                  {organizations.reduce((acc, org) => acc + org.courses, 0).toLocaleString()}
-                </p>
-              </div>
-            </div>
-          </div>
-          <div className="rounded-xl bg-white p-6 card-shadow">
-            <div className="flex items-center gap-4">
-              <div className="rounded-lg bg-warning-50 p-3">
-                <CreditCard className="h-6 w-6 text-warning-600" />
-              </div>
-              <div>
-                <p className="text-sm text-slate-500">Monthly Revenue</p>
-                <p className="text-2xl font-bold text-slate-900">
-                  {formatCurrency(organizations.reduce((acc, org) => acc + org.revenue, 0))}
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Table Section */}
-        <div className="rounded-xl bg-white card-shadow">
-          {/* Table Header */}
-          <div className="flex items-center justify-between border-b border-slate-200 p-6">
-            <div className="flex items-center gap-4">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                <input
-                  type="text"
-                  placeholder="Search organizations..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="h-10 w-80 rounded-lg border border-slate-200 bg-slate-50 pl-10 pr-4 text-sm text-slate-900 placeholder:text-slate-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
-                />
-              </div>
-              <button className="flex items-center gap-2 rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors">
-                <Filter className="h-4 w-4" />
-                Filter
-              </button>
-            </div>
-            <button className="flex items-center gap-2 rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700 transition-colors">
-              <Plus className="h-4 w-4" />
-              Add Organization
-            </button>
-          </div>
-
-          {/* Table */}
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-slate-200 bg-slate-50">
-                  <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
-                    Organization
-                  </th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
-                    Plan
-                  </th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
-                    Status
-                  </th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
-                    Users
-                  </th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
-                    Courses
-                  </th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
-                    Revenue
-                  </th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
-                    Joined
-                  </th>
-                  <th className="px-6 py-4 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">
-                    Actions
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-200">
-                {filteredOrgs.map((org) => (
-                  <tr key={org.id} className="hover:bg-slate-50 transition-colors">
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-3">
-                        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary-100">
-                          <span className="text-sm font-bold text-primary-700">{org.code}</span>
-                        </div>
-                        <div>
-                          <p className="text-sm font-medium text-slate-900">{org.name}</p>
-                          <p className="text-xs text-slate-500">{org.email}</p>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <span
-                        className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${planColors[org.plan]}`}
-                      >
-                        {org.plan}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4">
-                      <span
-                        className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium capitalize ${statusColors[org.status]}`}
-                      >
-                        {org.status}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4">
-                      <p className="text-sm text-slate-900">{org.users.toLocaleString()}</p>
-                    </td>
-                    <td className="px-6 py-4">
-                      <p className="text-sm text-slate-900">{org.courses}</p>
-                    </td>
-                    <td className="px-6 py-4">
-                      <p className="text-sm font-medium text-slate-900">{formatCurrency(org.revenue)}</p>
-                    </td>
-                    <td className="px-6 py-4">
-                      <p className="text-sm text-slate-500">{formatDate(org.createdAt)}</p>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="flex items-center justify-end gap-2">
-                        <button className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors">
-                          <Eye className="h-4 w-4" />
-                        </button>
-                        <button className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors">
-                          <Edit className="h-4 w-4" />
-                        </button>
-                        <button className="rounded-lg p-2 text-slate-400 hover:bg-danger-50 hover:text-danger-600 transition-colors">
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          {/* Pagination */}
-          <div className="flex items-center justify-between border-t border-slate-200 px-6 py-4">
-            <p className="text-sm text-slate-500">
-              Showing <span className="font-medium text-slate-900">1</span> to{' '}
-              <span className="font-medium text-slate-900">{filteredOrgs.length}</span> of{' '}
-              <span className="font-medium text-slate-900">{organizations.length}</span> results
-            </p>
-            <div className="flex items-center gap-2">
-              <button className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed" disabled>
-                Previous
-              </button>
-              <button className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed" disabled>
-                Next
-              </button>
-            </div>
-          </div>
-        </div>
+    <Page
+      title="Organizations"
+      subtitle="Every university on the platform."
+      actions={
+        <Button icon={Plus} onClick={() => setCreating(true)}>
+          Add Organization
+        </Button>
+      }
+    >
+      <div
+        className={cn(
+          'grid grid-cols-1 gap-6 sm:grid-cols-2',
+          billingEnabled ? 'lg:grid-cols-4' : 'lg:grid-cols-3'
+        )}
+      >
+        <SummaryTile
+          icon={Building2}
+          tone="primary"
+          label="Organizations"
+          value={overview ? formatNumber(overview.totals.organizations) : '—'}
+        />
+        <SummaryTile
+          icon={Users}
+          tone="success"
+          label="Total Users"
+          value={overview ? formatNumber(overview.totals.users) : '—'}
+        />
+        {billingEnabled ? (
+          <>
+            <SummaryTile
+              icon={CreditCard}
+              tone="accent"
+              label="Active Subscriptions"
+              value={
+                overview ? formatNumber(overview.totals.activeSubscriptions) : '—'
+              }
+            />
+            <SummaryTile
+              icon={BookOpen}
+              tone="warning"
+              label="Revenue This Month"
+              value={overview ? formatCurrency(overview.monthlyRevenue.current) : '—'}
+            />
+          </>
+        ) : (
+          <SummaryTile
+            icon={BookOpen}
+            tone="accent"
+            label="Students"
+            value={overview ? formatNumber(overview.totals.students) : '—'}
+          />
+        )}
       </div>
-    </div>
-  )
-}
+
+      <DataTable
+        columns={columns}
+        rows={data?.data ?? []}
+        rowKey={(org) => org.id}
+        isLoading={isLoading || (isFetching && !data)}
+        error={error}
+        onRetry={() => refetch()}
+        meta={data?.meta}
+        onPageChange={setPage}
+        emptyTitle="No organizations found"
+        emptyMessage={
+          search || status
+            ? 'Try adjusting your search or filters.'
+            : 'Add your first university to get started.'
+        }
+        emptyAction={
+          !search && !status ? (
+            <Button icon={Plus} size="sm" onClick={() => setCreating(true)}>
+              Add Organization
+            </Button>
+          ) : undefined
+        }
+        toolbar={
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+            <SearchInput
+              value={search}
+              onChange={(value) => {
+                setSearch(value)
+                setPage(1)
+              }}
+              placeholder="Search by name, code or email…"
+              className="sm:w-80"
+            />
+            {billingEnabled && (
+              <select
+                value={status}
+                onChange={(event) => {
+                  setStatus(event.target.value)
+                  setPage(1)
+                }}
+                className="h-10 rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
+              >
+                {STATUS_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            )}
+          </div>
+        }
+      />
+
+      <OrganizationFormModal
+        open={creating}
+        onClose={() => setCreating(false)}
+      />
+
+      <OrganizationFormModal
+        open={Boolean(editing)}
+        organization={editing}
+        onClose={() => setEditing(null)}
+      />
+
+      <ConfirmDialog
+        open={Boolean(deleting)}
+        title="Delete organization"
+        message={`Permanently delete ${deleting?.name}? Organizations with users or billing history can't be deleted.`}
+        confirmLabel="Delete"
+        destructive
+        loading={deleteOrg.isPending}
+        onConfirm={() => deleting && deleteOrg.mutate(deleting.id)}
+        onClose={() => setDeleting(null)}
+      />
+    </Page>
+  )}
