@@ -172,23 +172,23 @@ production. See "Outstanding" below.
 None of these are in `review.txt`. That review explicitly did not compile or run
 the Flutter app, so no runtime or layout defect could have been in it.
 
-## M-1 — `_LectureCard` overflows on 390pt phones
+## M-1 — WITHDRAWN. Not a defect; an artifact of the test font
 
-`apps/mobile/lib/presentation/student_shell.dart:644`
+**Previously reported here as a 13px overflow of `_LectureCard`
+(`student_shell.dart:644`) affecting iPhone 12/13/14. That was wrong.**
 
-A `Row` overflows by 13px at 390pt width — iPhone 12, 13, 14 and 14 Pro. The
-student timetable is the most-used student screen, so this is visible to a
-large share of users.
+Widget tests render every glyph in a fallback font, not the app's bundled
+`Outfit`. The fallback is about twice as wide: the string `09:00 - 10:30`
+measures **182.0px** in it and **87.7px** in Outfit. The overflow was the
+harness's, not the app's.
 
-Captured deliberately in `baseline_student_shell.png`, striping and all. The
-golden test carries a **tripwire** that asserts the overflow is still present,
-so fixing it fails the test and forces the golden to be regenerated in the same
-commit as the fix.
+With `Outfit` loaded (`test/helpers/load_fonts.dart`) the student timetable
+renders clean, and so do all 27 screens. The tripwire that asserted the
+overflow was present has been removed and the goldens regenerated with the real
+font.
 
-To fix: give the offending child an `Expanded`/`Flexible`, delete the tripwire
-block, drop the `FlutterError.onError` suppression, and regenerate.
-
-Severity: medium. Cosmetic, but on the highest-traffic student screen.
+The lesson is kept because it applies to every future measurement here: a
+layout measured in a font the app does not ship is evidence about nothing.
 
 ## M-2 — Android 6.0 support dropped by the toolchain
 
@@ -229,3 +229,81 @@ unless `SEED_ALLOW_REMOTE_HOST` names that exact host. Verified against the real
 
 No Docker and no local Postgres are installed on this machine, so a throwaway
 local database needs a system-level install first.
+
+---
+
+# Runtime verification of all 27 screens
+
+`apps/mobile/test/runtime_verification_test.dart` signs in as each role, walks
+every destination in its shell, and records what actually renders. Run it with
+`flutter test test/runtime_verification_test.dart`.
+
+**Result: 27 of 27 render clean.** No exceptions, no overflows, no unreachable
+destinations, with the real `Outfit` font loaded.
+
+## Method, and its limits
+
+Two things blocked an emulator run, both recorded rather than worked around:
+
+1. **The Android emulator will not start on this machine** — `Android Emulator
+   hypervisor driver is not installed`. That needs an administrator install.
+2. **The configured database is empty** — 0 organizations, 0 users, 0 courses,
+   0 sessions (verified read-only). Seeding it is out of scope, so no real
+   login is possible regardless of the emulator.
+
+So the app is driven through its real widget tree against a fake gateway. That
+exercises the real theme, shells, navigation and layout at a real phone size,
+with the real font. It does **not** exercise Android platform behaviour.
+
+**Explicitly unverified:** camera permissions and `mobile_scanner` (the student
+Scan QR tab renders its chrome, but no camera is opened), push notifications,
+file save/share, deep links, and anything requiring a real backend round trip.
+
+## A caution about this harness
+
+Three successive versions of it reported all 27 screens OK while the golden
+suite simultaneously proved the student timetable overflowed:
+
+1. the error handler was installed inside each visit, so errors raised while
+   the shell first laid out landed before any handler existed;
+2. the landing tab of each shell was never re-pumped, so its render was never
+   attributed to it;
+3. errors raised during sign-in went to a null current-screen and were dropped.
+
+All three are fixed. The reason this is written down is that **a verification
+harness that under-reports is worse than none**, and this one under-reported
+three different ways before it worked.
+
+---
+
+# Confirmed findings from runtime verification
+
+## M-4 — most navigation destinations are off-screen with no affordance
+
+`app_shell.dart:_RoleBottomNav`. Past four destinations the bar switches to a
+fixed 82px per item inside a horizontal `SingleChildScrollView`. On a 390pt
+screen about 4.7 items are visible.
+
+| Role | Destinations | Visible | Hidden |
+| --- | --- | --- | --- |
+| Admin | 8 | ~4.7 | ~3 |
+| Super admin | 11 | ~4.7 | ~6 |
+
+For a super admin that means Pending Students, Materials, Devices, Exports,
+Inbox and Account are all reachable only by horizontally dragging a bar that
+gives no visual sign it scrolls. The last visible label is clipped mid-word
+("Students & St…"), which is the only hint.
+
+No error is raised — the scroll view absorbs it — so this is invisible to
+automated checks and was found by looking at the rendered golden.
+
+Severity: medium, and it is a navigation defect rather than a cosmetic one:
+over half a super admin's app is undiscoverable.
+
+Not fixed here. It is a change to the navigation design and belongs with the
+Phase 5 shell work.
+
+## D-12 — Friday confirmed missing, visually
+
+`baseline_student_shell.png` shows the day selector as SAT SUN MON TUE WED THU.
+The Prisma `DayOfWeek` enum has seven days. Confirmed as reported.

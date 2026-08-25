@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:wall_e_mobile/main.dart';
 
 import 'helpers/fake_campus_api.dart';
+import 'helpers/load_fonts.dart';
 
 /// The targeted golden subset from plan.txt Phase 0.8.
 ///
@@ -18,10 +19,12 @@ import 'helpers/fake_campus_api.dart';
 /// a changed radius, a broken shell. That is the damage the design-preservation
 /// rule is actually worried about.
 ///
-/// These are NOT pixel-perfect renders of the shipped app. Widget tests do not
-/// load the bundled 'Outfit' font, so text here uses the test font. That is
-/// fine for the purpose: the comparison is against the previous run of this
-/// same harness, not against a design file.
+/// These load the app's REAL Outfit font (see helpers/load_fonts.dart), which
+/// matters more than it sounds. The fallback test font renders the same string
+/// roughly twice as wide - '09:00 - 10:30' measures 182px in the fallback and
+/// 88px in Outfit - and that difference invented a 13px overflow on the student
+/// timetable that does not exist in the shipped app. Goldens taken in a font
+/// the app does not ship are evidence about nothing.
 ///
 /// Regenerate deliberately, never reflexively:
 ///
@@ -51,6 +54,8 @@ Future<void> _pumpAt(WidgetTester tester, Widget app) async {
 }
 
 void main() {
+  setUpAll(loadAppFonts);
+
   testWidgets('golden: login', (tester) async {
     await _pumpAt(tester, WallEApp(api: FakeCampusApi()));
     await expectLater(
@@ -59,46 +64,13 @@ void main() {
     );
   });
 
-  // KNOWN DEFECT, captured deliberately.
-  //
-  // _LectureCard overflows its Row by 13px at this width
-  // (student_shell.dart:644). 390pt is iPhone 12/13/14/14 Pro, so this is
-  // visible to a large share of real users. It was not in review.txt because
-  // that review never compiled or ran the app.
-  //
-  // The golden records the app as it actually renders, striping and all. When
-  // the overflow is fixed the golden changes, and that change is the proof.
   testWidgets('golden: student shell', (tester) async {
-    final overflows = <String>[];
-    final priorOnError = FlutterError.onError;
-    FlutterError.onError = (details) {
-      if (details.exceptionAsString().contains('overflowed')) {
-        overflows.add(details.exceptionAsString());
-        return;
-      }
-      priorOnError?.call(details);
-    };
-    addTearDown(() => FlutterError.onError = priorOnError);
-
     await _pumpAt(tester, WallEApp(api: FakeCampusApi()));
     await signIn(tester, 'student@campus.edu');
     await tester.pumpAndSettle();
     await expectLater(
       find.byType(WallEApp),
       matchesGoldenFile('goldens/baseline_student_shell.png'),
-    );
-
-    // Tripwire. Asserts the DEFECT is still present, so that fixing the
-    // overflow fails HERE and forces the golden to be regenerated in the same
-    // commit as the fix. When you fix student_shell.dart:644: delete this
-    // block, drop the FlutterError.onError suppression above, and rerun with
-    // --update-goldens.
-    expect(
-      overflows,
-      isNotEmpty,
-      reason: 'student_shell.dart:644 _LectureCard no longer overflows at '
-          '390pt - fix confirmed. Remove this tripwire and regenerate the '
-          'golden.',
     );
   });
 

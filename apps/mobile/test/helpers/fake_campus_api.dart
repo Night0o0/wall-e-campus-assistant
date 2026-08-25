@@ -7,7 +7,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wall_e_mobile/data/campus_api.dart';
-import 'package:wall_e_mobile/main.dart';
 import 'package:wall_e_mobile/models/account_role.dart';
 
 class FakeCampusApi implements CampusGateway {
