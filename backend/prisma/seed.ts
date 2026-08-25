@@ -1,10 +1,14 @@
 import {
   PrismaClient,
+  AttendanceStatus,
   BillingCycle,
   DayOfWeek,
+  SessionCloseReason,
   SubscriptionStatus,
 } from "@prisma/client";
 import bcrypt from "bcrypt";
+import { partsInZone, zonedTimeToUtc } from "../src/utils/occurrence.util.js";
+import { assertSeedAllowed } from "../src/utils/seed-guard.js";
 
 const prisma = new PrismaClient();
 
@@ -18,6 +22,16 @@ const OWNER = {
 
 /** Every seeded university account shares this password. */
 const DEMO_PASSWORD = "Demo@12345";
+
+/**
+ * Credential for the seeded robot/tablet.
+ *
+ * A fixed value so QA can authenticate a simulated device without reading it
+ * out of a provisioning response, exactly as DEMO_PASSWORD exists so nobody has
+ * to reset a demo account. Real devices get 32 bytes of entropy from
+ * DeviceService.provision, which is the only path that runs in production.
+ */
+const DEMO_DEVICE_SECRET = "Robot@12345-Demo-Only";
 
 const MONTHS_OF_HISTORY = 8;
 
@@ -324,6 +338,48 @@ const WEEKDAYS = [
 ];
 
 /**
+ * The instant of a past occurrence of a weekly slot, on the campus clock.
+ *
+ * `weeksAgo: 0` is the most recent one that has already happened. Computed
+ * rather than written down, for the same reason the development lecture is: a
+ * seed with hardcoded dates stops demonstrating anything next month.
+ */
+const pastOccurrence = (
+  day: DayOfWeek,
+  clock: string,
+  weeksAgo: number,
+  now: Date
+): Date => {
+  const today = partsInZone(now, CAMPUS_TIMEZONE);
+  const midnight = Date.UTC(today.year, today.month - 1, today.day);
+
+  const wanted = WEEKDAYS.indexOf(day);
+  const daysBack = ((new Date(midnight).getUTCDay() - wanted + 7) % 7) + weeksAgo * 7;
+
+  const at = (offsetDays: number) => {
+    const date = new Date(midnight - offsetDays * 86400000);
+    const [hour = 0, minute = 0] = clock.split(":").map(Number);
+
+    return zonedTimeToUtc(
+      {
+        year: date.getUTCFullYear(),
+        month: date.getUTCMonth() + 1,
+        day: date.getUTCDate(),
+        hour,
+        minute,
+      },
+      CAMPUS_TIMEZONE
+    );
+  };
+
+  const candidate = at(daysBack);
+
+  // If today is the lecture's own weekday and the hour has not come round yet,
+  // the "most recent" occurrence is the week before.
+  return candidate > now ? at(daysBack + 7) : candidate;
+};
+
+/**
  * A lecture placed a short way into the future, so lecture reminders can be
  * watched being generated and delivered without editing the database by hand.
  *
@@ -392,6 +448,13 @@ const DEMO_STUDENTS = [
   { key: "A1", slug: "mechatronics.a", fullName: "Mariam Fouad", level: DEMO_LEVEL, section: "A" },
   { key: "B1", slug: "mechatronics.b", fullName: "Youssef Nasser", level: DEMO_LEVEL, section: "B" },
   { key: "L3", slug: "mechatronics.l3", fullName: "Salma Kamal", level: 3, section: "A" },
+  // Three more in section A, so the section A cohort is four people and an
+  // attendance roll can show PRESENT, LATE and ABSENT side by side. With one
+  // student in the cohort the three states cannot all be seen at once, and a
+  // roll of one is not a roll anybody can read a report from.
+  { key: "A2", slug: "mechatronics.a2", fullName: "Omar Sherif", level: DEMO_LEVEL, section: "A" },
+  { key: "A3", slug: "mechatronics.a3", fullName: "Nadia Hassan", level: DEMO_LEVEL, section: "A" },
+  { key: "A4", slug: "mechatronics.a4", fullName: "Karim Adel", level: DEMO_LEVEL, section: "A" },
 ];
 
 const pick = <T>(items: T[]) => items[randomInt(0, items.length - 1)]!;
@@ -430,6 +493,8 @@ async function wipe() {
   await prisma.session.deleteMany();
   await prisma.lectureSchedule.deleteMany();
   await prisma.course.deleteMany();
+  // Before User and Organization: a device points at both.
+  await prisma.robotDevice.deleteMany();
   await prisma.payment.deleteMany();
   await prisma.invoice.deleteMany();
   await prisma.studentProfile.deleteMany();
@@ -443,6 +508,12 @@ async function wipe() {
 }
 
 async function main() {
+  // Before anything else, and before any connection is opened: this script
+  // wipes every table it owns and writes credentials that are committed to the
+  // repository. Checked on NODE_ENV alone — SEED_KEEP_EXISTING does not soften
+  // it, because the demo data is as unwelcome in production as the deletion is.
+  assertSeedAllowed();
+
   console.log("🌱 Seeding WALL-E platform data...\n");
 
   if (process.env.SEED_KEEP_EXISTING !== "true") {
@@ -532,6 +603,8 @@ async function main() {
   let totalPayments = 0;
   let totalCourses = 0;
   let totalSchedules = 0;
+  let totalDevices = 0;
+  let totalSessions = 0;
 
   for (const university of UNIVERSITIES) {
     const existing = await prisma.organization.findUnique({
@@ -717,6 +790,32 @@ async function main() {
     if (DEMO_SCHEDULE_CODES.includes(university.code)) {
       const domain = university.code.toLowerCase();
 
+      /* --- The lecture-hall robot --- */
+
+      // Bound to B-204. The binding is the point of the seed: this device must
+      // resolve the B-204 session below and must not resolve the C-101 one.
+      // Seeded per demo university so cross-tenant isolation can be shown too —
+      // the NCTU device must never resolve a CU session either.
+      //
+      // It cannot open a session, and there is no flag that would let it: the
+      // approved lifecycle is that a human opens attendance and the device puts
+      // the code on screen.
+      await prisma.robotDevice.create({
+        data: {
+          organizationId: organization.id,
+          name: `${university.code} Lecture Hall Robot`,
+          room: "B-204",
+          // Email-shaped so the native app can use one email/password form for
+          // humans and devices while this remains a capability-limited device.
+          deviceKeyId: `robot@${domain}.edu.eg`,
+          secretHash: await bcrypt.hash(DEMO_DEVICE_SECRET, 10),
+          createdById: superAdmin.id,
+          createdAt: joinedAt,
+        },
+      });
+
+      totalDevices += 1;
+
       // Instructors: ADMIN users, titled through AdminProfile.jobTitle.
       const instructors = [];
 
@@ -766,8 +865,18 @@ async function main() {
         totalCourses += 1;
       }
 
+      // Keyed by course + section, so the open sessions below can name the
+      // exact lecture they are taking attendance for. `courseId` travels with
+      // it because a session copies the course from its lecture — see
+      // SessionService.createSession; a session written here without it would
+      // be invisible to every course-level attendance query.
+      const demoSchedules = new Map<
+        string,
+        { id: string; room: string; courseId: string }
+      >();
+
       for (const entry of DEMO_TIMETABLE) {
-        await prisma.lectureSchedule.create({
+        const schedule = await prisma.lectureSchedule.create({
           data: {
             organizationId: organization.id,
             courseId: demoCourses.get(entry.course)!,
@@ -785,7 +894,44 @@ async function main() {
           },
         });
 
+        demoSchedules.set(`${entry.course}:${entry.section}`, {
+          id: schedule.id,
+          room: schedule.room,
+          courseId: schedule.courseId,
+        });
+
         totalSchedules += 1;
+      }
+
+      /* --- Two open sessions, so the room binding can be seen working --- */
+
+      // One in the robot's room and one in another, both open at once. The
+      // seeded device must return exactly the first from
+      // GET /api/devices/me/sessions/active — if it ever returns both, the
+      // binding has stopped working and this seed is what says so.
+      //
+      // Opened by the lecture's own instructor, and each carries the room of
+      // the lecture behind it, exactly as SessionService stamps it.
+      const openSessions: { course: string; section: string; instructor: number }[] = [
+        { course: "MEC201", section: "A", instructor: 0 }, // B-204 — visible
+        { course: "MEC203", section: "A", instructor: 1 }, // C-101 — not
+      ];
+
+      for (const open of openSessions) {
+        const schedule = demoSchedules.get(`${open.course}:${open.section}`)!;
+
+        await prisma.session.create({
+          data: {
+            title: `${open.course} — section ${open.section}`,
+            createdById: instructors[open.instructor]!.id,
+            organizationId: organization.id,
+            lectureScheduleId: schedule.id,
+            courseId: schedule.courseId,
+            room: schedule.room,
+          },
+        });
+
+        totalSessions += 1;
       }
 
       /* --- One lecture starting shortly, for testing reminders --- */
@@ -831,10 +977,12 @@ async function main() {
 
       // Students whose profiles are already COMPLETED, so the personalised
       // timetable endpoint works the moment they sign in.
+      const demoStudents: { id: string; level: number; section: string }[] = [];
+
       for (const student of DEMO_STUDENTS) {
         const birthDate = fakeBirthDate();
 
-        await prisma.user.create({
+        const record = await prisma.user.create({
           data: {
             universityId: `${university.code}-DEMO-${student.key}`,
             fullName: student.fullName,
@@ -863,8 +1011,141 @@ async function main() {
           },
         });
 
+        demoStudents.push({
+          id: record.id,
+          level: student.level,
+          section: student.section,
+        });
+
         totalUsers += 1;
       }
+
+      /* --- Attendance history, covering every lifecycle state --- */
+
+      // The section A / level 2 cohort — exactly who the MEC201 section A
+      // lecture addresses, and therefore exactly who its roll is called over.
+      const sectionA = demoStudents.filter(
+        (student) => student.level === DEMO_LEVEL && student.section === "A"
+      );
+
+      const mec201 = demoSchedules.get("MEC201:A")!;
+      const mec201Instructor = instructors[0]!.id;
+
+      /**
+       * Four Sundays, deliberately not four sessions.
+       *
+       * Week 3 has no session at all, and that gap is the point: it is the only
+       * way to see NOT_RECORDED, which exists precisely because no row exists.
+       * A seed in which every occurrence was recorded could not demonstrate the
+       * one state the lifecycle was built to keep separate from ABSENT.
+       */
+      const history: {
+        weeksAgo: number;
+        closeReason: SessionCloseReason;
+        /** Index into sectionA; everyone else on the roll is marked absent. */
+        present: number[];
+        late: number[];
+      }[] = [
+        { weeksAgo: 3, closeReason: SessionCloseReason.MANUAL, present: [0, 1], late: [2] },
+        // weeksAgo 2 is missing on purpose → NOT_RECORDED.
+        {
+          weeksAgo: 1,
+          // The instructor walked out without closing it; the sweep did.
+          closeReason: SessionCloseReason.AUTO_STALE,
+          present: [0, 2],
+          late: [],
+        },
+        { weeksAgo: 0, closeReason: SessionCloseReason.MANUAL, present: [0, 1, 2, 3], late: [] },
+      ];
+
+      for (const week of history) {
+        const startTime = pastOccurrence("SUNDAY", "10:00", week.weeksAgo, now);
+        const endTime = new Date(startTime.getTime() + 120 * 60_000);
+        // The roll is called shortly after the session closes, as the worker
+        // would do it.
+        const sweptAt = new Date(endTime.getTime() + 5 * 60_000);
+
+        const session = await prisma.session.create({
+          data: {
+            title: `MEC201 — section A`,
+            createdById: mec201Instructor,
+            organizationId: organization.id,
+            lectureScheduleId: mec201.id,
+            courseId: mec201.courseId,
+            room: mec201.room,
+            status: "CLOSED",
+            startTime,
+            endTime,
+            closeReason: week.closeReason,
+            absencesSweptAt: sweptAt,
+            createdAt: startTime,
+          },
+        });
+
+        totalSessions += 1;
+
+        for (const [index, student] of sectionA.entries()) {
+          const isPresent = week.present.includes(index);
+          const isLate = week.late.includes(index);
+
+          if (!isPresent && !isLate) {
+            // ABSENT: written by the roll call, not by a scan, so its scanTime
+            // is the moment the roll was called.
+            await prisma.attendance.create({
+              data: {
+                studentId: student.id,
+                sessionId: session.id,
+                status: AttendanceStatus.ABSENT,
+                scanTime: sweptAt,
+              },
+            });
+
+            continue;
+          }
+
+          // PRESENT within the threshold, LATE past it. The threshold is
+          // ATTENDANCE_LATE_AFTER_MINUTES (15 by default); 5 and 25 minutes sit
+          // clearly either side of it, so the demo does not depend on the exact
+          // value being left alone.
+          await prisma.attendance.create({
+            data: {
+              studentId: student.id,
+              sessionId: session.id,
+              status: isLate ? AttendanceStatus.LATE : AttendanceStatus.PRESENT,
+              scanTime: new Date(
+                startTime.getTime() + (isLate ? 25 : 5) * 60_000
+              ),
+            },
+          });
+        }
+      }
+
+      /**
+       * One session left in PENDING: open, but its lecture is over.
+       *
+       * Opened five minutes past its own two-hour length, so it sits inside the
+       * stale grace rather than past it. This state is genuinely transient — if
+       * the attendance worker is running it will auto-close this session to
+       * AUTO_STALE once the grace expires, which is not the seed decaying but
+       * the lifecycle working.
+       */
+      const mec202 = demoSchedules.get("MEC202:A")!;
+
+      await prisma.session.create({
+        data: {
+          title: "MEC202 — section A",
+          createdById: mec201Instructor,
+          organizationId: organization.id,
+          lectureScheduleId: mec202.id,
+          courseId: mec202.courseId,
+          room: mec202.room,
+          status: "ACTIVE",
+          startTime: new Date(now.getTime() - 125 * 60_000),
+          createdAt: new Date(now.getTime() - 125 * 60_000),
+        },
+      });
+
+      totalSessions += 1;
     }
 
     /* --- Billing history: one invoice + payment per elapsed period --- */
@@ -969,6 +1250,8 @@ async function main() {
   console.log(`Users         : ${totalUsers + 1}`);
   console.log(`Courses       : ${totalCourses}`);
   console.log(`Lectures      : ${totalSchedules}`);
+  console.log(`Robot devices : ${totalDevices}`);
+  console.log(`Open sessions : ${totalSessions}`);
   console.log(`Invoices      : ${totalInvoices}`);
   console.log(`Payments      : ${totalPayments}`);
   console.log("────────────────────────────────────────");
@@ -992,6 +1275,37 @@ async function main() {
     console.log(`     instructor (ADMIN)   : hana.zaki@${domain}.edu.eg`);
     console.log(`     instructor (reminder): dev.reminder@${domain}.edu.eg`);
   }
+
+  console.log("\n🤖 Robot/tablet demo devices (room B-204, QR display only):");
+
+  for (const code of DEMO_SCHEDULE_CODES) {
+    console.log(`   ${code}: email/device ID = robot@${code.toLowerCase()}.edu.eg`);
+  }
+
+  console.log(`   password/device secret : ${DEMO_DEVICE_SECRET}`);
+  console.log("   POST /api/devices/auth  { deviceKeyId, deviceSecret }");
+  console.log("   → then GET /api/devices/me/sessions/active with the token.");
+  console.log(
+    "   Two sessions are open per university: MEC201/A in B-204 and MEC203/A"
+  );
+  console.log(
+    "   in C-101. A B-204 robot must see the first and only the first."
+  );
+
+  console.log("\n📋 Attendance lifecycle coverage (per demo university):");
+  console.log("   GET /api/schedules/<MEC201 section A id>/attendance-log");
+  console.log("   PRESENT / LATE   : scans 5 and 25 minutes after each session opened");
+  console.log("   ABSENT           : section A students with no scan, written by the roll call");
+  console.log("   AUTO_STALE       : the session one week ago, closed by the sweep");
+  console.log("   MANUAL           : the sessions three weeks and this week");
+  console.log("   NOT_RECORDED     : two weeks ago — no session was ever opened");
+  console.log("   PENDING          : MEC202/A, open now with its lecture already over");
+  console.log("                      Deliberately NOT served to the robot and NOT scannable:");
+  console.log("                      the window is enforced on read and on write, not by the");
+  console.log("                      worker. It shows up as expiredCount on the device");
+  console.log("                      endpoint until the sweep closes it as AUTO_STALE.");
+  console.log("   The two open sessions above stay scannable for two hours from seeding —");
+  console.log("   the length of their lecture. Re-run the seed to refresh the demo.");
 
   console.log("\n🔔 Lecture reminder demo (Robotics Lab, room DEV-LAB, section B):");
   console.log(
