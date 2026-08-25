@@ -15,6 +15,7 @@
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
     "db:seed": "prisma db seed",
+    "db:seed:mobile": "tsx prisma/mobile-demo.ts",
     "db:reset": "prisma migrate reset",
     "db:studio": "prisma studio"
   },
@@ -24,6 +25,7 @@
   "type": "commonjs",
   "dependencies": {
     "@prisma/client": "^6.9.0",
+    "@types/nodemailer": "^8.0.1",
     "bcrypt": "^6.0.0",
     "cors": "^2.8.5",
     "dotenv": "^16.5.0",
@@ -32,6 +34,7 @@
     "express-rate-limit": "^8.6.2",
     "helmet": "^8.3.0",
     "jsonwebtoken": "^9.0.2",
+    "nodemailer": "^9.0.5",
     "zod": "^3.25.67"
   },
   "devDependencies": {

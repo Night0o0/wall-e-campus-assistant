@@ -20,6 +20,38 @@ enum SessionStatus {
   CLOSED
 }
 
+/**
+ * Why a session stopped accepting scans. Null while it is still open.
+ *
+ * MANUAL is the instructor pressing close. AUTO_STALE is the sweep closing a
+ * session that outlived its lecture by more than the configured grace period —
+ * an instructor who walked out without closing. The two are recorded distinctly
+ * because they mean different things about the data: a manually closed session
+ * was watched to the end, an AUTO_STALE one was not, and anyone auditing a
+ * student's absence is entitled to know which.
+ */
+enum SessionCloseReason {
+  MANUAL
+  AUTO_STALE
+}
+
+/**
+ * What an Attendance row records.
+ *
+ * PRESENT and LATE are both written by a student scanning; the two are split by
+ * how long after attendance opened the scan arrived. ABSENT is different in
+ * kind: nobody scans to produce it, and it is written by the absence sweep and
+ * by nothing else — see AttendanceLifecycleService.
+ *
+ * Note what is NOT in this enum, and why it must never be added: "not recorded"
+ * and "pending". Neither is a fact about a student, so neither can be a row
+ * about one. They are states of a lecture occurrence — no session was ever
+ * opened, or one was opened and is still open past its end — and they are
+ * derived from the presence and status of a Session, never stored. Putting them
+ * here would make "we have no idea whether this student attended" and "this
+ * student did not attend" the same shape of claim, which is the one confusion
+ * the whole lifecycle exists to prevent.
+ */
 enum AttendanceStatus {
   PRESENT
   LATE
@@ -78,11 +110,36 @@ enum DayOfWeek {
  * What a notification is about. The lecture reminders are named after the lead
  * time they carry so a row is self-describing in the database; the lead times
  * themselves live in one place only — src/config/notification.config.ts.
+ *
+ * The ACCOUNT_* values carry no lecture: they are about the account itself, so
+ * `lectureScheduleId` and `occurrenceStartsAt` are null on those rows. That is
+ * what the nullable columns on Notification were declared for.
+ *
+ * One consequence worth stating, because it is a property of PostgreSQL rather
+ * than of this schema: the `notification_occurrence_identity` unique index
+ * cannot deduplicate them, since NULLs compare distinct in a unique index. The
+ * lecture generator relies on that index for idempotency; account notices rely
+ * instead on the fact that they are written inside the same transaction as the
+ * decision that causes them, and that decision is itself idempotent — an
+ * already-approved student is rejected before any write happens.
  */
 enum NotificationType {
   LECTURE_ADMIN_24H
   LECTURE_ADMIN_30M
   LECTURE_STUDENT_10M
+  ACCOUNT_APPROVED
+  ACCOUNT_REJECTED
+}
+
+/**
+ * What a one-time code entitles its holder to do. Kept as two values rather
+ * than one flag because they are not interchangeable: a code mailed to prove an
+ * address must never be spendable to reset a password, and a reset code must
+ * never stand in for proof of a new address.
+ */
+enum EmailChallengePurpose {
+  EMAIL_VERIFICATION
+  PASSWORD_RESET
 }
 
 /**
@@ -104,6 +161,18 @@ enum DevicePlatform {
 }
 
 /**
+ * Lifecycle of a robot/tablet credential. PENDING is provisioned but not yet
+ * activated, SUSPENDED is a reversible pause, REVOKED is terminal — a revoked
+ * device is never reactivated, a replacement is issued instead.
+ */
+enum DeviceStatus {
+  PENDING
+  ACTIVE
+  SUSPENDED
+  REVOKED
+}
+
+/**
  * Where a student's academic data came from. Everything is SELF_REPORTED while
  * students fill their own profile in; a future university-database import sets
  * UNIVERSITY_SYNC so the two can be told apart without a schema change.
@@ -114,13 +183,35 @@ enum ProfileDataSource {
 }
 
 model User {
-  id             String       @id @default(uuid())
-  universityId   String       @unique
-  fullName       String
-  email          String       @unique
-  passwordHash   String
-  role           UserRole     @default(STUDENT)
-  isVerified     Boolean      @default(false)
+  id           String   @id @default(uuid())
+  universityId String   @unique
+  fullName     String
+  email        String   @unique
+  passwordHash String
+  role         UserRole @default(STUDENT)
+
+  /**
+   * Whether this account has been let in.
+   *
+   * A student registers themselves and lands here false — the default has
+   * always been false, and AuthService.register has never set it. What makes
+   * that mean something is `requireApproved` in auth.middleware.ts: an
+   * unapproved student can sign in and fill in their profile, and can do
+   * nothing else. Staff accounts are created by an administrator who has
+   * already decided, so they are written true at creation.
+   */
+  isVerified Boolean @default(false)
+
+  /// Who let them in, and when. Null on an account that was never pending —
+  /// staff — and on one still waiting. An approval is a decision somebody made
+  /// about somebody else, and a bare boolean cannot say who made it.
+  verifiedAt   DateTime?
+  verifiedById String?
+  verifiedBy   User?     @relation("StudentApprover", fields: [verifiedById], references: [id])
+
+  /// Students this user has approved. A back-relation only.
+  approvedStudents User[] @relation("StudentApprover")
+
   isActive       Boolean      @default(true)
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id])
@@ -134,12 +225,21 @@ model User {
   notifications    Notification[]
   deviceTokens     DeviceToken[]
 
+  /// Course material links this user published. A back-relation only.
+  courseMaterials CourseMaterial[] @relation("MaterialAuthor")
+
+  /// Robot/tablet credentials this user provisioned or retired. Back-relations
+  /// only — no column is added to User by either.
+  createdDevices RobotDevice[] @relation("DeviceCreator")
+  revokedDevices RobotDevice[] @relation("DeviceRevoker")
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([organizationId])
   @@index([role])
   @@index([createdAt])
+  @@index([verifiedById])
 }
 
 model SubscriptionPlan {
@@ -181,6 +281,8 @@ model Organization {
   lectureSchedules LectureSchedule[]
   notifications    Notification[]
   deviceTokens     DeviceToken[]
+  robotDevices     RobotDevice[]
+  courseMaterials  CourseMaterial[]
 
   @@index([createdAt])
 }
@@ -318,6 +420,7 @@ model Course {
   organization     Organization      @relation(fields: [organizationId], references: [id])
   sessions         Session[]
   lectureSchedules LectureSchedule[]
+  materials        CourseMaterial[]
   createdAt        DateTime          @default(now())
   updatedAt        DateTime          @updatedAt
 
@@ -326,6 +429,24 @@ model Course {
   @@index([createdById])
 }
 
+/**
+ * One attendance-taking occurrence: an admin opens it, students scan into it,
+ * it closes. Not to be confused with LectureSchedule, which is the standing
+ * weekly plan behind it.
+ *
+ * `lectureScheduleId` is the link between the two, and it is nullable in both
+ * directions of meaning: a session may be opened ad hoc for something that has
+ * no timetable entry at all, and every session that existed before this column
+ * did carries null. Nothing may assume it is set.
+ *
+ * `room` is where attendance was actually taken. It is copied from the linked
+ * schedule when the session is opened and never re-read afterwards — the same
+ * reasoning as Notification.title/body: this is a record of an occurrence, and
+ * moving next term's lecture to another room must not rewrite where last
+ * week's attendance happened. It is also what a room-bound robot filters on,
+ * which is why it is a column here rather than a join through the schedule:
+ * an ad-hoc session in B-204 has a room but no timetable entry.
+ */
 model Session {
   id             String        @id @default(uuid())
   title          String
@@ -335,18 +456,55 @@ model Session {
   course         Course?       @relation(fields: [courseId], references: [id])
   organizationId String
   organization   Organization  @relation(fields: [organizationId], references: [id])
-  qrSecret       String        @default(uuid())
-  status         SessionStatus @default(ACTIVE)
-  startTime      DateTime      @default(now())
-  endTime        DateTime?
-  attendances    Attendance[]
-  createdAt      DateTime      @default(now())
+
+  /// The timetable entry this occurrence belongs to, when it has one.
+  /// SET NULL rather than CASCADE on delete: schedules are soft-deleted and
+  /// never removed, but if one ever were, taking historical attendance records
+  /// down with it would be data loss. The session survives, merely unlinked.
+  lectureScheduleId String?
+  lectureSchedule   LectureSchedule? @relation(fields: [lectureScheduleId], references: [id], onDelete: SetNull)
+
+  /// Where attendance was taken. Stamped at open time; compared
+  /// case-insensitively, like every other free-text room in this schema.
+  room String?
+
+  qrSecret  String        @default(uuid())
+  status    SessionStatus @default(ACTIVE)
+  startTime DateTime      @default(now())
+  endTime   DateTime?
+
+  /// Set when `status` becomes CLOSED, and never afterwards. Null on an open
+  /// session, which is what makes "closed" and "closed by whom" one fact.
+  closeReason SessionCloseReason?
+
+  /**
+   * When the absence sweep finished calling the roll for this session.
+   *
+   * This column is the idempotency key of the ABSENT sweep. The unique
+   * constraint on Attendance already makes a duplicate row impossible, but this
+   * is what stops the sweep re-resolving a cohort it has already resolved, and
+   * it is the auditable record that the roll was called at all — an absence is
+   * a claim about somebody, and "we never checked" must be distinguishable from
+   * "we checked and they were there".
+   *
+   * Null on every open session, and on every closed one whose roll is still
+   * outstanding. Never cleared once set.
+   */
+  absencesSweptAt DateTime?
+
+  attendances Attendance[]
+  createdAt   DateTime     @default(now())
 
   @@index([organizationId])
   @@index([createdById])
   @@index([courseId])
   @@index([status])
   @@index([createdAt])
+  @@index([lectureScheduleId])
+  /// The robot's poll: the open sessions of one university.
+  @@index([organizationId, status])
+  /// The sweep's two queries: sessions still open, and closed rolls not yet called.
+  @@index([status, absencesSweptAt])
 }
 
 model Attendance {
@@ -408,6 +566,10 @@ model LectureSchedule {
   updatedAt DateTime @updatedAt
 
   notifications Notification[]
+
+  /// The attendance-taking occurrences opened against this weekly slot.
+  /// A back-relation only — the column lives on Session.
+  sessions Session[]
 
   @@index([organizationId])
   @@index([courseId])
@@ -521,4 +683,223 @@ model DeviceToken {
 
   @@index([userId, isActive])
   @@index([organizationId])
+}
+
+/**
+ * A link to where a course's material actually lives — in practice a Google
+ * Drive folder the instructor maintains.
+ *
+ * The file is not stored here and is not proxied through this API. The value of
+ * this table is the *addressing*: answering "which folder is this student's
+ * second-year Data Structures material in" without the student having to be
+ * told, and without every instructor emailing a link round at the start of term.
+ *
+ * ── Why the cohort is copied rather than pointed at ──────────────────────────
+ *
+ * A material belongs to a course AND to an audience, because the same subject
+ * is taught to more than one year, and each year gets its own folder. That
+ * audience is the academic address, stored as plain columns exactly as
+ * LectureSchedule and StudentProfile store it — the three have to be comparable
+ * field for field, and there is still no normalized Faculty/Department model to
+ * point at.
+ *
+ * It deliberately does NOT hang off a lectureScheduleId. A course is often
+ * taught to one cohort across several timetable rows — a lecture and a lab, two
+ * different days — and a link attached to one of those rows would be invisible
+ * from the other. The student's question is "where is the material for this
+ * subject", not "for this Tuesday slot". Instructors still choose the cohort by
+ * picking one of their own lectures in the UI; the service copies the address
+ * off it, and it is the address that is stored.
+ *
+ * ── section ──────────────────────────────────────────────────────────────────
+ *
+ * Nullable, and the only nullable part of the address. Null means "every
+ * section of this faculty/department/level/semester", which is the common case:
+ * an instructor teaching sections A, B and C from one folder adds one row, not
+ * three. A non-null section narrows the link to that section alone, for the
+ * occasional per-section folder. See CourseMaterialService for the matching.
+ *
+ * ── driveUrl ─────────────────────────────────────────────────────────────────
+ *
+ * An untrusted string typed by a member of staff, validated at the edge to be
+ * https and to point at Google Drive — see types/material.types.ts. Note what
+ * this system cannot enforce: the folder's own sharing permissions live in
+ * Google, not here. A folder set to "anyone with the link" is readable by anyone
+ * who obtains the link, whatever this table says about who may read the row.
+ */
+model CourseMaterial {
+  id             String       @id @default(uuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+
+  courseId String
+  course   Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  // The audience. Mirrors LectureSchedule's academic address, minus the
+  // day/time — material is not tied to a slot.
+  faculty    String
+  department String
+  level      Int
+  /// 1 = First Semester, 2 = Second Semester.
+  semester   Int
+  /// Null = every section of the cohort above.
+  section    String?
+
+  /// What the link is called in the list: "Lectures", "Labs", "Past papers".
+  title    String
+  driveUrl String
+
+  addedById String
+  addedBy   User   @relation("MaterialAuthor", fields: [addedById], references: [id])
+
+  /// Soft delete, like LectureSchedule. A link removed mid-term should stop
+  /// appearing without erasing the record that it was published.
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([organizationId])
+  @@index([courseId])
+  @@index([addedById])
+  /// The student lookup: every column it filters on, in order.
+  @@index([organizationId, isActive, faculty, department, level, semester])
+}
+
+/**
+ * A robot or wall-mounted tablet that displays the attendance QR code.
+ *
+ * This is NOT a User and deliberately carries no UserRole. A device is its own
+ * principal: it authenticates through its own middleware, against its own
+ * signing key, onto its own request property. Nothing that inspects `req.user`
+ * can ever see a device, so no existing role check can be satisfied by one —
+ * see device.middleware.ts.
+ *
+ * `secretHash` is bcrypt over a 32-byte random secret that is returned exactly
+ * once, at provisioning, and never again. Losing it means rotating it.
+ *
+ * The point of the model is revocability. `status` is re-read from this row on
+ * every single request, exactly as `authenticate` re-reads User.isActive, so a
+ * revoked device stops working on its next call rather than when its short
+ * access token happens to expire.
+ */
+model RobotDevice {
+  id             String       @id @default(uuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+
+  /// Human label for the console: "Lab B-204 Robot".
+  name String
+  /// Optional room binding. When set, the device serves only sessions held in
+  /// this room — a tablet bolted to B-204 cannot display the QR for a lecture
+  /// in C-101. Compared case-insensitively against Session.room, like every
+  /// other free-text room in this schema. Null means unbound: the device serves
+  /// every open session in its university.
+  room String?
+
+  /// Public identifier, safe to log and to print on a sticker.
+  deviceKeyId String @unique
+  /// bcrypt over the provisioning secret. Never selected into a response.
+  secretHash  String
+
+  status DeviceStatus @default(ACTIVE)
+
+  /// Inert. Reserved, always false, and read by nothing.
+  ///
+  /// A device does not open attendance sessions in the approved lifecycle — an
+  /// instructor or admin does, and the device only displays the code for what
+  /// they opened. The `session:open` capability this column once granted was
+  /// removed rather than left switched off, because a permanently disabled
+  /// permission is an invitation to switch it on. No API route reads or writes
+  /// this column; nothing can set it to true.
+  ///
+  /// Kept only so the applied shape of the table matches the already-approved
+  /// M1 migration. Drop it in a later migration if the decision holds.
+  canOpenSessions Boolean @default(false)
+
+  /// Audit trail. Stamped on every successful credential exchange.
+  lastSeenAt    DateTime?
+  lastIpAddress String?
+
+  createdById String
+  createdBy   User   @relation("DeviceCreator", fields: [createdById], references: [id])
+
+  revokedAt     DateTime?
+  revokedById   String?
+  revokedBy     User?     @relation("DeviceRevoker", fields: [revokedById], references: [id])
+  revokedReason String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([organizationId, status])
+  @@index([createdById])
+  @@index([revokedById])
+}
+
+/**
+ * A one-time code mailed to an address, and the only record that the address
+ * was ever proven.
+ *
+ * ── Why this table is keyed by email and not by user ────────────────────────
+ *
+ * At registration there is no user yet. The address is verified *before* the
+ * account exists, so that a failed or abandoned signup leaves nothing behind —
+ * no half-made User row holding the unique claim on an email address or a
+ * university ID that somebody else may legitimately need. Password reset could
+ * have carried a userId, but giving the two purposes different shapes would
+ * mean two code paths for issuing, throttling and burning codes, and the
+ * throttle in particular has to count both purposes together or it is not a
+ * throttle at all.
+ *
+ * ── What is stored, and what is not ────────────────────────────────────────
+ *
+ * The code itself is never stored. `codeHash` is bcrypt over it, for the same
+ * reason Device.secretHash is: a leaked database must not hand over live
+ * credentials. bcrypt rather than a fast digest is a deliberate cost — six
+ * digits is only a million possibilities, which any fast hash surrenders
+ * instantly, and which bcrypt at the project's work factor does not.
+ *
+ * ── Why rows are kept after use ────────────────────────────────────────────
+ *
+ * A consumed row is not deleted. It is the evidence that a code was spent and
+ * when, which is what makes replay detectable rather than merely impossible,
+ * and it is what the per-hour issue ceiling counts against. Rows are pruned on
+ * a schedule by the sweep, not on use.
+ */
+model EmailChallenge {
+  id String @id @default(uuid())
+
+  /// Lowercased at the service boundary, so "A@b.com" and "a@b.com" share one
+  /// throttle bucket rather than two.
+  email String
+
+  purpose EmailChallengePurpose
+
+  /// bcrypt over the code. Never selected into a response.
+  codeHash String
+
+  /// Wrong guesses so far. At OTP_MAX_ATTEMPTS the row is burned by stamping
+  /// consumedAt: a code that has been guessed at five times is not a code any
+  /// more, whatever its expiry says.
+  attempts Int @default(0)
+
+  /// Set the moment the code is spent, burned, or superseded by a newer code
+  /// for the same address and purpose. Non-null means unusable, permanently.
+  consumedAt DateTime?
+
+  expiresAt DateTime
+
+  /// Audit trail only. Nothing is authorized by it — see the note on
+  /// Device.lastIpAddress for the same rule applied to devices.
+  requestIp String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  /// The verification lookup (newest live code for an address and purpose) and
+  /// the throttle count (codes issued to an address in the last hour) are the
+  /// same query shape, so one index serves both.
+  @@index([email, purpose, createdAt])
+  /// The pruning sweep.
+  @@index([expiresAt])
 }

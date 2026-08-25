@@ -4,12 +4,15 @@ import helmet from "helmet";
 import rateLimit from "express-rate-limit";
 
 import { env } from "./config/env.js";
+import { apiLimiter } from "./utils/rate-limit.js";
 import authRoutes from "./routes/auth.routes.js";
+import deviceRoutes from "./routes/device.routes.js";
 import healthRoutes from "./routes/health.routes.js";
 import sessionRoutes from "./routes/session.routes.js";
 import attendanceRoutes from "./routes/attendance.routes.js";
 import courseRoutes from "./routes/course.routes.js";
 import studentRoutes from "./routes/student.routes.js";
+import materialRoutes from "./routes/material.routes.js";
 import scheduleRoutes from "./routes/schedule.routes.js";
 import notificationRoutes from "./routes/notification.routes.js";
 import adminRoutes from "./routes/admin.routes.js";
@@ -37,17 +40,16 @@ app.use(
 
 app.use(express.json({ limit: "1mb" }));
 
-// Broad limiter for the whole API.
-app.use(
-  "/api",
-  rateLimit({
-    windowMs: 15 * 60 * 1000,
-    limit: env.isProduction ? 300 : 10_000,
-    standardHeaders: "draft-7",
-    legacyHeaders: false,
-    message: { message: "Too many requests, please try again later" },
-  })
-);
+/**
+ * Broad limiter for the whole API, counted per caller rather than per address.
+ *
+ * A campus leaves through one NAT gateway, so an IP-keyed bucket is shared by
+ * every student on the WiFi and every robot in every building. A lecture hall
+ * scanning attendance at the same minute would exhaust it between them and
+ * start receiving 429s — so the key is the authenticated principal wherever one
+ * can be established, and the IP only when it cannot. See utils/rate-limit.ts.
+ */
+app.use("/api", apiLimiter);
 
 // Tighter limiter for credential endpoints.
 const authLimiter = rateLimit({
@@ -68,9 +70,13 @@ app.use("/api/sessions", sessionRoutes);
 app.use("/api/attendance", attendanceRoutes);
 app.use("/api/courses", courseRoutes);
 app.use("/api/students", studentRoutes);
+app.use("/api/materials", materialRoutes);
 app.use("/api/schedules", scheduleRoutes);
 app.use("/api/notifications", notificationRoutes);
 app.use("/api/admin", adminRoutes);
+
+// Robot/tablet surface. Its own principal type: see device.middleware.ts.
+app.use("/api/devices", deviceRoutes);
 
 // Platform administration
 app.use("/api/organizations", organizationRoutes);
