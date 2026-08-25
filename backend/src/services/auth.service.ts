@@ -1,13 +1,152 @@
 import bcrypt from "bcrypt";
 import jwt, { SignOptions } from "jsonwebtoken";
 import { UserRepository } from "../repositories/user.repository.js";
+import { EmailChallengeService } from "./email-challenge.service.js";
+import {
+  accountExistsEmail,
+  passwordResetEmail,
+  staffResetUnavailableEmail,
+  verificationEmail,
+} from "./mail/mail.content.js";
 import { env } from "../config/env.js";
-import { conflict, notFound, unauthorized, badRequest } from "../utils/AppError.js";
+import {
+  AppError,
+  conflict,
+  notFound,
+  unauthorized,
+  badRequest,
+} from "../utils/AppError.js";
 
 const SALT_ROUNDS = 10;
 
+/**
+ * What a registration ticket asserts, and nothing more: that whoever holds it
+ * proved control of this address, recently. It is not a session, it grants no
+ * access to anything, and it is signed with its own key so it cannot be
+ * mistaken for one — see env.ticketJwtSecret.
+ */
+interface RegistrationTicket {
+  email: string;
+  typ: "registration";
+}
+
 export class AuthService {
-  private userRepository = new UserRepository();
+  /** Injected so tests can drive registration and recovery without a database. */
+  constructor(
+    private userRepository = new UserRepository(),
+    private challenges = new EmailChallengeService()
+  ) {}
+
+  /* ----------------------- Student email verification ---------------------- */
+
+  /**
+   * Step 1 of registration: prove the address.
+   *
+   * Answers identically whether or not the address already has an account, and
+   * mails a different message in each case. The alternative — a 409 here —
+   * would turn this endpoint into a checker for which addresses hold accounts
+   * at this university, which is a list worth having if you intend to phish it.
+   *
+   * Note the asymmetry with `register` below, which still answers 409 for a
+   * taken address. That is not an oversight left standing: once
+   * STUDENT_EMAIL_VERIFICATION_REQUIRED is on, `register` is unreachable
+   * without a ticket, and a ticket cannot be obtained for an address that
+   * already has an account — so the oracle closes when the flag flips.
+   */
+  async startEmailVerification(rawEmail: string, requestIp: string | null) {
+    const email = this.challenges.normalizeEmail(rawEmail);
+    const existing = await this.userRepository.findByEmail(email);
+
+    if (existing) {
+      await this.challenges.notifyWithoutCode(
+        email,
+        "EMAIL_VERIFICATION",
+        accountExistsEmail(),
+        requestIp
+      );
+
+      return;
+    }
+
+    await this.challenges.issue(
+      email,
+      "EMAIL_VERIFICATION",
+      verificationEmail,
+      requestIp
+    );
+  }
+
+  /**
+   * Step 2: spend the code, receive a ticket.
+   *
+   * The ticket is what carries "this address was proven" into the registration
+   * request that follows, because HTTP will not carry it for us. It is not
+   * single-use and does not need to be: the only thing it unlocks is creating
+   * an account with that exact address, and User.email is unique, so a second
+   * use collides with the account the first one made.
+   */
+  async confirmEmailVerification(rawEmail: string, code: string) {
+    const email = this.challenges.normalizeEmail(rawEmail);
+
+    await this.challenges.verify(email, "EMAIL_VERIFICATION", code);
+
+    const payload: RegistrationTicket = { email, typ: "registration" };
+
+    const verificationTicket = jwt.sign(payload, env.ticketJwtSecret, {
+      expiresIn: `${env.REGISTRATION_TICKET_TTL_MINUTES}m`,
+    } as SignOptions);
+
+    return {
+      verificationTicket,
+      expiresInMinutes: env.REGISTRATION_TICKET_TTL_MINUTES,
+    };
+  }
+
+  /**
+   * Enforced only when the flag is on, so the Flutter client that predates this
+   * feature keeps registering students while it is adopted. See
+   * STUDENT_EMAIL_VERIFICATION_REQUIRED in config/env.ts for why that is a flag
+   * rather than a breaking change.
+   */
+  private assertEmailProven(email: string, ticket: string | undefined) {
+    if (!env.STUDENT_EMAIL_VERIFICATION_REQUIRED) {
+      return;
+    }
+
+    if (!ticket) {
+      throw new AppError(
+        "Verify your email address before registering",
+        400,
+        undefined,
+        "EMAIL_VERIFICATION_REQUIRED"
+      );
+    }
+
+    let payload: RegistrationTicket;
+
+    try {
+      payload = jwt.verify(ticket, env.ticketJwtSecret) as RegistrationTicket;
+    } catch {
+      throw new AppError(
+        "That verification has expired. Verify your email address again.",
+        400,
+        undefined,
+        "EMAIL_VERIFICATION_EXPIRED"
+      );
+    }
+
+    // The ticket proves an address, so it must be checked against the address
+    // actually being registered. Without this, a ticket for an attacker's own
+    // mailbox would register an account under somebody else's.
+    if (payload.typ !== "registration" || payload.email !== email) {
+      throw new AppError(
+        "That verification does not match this email address",
+        400,
+        undefined,
+        "EMAIL_VERIFICATION_MISMATCH"
+      );
+    }
+  }
 
   async register(data: {
     universityId: string;
@@ -15,7 +154,12 @@ export class AuthService {
     email: string;
     password: string;
     organizationCode: string;
+    verificationTicket?: string;
   }) {
+    const email = this.challenges.normalizeEmail(data.email);
+
+    this.assertEmailProven(email, data.verificationTicket);
+
     const organization = await this.userRepository.findOrganizationByCode(
       data.organizationCode
     );
@@ -32,7 +176,7 @@ export class AuthService {
       throw conflict("University ID already exists");
     }
 
-    const existingUser = await this.userRepository.findByEmail(data.email);
+    const existingUser = await this.userRepository.findByEmail(email);
 
     if (existingUser) {
       throw conflict("Email already exists");
@@ -43,11 +187,95 @@ export class AuthService {
     return this.userRepository.create({
       universityId: data.universityId,
       fullName: data.fullName,
-      email: data.email,
+      email,
       passwordHash,
       role: "STUDENT",
       organizationId: organization.id,
     });
+  }
+
+  /* ---------------------------- Password recovery -------------------------- */
+
+  /**
+   * Ask for a reset code.
+   *
+   * Returns the same thing for every address — no account, a student account, a
+   * staff account, a deactivated account — and decides what to mail privately.
+   * A caller can learn nothing from the response; only the inbox learns
+   * anything, which is the correct audience.
+   *
+   * Staff are answered with an explanation rather than a code, by decision:
+   * a staff account approves registrations and publishes to whole cohorts, so
+   * recovering one is a human decision made by the university administrator
+   * through /api/admin/users/:id/password.
+   */
+  async requestPasswordReset(rawEmail: string, requestIp: string | null) {
+    const email = this.challenges.normalizeEmail(rawEmail);
+    const user = await this.userRepository.findByEmail(email);
+
+    // No account, or a deactivated one. Nothing is sent: mailing an address
+    // that has never registered would make this endpoint a way to send mail to
+    // arbitrary strangers, and a deactivated account has nothing to recover.
+    if (!user || !user.isActive) {
+      return;
+    }
+
+    if (user.role !== "STUDENT") {
+      await this.challenges.notifyWithoutCode(
+        email,
+        "PASSWORD_RESET",
+        staffResetUnavailableEmail(),
+        requestIp
+      );
+
+      return;
+    }
+
+    await this.challenges.issue(
+      email,
+      "PASSWORD_RESET",
+      passwordResetEmail,
+      requestIp
+    );
+  }
+
+  /**
+   * Spend a reset code and set a new password.
+   *
+   * The code is verified before the account is looked at, so a wrong code
+   * cannot be told apart from an address with no account: both fail identically
+   * inside EmailChallengeService.verify.
+   *
+   * KNOWN LIMITATION, recorded here rather than in a tracker: existing access
+   * tokens survive a reset. Tokens are stateless JWTs with a 7-day expiry and
+   * there is no token-version column to bump, so a session opened with the old
+   * password stays usable until it expires. Closing that needs a revocation
+   * column on User and a check in the auth middleware — a deliberate change,
+   * not something to smuggle in here.
+   */
+  async resetPassword(rawEmail: string, code: string, newPassword: string) {
+    const email = this.challenges.normalizeEmail(rawEmail);
+
+    await this.challenges.verify(email, "PASSWORD_RESET", code);
+
+    const user = await this.userRepository.findByEmail(email);
+
+    // Only reachable if the account was deactivated between the code being
+    // issued and being spent. The code was valid, so this is not an enumeration
+    // surface — the caller already proved control of the address.
+    if (!user || !user.isActive || user.role !== "STUDENT") {
+      throw badRequest("This account cannot be recovered by email");
+    }
+
+    const isSamePassword = await bcrypt.compare(newPassword, user.passwordHash);
+
+    if (isSamePassword) {
+      throw badRequest("New password must be different from the current one");
+    }
+
+    const passwordHash = await bcrypt.hash(newPassword, SALT_ROUNDS);
+
+    await this.userRepository.updatePassword(user.id, passwordHash);
   }
 
   async login(data: { email: string; password: string }) {
@@ -89,6 +317,25 @@ export class AuthService {
         organizationId: user.organizationId,
       },
     };
+  }
+
+  /** Native-app login. The platform system owner is intentionally web-only. */
+  async loginForMobile(data: { email: string; password: string }) {
+    const result = await this.login({
+      email: data.email.trim().toLowerCase(),
+      password: data.password,
+    });
+
+    if (result.user.role === "SYSTEM_OWNER") {
+      throw new AppError(
+        "System owner accounts are available on the web console only",
+        403,
+        undefined,
+        "WEB_ONLY_ACCOUNT"
+      );
+    }
+
+    return result;
   }
 
   async getProfile(userId: string) {

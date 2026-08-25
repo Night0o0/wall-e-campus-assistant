@@ -6,6 +6,8 @@ import { AppError } from "../utils/AppError.js";
 
 interface ErrorResponse {
   message: string;
+  /** Stable machine-readable identifier. Absent when the thrower set none. */
+  code?: string;
   errors?: unknown;
   stack?: string;
 }
@@ -14,7 +16,7 @@ const resolve = (err: unknown): { status: number; body: ErrorResponse } => {
   if (err instanceof AppError) {
     return {
       status: err.statusCode,
-      body: { message: err.message, errors: err.details },
+      body: { message: err.message, code: err.code, errors: err.details },
     };
   }
 
@@ -77,6 +79,10 @@ export const errorHandler = (
 
   if (body.errors === undefined) {
     delete body.errors;
+  }
+
+  if (body.code === undefined) {
+    delete body.code;
   }
 
   if (!env.isProduction && err instanceof Error) {

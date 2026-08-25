@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import { CourseService } from "../services/course.service.js";
+import { CourseQuery } from "../types/course.types.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 
 const courseService = new CourseService();
@@ -23,7 +24,11 @@ export const getMyCourses = asyncHandler(async (req: Request, res: Response) => 
 
 export const getOrgCourses = asyncHandler(
   async (req: Request, res: Response) => {
-    const courses = await courseService.getOrgCourses(req.user!.organizationId);
+    const courses = await courseService.getOrgCourses(
+      req.user!.organizationId,
+      (req.validatedQuery ?? {}) as CourseQuery
+    );
+
     res.status(200).json(courses);
   }
 );

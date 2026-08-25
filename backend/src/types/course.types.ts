@@ -19,3 +19,28 @@ export const updateCourseSchema = z.object({
 
 export type CreateCourseInput = z.infer<typeof createCourseSchema>;
 export type UpdateCourseInput = z.infer<typeof updateCourseSchema>;
+
+/**
+ * Filters for the course list.
+ *
+ * No organizationId, for the usual reason: the tenant comes from the token.
+ *
+ * `level` is the odd one out and is worth explaining. Course carries no
+ * academic level — a course is a subject, and the same subject can be taught to
+ * more than one year. The level lives on LectureSchedule, which is the teaching
+ * assignment, so filtering by it means "courses that have an active lecture at
+ * this level" and is resolved through that relation. That is what makes
+ * "second-year mechatronics subjects" answerable at all.
+ *
+ * The response stays a plain array rather than gaining a pagination envelope. A
+ * university has tens of courses, and changing the shape of an existing
+ * response would break every client already reading it.
+ */
+export const courseQuerySchema = z.object({
+  search: z.string().trim().min(1).max(100).optional(),
+  department: z.string().trim().min(1).max(100).optional(),
+  semester: z.string().trim().min(1).max(50).optional(),
+  level: z.coerce.number().int().min(1).max(7).optional(),
+});
+
+export type CourseQuery = z.infer<typeof courseQuerySchema>;

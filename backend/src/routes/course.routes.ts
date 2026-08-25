@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { authenticate, requireRole } from "../middleware/auth.middleware.js";
-import { validate } from "../middleware/validate.middleware.js";
-import { createCourseSchema, updateCourseSchema } from "../types/course.types.js";
+import { validate, validateQuery } from "../middleware/validate.middleware.js";
+import { courseQuerySchema, createCourseSchema, updateCourseSchema } from "../types/course.types.js";
 import { 
     createCourse, 
     getMyCourses, 
@@ -21,8 +21,9 @@ router.use(authenticate);
 // Create a new course (Admin only)
 router.post("/", requireRole('ADMIN', 'UNIVERSITY_SUPER_ADMIN', 'SYSTEM_OWNER'), validate(createCourseSchema), createCourse);
 
-// Get all courses in the organization (All authenticated users)
-router.get("/", getOrgCourses);
+// Get all courses in the organization (All authenticated users), optionally
+// narrowed by department, semester, academic level or a free-text search.
+router.get("/", validateQuery(courseQuerySchema), getOrgCourses);
 
 // Get courses created by the current user (Admin only)
 router.get("/my", requireRole('ADMIN', 'UNIVERSITY_SUPER_ADMIN', 'SYSTEM_OWNER'), getMyCourses);

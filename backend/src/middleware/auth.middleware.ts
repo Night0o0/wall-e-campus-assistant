@@ -2,7 +2,7 @@ import { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
 import { env } from "../config/env.js";
 import prisma from "../lib/prisma.js";
-import { forbidden, unauthorized } from "../utils/AppError.js";
+import { AppError, forbidden, unauthorized } from "../utils/AppError.js";
 
 export interface AuthenticatedUser {
   id: string;
@@ -98,3 +98,54 @@ export const requireRole = (...roles: string[]) => {
 
 /** Convenience guard for platform-owner-only routes. */
 export const requireOwner = requireRole("SYSTEM_OWNER");
+
+/**
+ * The student approval gate: a self-registered student is inert until a member
+ * of staff approves them.
+ *
+ * `isVerified` already defaulted to false and `AuthService.register` never sets
+ * it, so every self-registered student was already pending in the database.
+ * This guard is what finally makes that column mean something.
+ *
+ * Note where it is NOT. It is not part of `authenticate`, and not a check in
+ * `login`, and that is the whole design. A pending student has to be able to
+ * sign in and fill in their academic profile, because that profile — faculty,
+ * department, level, section — is precisely what the approving admin reads
+ * before deciding. Gating the token itself would leave staff approving a row
+ * that carries nothing but a name and an email address, which is not an
+ * approval, it is a rubber stamp.
+ *
+ * So the guard goes on the feature routes a student cannot usefully reach while
+ * unapproved — timetable, scanning, attendance history, materials — and never
+ * on /api/auth or /api/students/me/profile.
+ *
+ * Only STUDENT is gated. Staff accounts are created by an administrator who has
+ * already made the decision at the moment of creation; there is nobody left to
+ * approve them, and a role that cannot be self-registered cannot be pending.
+ */
+export const requireApproved = (
+  req: Request,
+  _res: Response,
+  next: NextFunction
+) => {
+  if (!req.user) {
+    next(unauthorized());
+    return;
+  }
+
+  if (req.user.role === "STUDENT" && !req.user.isVerified) {
+    next(
+      new AppError(
+        "Your account is waiting for approval from your university",
+        403,
+        undefined,
+        // The client branches on this to show a "pending approval" screen
+        // rather than a generic permission error.
+        "ACCOUNT_PENDING_APPROVAL"
+      )
+    );
+    return;
+  }
+
+  next();
+};

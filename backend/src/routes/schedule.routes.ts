@@ -10,6 +10,7 @@ import {
   createSchedule,
   deactivateSchedule,
   getSchedule,
+  getScheduleAttendanceLog,
   getSchedules,
   updateSchedule,
 } from "../controllers/schedule.controller.js";
@@ -34,6 +35,21 @@ router.post("/", canManage, validate(createScheduleSchema), createSchedule);
 // Readable by any authenticated user; the result set depends on the role.
 router.get("/", validateQuery(scheduleQuerySchema), getSchedules);
 router.get("/:id", getSchedule);
+
+/**
+ * What happened to each of this lecture's recent occurrences: NOT_RECORDED,
+ * OPEN, PENDING or RECORDED.
+ *
+ * Teaching staff, not students. Which lectures nobody bothered to take
+ * attendance for is a question about the institution's own record-keeping, and
+ * the answer names the instructor responsible. An ADMIN sees only their own
+ * lectures; the narrowing happens inside the service.
+ */
+router.get(
+  "/:id/attendance-log",
+  requireRole("ADMIN", "UNIVERSITY_SUPER_ADMIN", "SYSTEM_OWNER"),
+  getScheduleAttendanceLog
+);
 
 router.patch("/:id", canManage, validate(updateScheduleSchema), updateSchedule);
 

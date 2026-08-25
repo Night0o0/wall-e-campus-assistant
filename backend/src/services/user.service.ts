@@ -80,6 +80,8 @@ export class UserService {
       role: input.role,
       organizationId: input.organizationId,
       isVerified: input.isVerified,
+      jobTitle: input.jobTitle,
+      office: input.office,
     });
 
     return userRepo.findByIdSafe(user.id);
@@ -110,14 +112,11 @@ export class UserService {
       }
     }
 
-    // Guard against an owner locking themselves out of the platform.
+    // Guard against an owner locking themselves out of the platform. Roles are
+    // immutable after creation, so self-demotion is not a possible edit.
     if (id === actingUserId) {
       if (input.isActive === false) {
         throw badRequest("You cannot deactivate your own account");
-      }
-
-      if (input.role && input.role !== user.role) {
-        throw badRequest("You cannot change your own role");
       }
     }
 
@@ -171,13 +170,11 @@ export class UserService {
   private async assertNotLastOwner(
     userId: string,
     currentRole: string,
-    input: Pick<UpdateUserInput, "role" | "isActive">
+    input: Pick<UpdateUserInput, "isActive">
   ) {
     if (currentRole !== "SYSTEM_OWNER") return;
 
-    const losingOwnerStatus =
-      (input.role !== undefined && input.role !== "SYSTEM_OWNER") ||
-      input.isActive === false;
+    const losingOwnerStatus = input.isActive === false;
 
     if (!losingOwnerStatus) return;
 
@@ -191,7 +188,7 @@ export class UserService {
 
     if (remainingOwners === 0) {
       throw badRequest(
-        "This is the last active system owner. Promote another owner first."
+        "This is the last active system owner. Create another owner first."
       );
     }
   }

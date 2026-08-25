@@ -1,5 +1,5 @@
 import prisma from "../lib/prisma.js";
-import { CreateCourseInput, UpdateCourseInput } from "../types/course.types.js";
+import { CourseQuery, CreateCourseInput, UpdateCourseInput } from "../types/course.types.js";
 
 export class CourseRepository {
 
@@ -45,9 +45,45 @@ export class CourseRepository {
         });
     }
 
-    async findByOrganization(organizationId: string) {
+    /**
+     * The courses of one university, optionally narrowed.
+     *
+     * The tenant is a required first argument and is spread last, so no filter
+     * derived from the request can displace it — the same construction as
+     * UserRepository.findManyInOrganization, and for the same reason.
+     */
+    async findByOrganization(organizationId: string, query: CourseQuery = {}) {
         return prisma.course.findMany({
-            where: { organizationId },
+            where: {
+                ...(query.search
+                    ? {
+                          OR: [
+                              { courseCode: { contains: query.search, mode: "insensitive" } },
+                              { courseName: { contains: query.search, mode: "insensitive" } },
+                          ],
+                      }
+                    : {}),
+                ...(query.department
+                    ? { department: { equals: query.department, mode: "insensitive" } }
+                    : {}),
+                ...(query.semester
+                    ? { semester: { equals: query.semester, mode: "insensitive" } }
+                    : {}),
+                // Resolved through the teaching assignment, because a course has
+                // no level of its own. Only active schedules count: a course
+                // dropped from this year's timetable is no longer taught at that
+                // level, whatever it was taught at last year.
+                ...(query.level !== undefined
+                    ? {
+                          lectureSchedules: {
+                              some: { level: query.level, isActive: true },
+                          },
+                      }
+                    : {}),
+
+                // Last, and not optional.
+                organizationId,
+            },
             orderBy: { createdAt: 'desc' },
             include: {
                 createdBy: {

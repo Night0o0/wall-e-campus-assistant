@@ -1,5 +1,5 @@
 import { CourseRepository } from "../repositories/course.repository.js";
-import { CreateCourseInput, UpdateCourseInput } from "../types/course.types.js";
+import { CourseQuery, CreateCourseInput, UpdateCourseInput } from "../types/course.types.js";
 import { conflict, forbidden, notFound } from "../utils/AppError.js";
 
 const courseRepo = new CourseRepository();
@@ -41,8 +41,8 @@ export class CourseService {
         return courseRepo.findByCreator(adminId, organizationId);
     }
 
-    async getOrgCourses(organizationId: string) {
-        return courseRepo.findByOrganization(organizationId);
+    async getOrgCourses(organizationId: string, query: CourseQuery = {}) {
+        return courseRepo.findByOrganization(organizationId, query);
     }
 
     async updateCourse(courseId: string, data: UpdateCourseInput, adminId: string, organizationId: string) {

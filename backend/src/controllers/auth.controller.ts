@@ -20,8 +20,82 @@ export const register = asyncHandler(async (req: Request, res: Response) => {
   });
 });
 
+/* ------------------------- Email verification (OTP) ------------------------ */
+
+/**
+ * POST /api/auth/verify-email/start
+ *
+ * Always 200, always the same body. Whether a code was sent, a "you already
+ * have an account" note was sent, or nothing was sent, is not visible from
+ * here — see AuthService.startEmailVerification.
+ */
+export const startEmailVerification = asyncHandler(
+  async (req: Request, res: Response) => {
+    await authService.startEmailVerification(req.body.email, req.ip ?? null);
+
+    res.status(200).json({
+      message:
+        "If that address can be registered, a verification code is on its way.",
+    });
+  }
+);
+
+/** POST /api/auth/verify-email/confirm — spends the code, returns the ticket. */
+export const confirmEmailVerification = asyncHandler(
+  async (req: Request, res: Response) => {
+    const result = await authService.confirmEmailVerification(
+      req.body.email,
+      req.body.code
+    );
+
+    res.status(200).json({
+      message: "Email verified",
+      ...result,
+    });
+  }
+);
+
+/* ---------------------------- Password recovery ---------------------------- */
+
+/** POST /api/auth/forgot-password — identical answer for every address. */
+export const forgotPassword = asyncHandler(
+  async (req: Request, res: Response) => {
+    await authService.requestPasswordReset(req.body.email, req.ip ?? null);
+
+    res.status(200).json({
+      message: "If that account exists, a reset code is on its way.",
+    });
+  }
+);
+
+/** POST /api/auth/reset-password */
+export const resetPassword = asyncHandler(
+  async (req: Request, res: Response) => {
+    await authService.resetPassword(
+      req.body.email,
+      req.body.code,
+      req.body.newPassword
+    );
+
+    res.status(200).json({
+      message: "Password updated. Sign in with your new password.",
+    });
+  }
+);
+
 export const login = asyncHandler(async (req: Request, res: Response) => {
   const result = await authService.login(req.body);
+
+  res.status(200).json({
+    message: "Login successful",
+    token: result.token,
+    user: result.user,
+  });
+});
+
+/** POST /api/auth/mobile-login — campus app users only. */
+export const mobileLogin = asyncHandler(async (req: Request, res: Response) => {
+  const result = await authService.loginForMobile(req.body);
 
   res.status(200).json({
     message: "Login successful",
