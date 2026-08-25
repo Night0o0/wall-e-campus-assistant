@@ -202,3 +202,42 @@ Then check the two things this was really about:
   and record who authorised it.
 - **No data migration of any kind.** Both new migrations are pure DDL.
 - **No `migrate reset`.** It drops the database. It is never the answer here.
+
+---
+
+# Read-only inspection result — 25 Aug 2026
+
+Ran `prisma migrate status` plus an `information_schema` query. **No writes.**
+
+**All 10 migrations report unapplied. The `_prisma_migrations` table does not
+exist at all** — not empty, absent.
+
+**But the schema is fully present: 17 tables in `public`.**
+
+```
+AdminProfile      Course          DeviceToken      Invoice
+Attendance        CourseMaterial  EmailChallenge   LectureSchedule
+Notification      Organization    Payment          RobotDevice
+Session           StudentProfile  Subscription     SubscriptionPlan
+User
+```
+
+Those tables span every migration in the set — `LectureSchedule` (migration 4),
+`RobotDevice` (6), `CourseMaterial` (9), `EmailChallenge` (10) — so the database
+was built by `prisma db push` or equivalent, which creates schema without
+writing a ledger.
+
+## What this means
+
+`prisma migrate deploy` would replay `20260802073548_init` — a `CREATE TABLE`
+run — against tables that already exist, and fail on the first statement. Do not
+run it.
+
+The resolution is `prisma migrate resolve --applied <name>` for each of the ten,
+which creates the ledger and marks them applied without executing their SQL.
+That is only safe where the migration's effects are **already fully present**,
+which is what step 3-4 of the procedure above must establish per migration —
+column by column, not table by table. A table existing does not prove a later
+`ALTER` inside the same migration ran.
+
+Still gated behind the approval step. Nothing has been written.
