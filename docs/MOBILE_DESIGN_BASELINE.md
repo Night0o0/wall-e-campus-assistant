@@ -307,3 +307,43 @@ Phase 5 shell work.
 
 `baseline_student_shell.png` shows the day selector as SAT SUN MON TUE WED THU.
 The Prisma `DayOfWeek` enum has seven days. Confirmed as reported.
+
+---
+
+# Functional verification: what mobile can actually write
+
+Rendering proves a screen draws; it does not prove it can act. The complete set
+of write calls in `apps/mobile/lib` is five paths:
+
+| Call | Screen |
+| --- | --- |
+| `POST /schedules`, `PATCH /schedules/:id` | Timetable (super admin) |
+| `PATCH /admin/students/:id/approve` | Pending Students |
+| `POST /materials`, `PATCH /materials/:id` | Materials |
+| `PATCH /notifications/:id/read`, `/read-all` | Inbox |
+| `POST /attendance/scan` | Student Scan QR |
+| `PATCH /students/me/profile` | Student profile |
+
+Everything else is read-only. That confirms, from the code rather than from
+reading page titles:
+
+- **D-14 confirmed** — Sessions has no write call in any role. No open, no
+  close, no QR.
+- **Courses confirmed read-only** — no create, edit or delete for a super admin.
+- **Devices confirmed read-only** — no provision, rotate or revoke, so a robot
+  cannot be credentialed from mobile.
+- **Students & Staff confirmed read-only apart from approve** — no create, no
+  deactivate, no password reset.
+- **D-15 confirmed** — `ConnectedProfile` is a read-only `_DataPage` for staff
+  and robot; the student profile edits the academic profile only. No role can
+  change a password.
+- **Exports confirmed a placeholder** — no API call of any kind.
+
+## New correction to review.txt: reject does not exist on mobile
+
+`review.txt` records mobile Pending Students as "WORKING - /admin/students/
+pending + approve/reject". Only **approve** exists. Grepping the whole Flutter
+source for "reject" returns one string in an error message and nothing else.
+
+So a member of staff can admit a student from the phone but cannot turn one
+away, and the screen offers no way to do it. Add this to the Phase 5 list.
