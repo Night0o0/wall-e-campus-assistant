@@ -12,14 +12,16 @@ is marked as such rather than described in the future tense.
 
 ## Overview
 
-WALL-E is a backend-first platform. The API is complete and tested for the
-campus features described below; the only user interface that exists is the
-**platform owner console** (`apps/web`), which admits `SYSTEM_OWNER` accounts
-only. Staff and students have working APIs but no screens.
+WALL-E has a role-aware React web console in `apps/web`: `SYSTEM_OWNER` gets the
+platform estate, `UNIVERSITY_SUPER_ADMIN` gets the university-wide console, and
+`ADMIN` gets the teaching console. `STUDENT` deliberately has no web console in
+this repository; student workflows are exposed through the API for the separate
+mobile client. Robot/tablet credentials use the dedicated `/robot` console.
 
 Billing exists but is **switched off by default** — see
-[Billing](#billing-switched-off). Robots are a planned **extension**; the
-platform is fully functional without any hardware.
+[Billing](#billing-switched-off). The device-authenticated robot display is
+implemented, while physical robot hardware remains optional and outside the
+software platform.
 
 ### Contents
 
@@ -57,24 +59,26 @@ specification-only — see [Planned / Future Features](#planned--future-features
 |------|--------|
 | Backend API (Express + Prisma + PostgreSQL) | **Implemented** |
 | Auth, organizations, users, platform metrics | **Implemented** |
-| Campus attendance (courses, sessions, QR scan) | **Implemented** — API only, no UI |
+| Campus attendance (courses, sessions, QR scan) | **Implemented** — staff web console; student scan API for the mobile client |
 | **Feature 1** — student self-service academic profile | **Implemented** — API only |
-| **Feature 2** — academic timetable / lecture schedules | **Implemented** — API only |
-| **Feature 3** — lecture notifications + in-process worker | **Implemented** — API only; push delivery is **partial**, see below |
-| **Feature 4** — Excel student export (`.xlsx`) | **Implemented** — API only |
-| **Feature 5** — university administration console API | **Implemented** — API only, no UI |
-| Owner console (React + Vite + Tailwind) | **Implemented** — platform owner screens only |
+| **Feature 2** — academic timetable / lecture schedules | **Implemented** — API + staff web pages |
+| **Feature 3** — lecture notifications + in-process worker | **Implemented** — API + staff inbox; push delivery is **partial**, see below |
+| **Feature 4** — Excel student export (`.xlsx`) | **Implemented** — API + course export action |
+| **Feature 5** — university administration console | **Implemented** — API + role-scoped web pages |
+| Role-aware web console (React + Vite + Tailwind) | **Implemented** — owner, university administrator, teaching staff and robot display |
 | Plans, subscriptions, invoices, payments | **Implemented but switched off** — see [Billing](#billing-switched-off) |
-| Automated tests (backend) | **Implemented** — 55 tests, 6 files, Vitest |
+| Automated tests | **Implemented** — backend service/schema suite plus frontend role, guard, login and API-contract tests |
 | Push delivery (FCM / APNs) | **Partially implemented** — provider abstraction exists; the shipped providers log or no-op. No real push is sent |
 | Plan-limit enforcement / subscription gating | **Not implemented** — limits are stored and displayed only |
-| Student mobile app (Flutter or otherwise) | **Not implemented** — `apps/mobile/` is an empty directory |
-| Robot touch UI | **Not implemented** — `apps/tablet/` is empty |
+| Flutter mobile app | **Implemented** — role-aware live client for university super admin, admin, student and robot principals; system owner remains web-only |
+| Robot display UI | **Implemented** — `/robot`; physical robot firmware is not implemented |
 | ESP32 / Raspberry Pi firmware | **Not implemented** — `hardware/` is empty |
 | Campus map / navigation, face recognition | **Not implemented** — no models, no endpoints |
-| Staff and student web/mobile UI | **Not implemented** — the console admits `SYSTEM_OWNER` only |
+| Staff web UI | **Implemented** — `ADMIN` and `UNIVERSITY_SUPER_ADMIN` route trees |
+| Student mobile UI | **Implemented** — timetable, attendance QR scan, materials, notifications and profile surfaces use the backend API |
 
-Features 1–5 are backend-only. None of them has a user interface yet.
+Student profile editing and QR scanning remain mobile-client concerns; the
+staff-facing portions of Features 2–5 are available in `apps/web`.
 
 ---
 
@@ -82,7 +86,7 @@ Features 1–5 are backend-only. None of them has a user interface yet.
 
 ### Feature 1 — Student Academic Profile
 
-**Status: implemented (API only).**
+**Status: implemented (API; student client external).**
 
 A student's own academic record, filled in by the student. **No approval step.**
 
@@ -111,7 +115,7 @@ A student's own academic record, filled in by the student. **No approval step.**
 
 ### Feature 2 — Academic Schedule
 
-**Status: implemented (API only).**
+**Status: implemented (API + staff web timetable; student client external).**
 
 `LectureSchedule` is the source of truth for the timetable — one recurring
 weekly lecture: "Electronics, every Sunday 12:00–14:00 in B-204, taught by Dr X
@@ -142,7 +146,7 @@ to Engineering / Mechatronics / level 2 / semester 1 / section B".
 
 ### Feature 3 — Notifications
 
-**Status: implemented (API only). Push delivery partially implemented.**
+**Status: implemented (API + staff web inbox). Push delivery partially implemented.**
 
 Automated reminders generated from the Feature 2 timetable and stored in the
 database. Full detail in [Notification System](#notification-system).
@@ -158,7 +162,7 @@ database. Full detail in [Notification System](#notification-system).
 
 ### Feature 4 — Excel Export
 
-**Status: implemented (API only).**
+**Status: implemented (API + web export actions).**
 
 Authorized instructors and admins export a course's student roster as a genuine
 `.xlsx` workbook, generated per request from live database data. Full detail in
@@ -168,7 +172,7 @@ Authorized instructors and admins export a course's student roster as a genuine
 
 ### Other Existing Modules
 
-**University administration console API (Feature 5) — implemented, API only.**
+**University administration console (Feature 5) — implemented, API + web UI.**
 
 One university's own dashboard and its own user directory, for
 `UNIVERSITY_SUPER_ADMIN` (and `SYSTEM_OWNER`), scoped to the caller's own
@@ -201,7 +205,7 @@ university's data. Here the tenant comes from the authenticated user, and
 There is currently **no web UI for these endpoints** — `apps/web` contains no
 admin API client.
 
-**Attendance (QR flow) — implemented, API only.**
+**Attendance (QR flow) — implemented, with staff web pages and student scan API.**
 
 1. An admin opens a session; the server stores a per-session `qrSecret`.
 2. `GET /api/sessions/:id/qr` returns a JWT signed with `qrSecret + JWT_SECRET`,
@@ -251,8 +255,8 @@ cannot pay through the app.
 
 ```
 ┌──────────────────────────┐        ┌──────────────────────────┐
-│  apps/web                │        │  apps/mobile  (EMPTY)    │
-│  Platform owner console  │        │  apps/tablet  (EMPTY)    │
+│  apps/web                │        │  apps/mobile  (Flutter)  │
+│  Role-aware web console  │        │  student app (external)  │
 │  React 19 + Vite + TW4   │        │  hardware/    (EMPTY)    │
 └────────────┬─────────────┘        └──────────────────────────┘
              │ HTTP + JWT (Bearer)
@@ -311,24 +315,24 @@ backend/
     lib/             prisma client singleton
   tests/             Vitest suite + in-memory repository doubles
 apps/
-  web/               platform owner console (React 19 + Vite + Tailwind 4)
+  web/               owner, university, teaching and robot consoles
   mobile/            EMPTY — student app, not started
   tablet/            EMPTY — robot touch UI, not started
 hardware/            EMPTY — firmware, not started
 database/            database-design.md
 docs/                SRS.md, Architecture.md, Architecture Decisions.md
-PAGES_AND_GAPS.txt   UI page plan per account type — PLAN ONLY, nothing built
+PAGES_AND_GAPS.txt   implemented UI/page matrix per account type
 ```
 
 `backend/src/models/`, `src/validators/` and `src/generated/` exist but are
 **empty** — leftovers from an earlier layout, superseded by `types/` and Prisma's
 generated client in `node_modules`.
 
-The web console's pages are: Login, Dashboard, Organizations,
-OrganizationDetail, Users, Settings, Robots (an explicit "Planned" placeholder,
-routed but showing no live devices), plus the four billing pages (Revenue,
-Subscriptions, Plans, Invoices) that are routed only when
-`VITE_BILLING_ENABLED=true`.
+The web console has separate route trees for the platform owner, university
+administrator and teaching staff, plus the device-authenticated `/robot`
+display. The four billing pages (Revenue, Subscriptions, Plans, Invoices) are
+routed only when `VITE_BILLING_ENABLED=true`. See `PAGES_AND_GAPS.txt` for the
+complete page matrix.
 
 ---
 
@@ -370,6 +374,10 @@ Two deliberate exceptions to "one repository per model":
 
 - `POST /api/auth/login` returns a JWT signed with `JWT_SECRET`, expiring after
   `JWT_EXPIRES_IN` (default `7d`).
+- `POST /api/auth/mobile-login` serves the Flutter app and refuses
+  `SYSTEM_OWNER` with `WEB_ONLY_ACCOUNT`; the system owner signs in on the web
+  console only. Robots use `POST /api/devices/auth` and receive a separately
+  signed device token.
 - Every protected route runs `authenticate`, which verifies the token and then
   **re-reads the user from the database** on each request. The request's role and
   organization therefore come from the stored record, never from token claims —
@@ -393,10 +401,16 @@ Four roles, from the `UserRole` enum in `backend/prisma/schema.prisma`:
 
 | Role | Belongs to | Can do |
 |------|-----------|--------|
-| `SYSTEM_OWNER` | The platform | Platform administration (organizations, users, cross-tenant metrics, billing). Confined to its **own** organization on every campus route, exactly like any other user. The only role the web console admits |
+| `SYSTEM_OWNER` | The platform | Platform administration (organizations, users, cross-tenant metrics, billing). Confined to its **own** organization on every campus route, exactly like any other user. Uses the platform route tree in the web console |
 | `UNIVERSITY_SUPER_ADMIN` | One university | Manages that university's timetable, courses, sessions and attendance; reads its own dashboard and user directory; can export any course roster in their organization |
 | `ADMIN` | One university | Teaching staff — professors, doctors, lecturers, engineers. There is no separate professor role; the academic title lives on `AdminProfile.jobTitle`. Reads their own teaching timetable, receives instructor reminders, exports rosters for courses they are assigned to |
 | `STUDENT` | One university | Fills their own academic profile, reads their own timetable, scans QR codes, reads their own attendance and notifications |
+
+Roles are immutable after account creation. Platform-created `ADMIN` and
+`UNIVERSITY_SUPER_ADMIN` accounts require a job title and receive an
+`AdminProfile` in the same create operation; `STUDENT` accounts receive a
+`StudentProfile`. This prevents a role from existing without the profile its
+pages expect.
 
 ### Authorization rules
 
@@ -879,25 +893,24 @@ curl -s -D - -o roster.xlsx \
 
 ```bash
 cd backend
-npm test                  # 55 tests, 6 files
+npm test
 npm run test:watch
-npm run typecheck         # src/
-npm run typecheck:tests   # src/ + tests/, via tsconfig.test.json
+npm run typecheck
+npm run typecheck:tests
+
+cd ../apps/web
+npm test
+npm run build
+npm run lint
 ```
 
-| File | Tests | Covers |
-|------|-------|--------|
-| `tests/occurrence.util.test.ts` | 7 | Weekly slot → instant, Cairo summer/winter offsets, DST crossing, clock formatting |
-| `tests/lecture-notification.service.test.ts` | 15 | 24h/30m/10m reminders, recipient rules, cross-tenant exclusion, duplicate prevention, deactivated lecture and instructor, message contents, delivery, overdue cancellation, dev simulation |
-| `tests/student-export.service.test.ts` | 13 | Export authorization matrix, real `.xlsx` (ZIP magic + read back through ExcelJS), no national ID, roster membership, cell values, filename |
-| `tests/admin.service.test.ts` | 9 | University dashboard counts scoped to one organization, attendance reported as a measurement not an invented rate, Sunday week start on the campus clock, 404 on a deleted tenant, directory scoping, `organizationId` smuggled through the query string ignored, no password hash or national ID exposed, `SYSTEM_OWNER` refused as a role filter |
-| `tests/notification.service.test.ts` | 7 | Inbox scoping, mark-read, mark-all-read, another user's notification, another organization's |
-| `tests/schedule.regression.test.ts` | 4 | Feature 2 still works after Feature 3 touched the schedule service |
-
-The suite is **database-free**. Repository doubles in `tests/helpers/` subclass
-the real repositories, so a method a double forgets to override reaches Postgres
-and fails loudly rather than silently returning nothing. There are **no
-HTTP-level or integration tests**, and no frontend tests.
+The backend suite covers authorization, tenant isolation, account creation and
+approval, attendance lifecycle, QR hardening, schedules, devices, materials,
+notifications, password recovery and Excel exports. Repository doubles keep the
+service tests database-free. The frontend suite covers role landing routes,
+route guards, staff login, the student mobile notice, per-role navigation and
+critical API request contracts. Full browser end-to-end and backend HTTP-level
+tests are still future work.
 
 ---
 
@@ -952,9 +965,16 @@ figures are legitimately zero on fresh data.
 | Platform owner email | `owner@wall-e.io` |
 | Platform owner password | `Owner@12345` |
 | All seeded university accounts | password `Demo@12345` |
+| NCTU robot email/device ID | `robot@nctu.edu.eg` |
+| NCTU robot password/device secret | `Robot@12345-Demo-Only` |
 
 The seed prints the full account list on completion, including the demo cohort's
 student and instructor addresses for `NCTU` and `CU`.
+
+For mobile QA without wiping the database, run `npm run db:seed:mobile`. It
+resets the selected NCTU demo credentials and idempotently prepares materials,
+inbox notices, a pending student and a fresh robot QR session. Details are in
+`apps/mobile/README.md`.
 
 ---
 
@@ -1041,11 +1061,11 @@ needed in development.
 
 ### 3. Sign in
 
-Use the development owner credentials from
+Use the appropriate development credentials from
 [Seed / Demo Data](#development--demo-credentials).
 
-> The console admits `SYSTEM_OWNER` only. A university account that signs in gets
-> an access-denied screen — there is no staff or student UI yet.
+> `SYSTEM_OWNER`, `UNIVERSITY_SUPER_ADMIN` and `ADMIN` each land in their own web
+> console. A `STUDENT` account is shown the mobile-app notice.
 
 ### Running the Backend
 
@@ -1069,6 +1089,7 @@ with `NOTIFICATION_WORKER_ENABLED=false` on any instance that must not send.
 | `npm run build` | Typecheck (`tsc -b`) + production build |
 | `npm run preview` | Serve the built bundle |
 | `npm run lint` | oxlint |
+| `npm test` | Vitest role, guard, login and API-contract tests |
 
 ---
 
@@ -1092,12 +1113,12 @@ Run from `backend/`:
 ## Current Limitations
 
 **Interface**
-- Features 1–5 have **no UI**. The console admits `SYSTEM_OWNER` only; staff and
-  students have no screen at all.
-- No student mobile app. `apps/mobile/`, `apps/tablet/` and `hardware/` are empty
-  directories.
-- `PAGES_AND_GAPS.txt` describes the intended student / admin / super-admin page
-  set. It is a **plan only** — none of those pages exist.
+- The staff and platform web consoles are implemented. Student screens belong to
+  the separate mobile client and are not present in this repository.
+- Physical robot firmware and campus hardware remain outside the repository;
+  `/robot` is the implemented device display client.
+- Full browser end-to-end coverage is not present yet; focused component and API
+  contract tests cover the account-role boundaries.
 
 **Notifications**
 - **Push is not actually delivered.** The provider logs and marks the row `SENT`;
@@ -1150,11 +1171,10 @@ in the repository:
 
 - Campus map, classroom search and turn-by-turn navigation
 - Face recognition authentication for admins
-- Robot touch UI (`apps/tablet/`) and voice/announcement playback
+- Robot voice/announcement playback and physical touch hardware
 - ESP32 / Raspberry Pi firmware (`hardware/`)
-- Robot fleet registry and device management (the console's Robots page is an
-  explicit placeholder)
-- Student mobile application (`apps/mobile/`)
+- Additional fleet operations beyond the implemented device provisioning,
+  rotation, room binding and revocation console
 - PDF / attendance reporting beyond the Feature 4 roster export
 - University-database (SIS) import — the `dataSource`, `externalStudentId` and
   `lastSyncedAt` columns exist as hooks, but nothing writes them
@@ -1165,17 +1185,12 @@ in the repository:
 
 Ordered by what blocks a real campus pilot.
 
-1. **University-facing console.** Role-based routing, the university dashboard
-   and directory (`/api/admin/*` already exist and are untouched by any UI),
-   course and session management, the live QR display (polling
-   `GET /sessions/:id/qr` on ~25 s, since tokens expire at 30 s), and a live
-   attendance roster. Without this there is no screen for a staff member to open
-   a session.
-2. **Student experience.** Sign in, scan, view timetable, view notifications,
-   view attendance history — every API already exists. A mobile web route inside
-   the existing React app would reach a pilot sooner than a native app.
+1. **Browser-level QA.** Add end-to-end tests for the implemented owner,
+   university-administrator, teaching-staff and robot route trees.
+2. **Mobile hardening.** Add secure persisted sessions, production HTTPS and
+   device-level end-to-end tests for the implemented Flutter client.
 3. **Push delivery.** Implement `PushNotificationProvider` against FCM and wire
-   a mobile client to `POST /notifications/device-tokens`.
+   the Flutter client to `POST /notifications/device-tokens`.
 4. **Reports.** PDF/attendance reporting beyond the Feature 4 roster export.
 5. **SRS features not started.** Campus map, classroom search and navigation;
    face recognition for admins; robot touch UI; ESP32 firmware.

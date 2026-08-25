@@ -1,0 +1,579 @@
+REVISED WHOLE-APPLICATION PLAN WITH MOBILE DESIGN PRESERVATION
+================================================================
+
+Scope: backend, React web application, and the complete Flutter mobile
+application for every role.
+
+
+MANDATORY MOBILE DESIGN RULE
+============================
+
+The current Flutter design must be preserved throughout implementation.
+
+Existing mobile screens must retain:
+
+- Layout and information hierarchy
+- Colors, gradients, backgrounds, borders, and shadows
+- Typography, font sizes, weights, and line heights
+- Spacing, padding, card sizes, and corner radii
+- Icons, buttons, fields, badges, and navigation
+- Animations, transitions, scrolling, and responsive behavior
+- Loading, empty, success, and error-state styling
+- Student, admin, super-admin, and robot visual identities
+
+Functional fixes must be added without redesigning existing screens.
+
+New screens--registration, OTP, password reset, pending approval, editors,
+and exports--must reuse the current theme, widgets, navigation patterns, and
+visual language. A design change is allowed only when necessary for missing
+functionality and must still look like part of the existing application.
+
+
+PHASE 0 - PRESERVE THE SOURCE AND VISUAL BASELINE
+=================================================
+
+1. Review modified and untracked files before committing anything.
+2. Check for secrets, generated files, and local build artifacts.
+3. Create a safe branch or recoverable backup point.
+4. Commit verified work in logical groups.
+5. Compile the current Flutter application before functional changes.
+6. Capture reference screenshots for every existing mobile screen, role, and
+   important state:
+   - Normal
+   - Loading
+   - Empty
+   - Error
+   - Dialog/modal
+   - Small and large mobile sizes
+7. Record theme values and reusable widgets.
+8. Add targeted Flutter golden-test infrastructure only for this representative
+   subset:
+   - Login
+   - One student-shell screen
+   - One admin-shell screen
+   - One super-admin-shell screen
+   - The robot QR-display screen
+9. Use the complete screenshot baseline for manual visual comparison on every
+   other existing screen and state. Do not expand golden coverage during this
+   remediation unless a screen proves too risky to verify reliably by manual
+   comparison.
+
+Success condition: the current design has a reproducible visual baseline that
+later work can be compared against.
+
+
+PHASE 1 - ESTABLISH THE TECHNICAL BASELINE
+==========================================
+
+1. Run backend type checking and tests.
+2. Run web type checking and tests.
+3. Run Flutter analysis, tests, and an Android build.
+4. Smoke-test the app on an emulator or physical device.
+5. Record existing failures separately.
+6. Inspect the migration ledger and live database schema read-only.
+7. Verify actual deployment configuration instead of relying only on example
+   files.
+
+No functional implementation begins until the current build state is
+understood.
+
+
+PHASE 2 - CORRECT BACKEND BEHAVIOR
+==================================
+
+2.1 Course authorization - D-10
+-------------------------------
+
+Create separate authorization policies:
+
+- canManageCourse
+- canExportCourse
+
+Rules:
+
+- Super admins may manage any course in their organization.
+- Instructors may export courses they created or actively teach.
+- Cross-organization access remains forbidden.
+- Instructor course-management policy must match the documented product rules.
+
+Add authorization and tenant-isolation tests.
+
+
+2.2 Session course data - D-1 and D-3
+--------------------------------------
+
+Include course: courseSummary in:
+
+- Session detail
+- Organization session list
+- Instructor session list
+
+Make the property required-but-nullable:
+
+    course: CourseSummary | null
+
+Linked sessions must include a course; ad-hoc sessions must explicitly return
+null.
+
+
+2.3 Instructor courses - D-4 and D-5
+-------------------------------------
+
+Make /courses/my return courses that the instructor:
+
+- Created, or
+- Has an active teaching assignment for
+
+Use /courses/my for instructors and /courses for super admins.
+
+Return reliable export authorization so clients never show actions that will
+predictably return 403.
+
+
+2.4 Materials - D-6 and D-7
+----------------------------
+
+- Derive publisher scope from the authenticated actor.
+- Instructors see and modify only their own materials.
+- Super admins see organization-wide materials.
+- Add Active, Withdrawn, and All filters.
+- Allow authorized reactivation of withdrawn material.
+
+
+2.5 Session pagination - D-2
+-----------------------------
+
+Add validated pagination and metadata to session queries.
+
+Update backend, web, and Flutter consumers together so neither client
+temporarily breaks from a response-shape change.
+
+
+PHASE 3 - CORRECT THE WEB CONSOLE
+=================================
+
+1. Add full pagination state to:
+   - Timetable
+   - Directory
+   - Devices
+   - Pending Students
+2. Include page values in request parameters and query keys.
+3. Reset to page one when filters change.
+4. Replace the 100-person instructor dropdown with a searchable,
+   incrementally loaded selector.
+5. Use role-correct course and material endpoints.
+6. Add material status filtering and reactivation.
+7. Add device editing for name and room binding.
+8. Prevent the Robots page from requesting plans when billing is disabled.
+9. Either implement a real Exports page or rename it so it does not promise
+   unavailable functionality.
+
+Course pagination is a separate scalability improvement; Courses is not
+currently one of the silently capped pages.
+
+
+PHASE 4 - COMPLETE STUDENT MOBILE ONBOARDING
+============================================
+
+Every screen in this phase must follow the existing student mobile design.
+
+
+4.1 Registration and OTP
+------------------------
+
+Create:
+
+1. Email entry
+2. OTP request
+3. OTP confirmation
+4. Registration form
+5. Registration success
+6. Pending-approval transition
+
+Use existing:
+
+- Background and gradients
+- Cards and fields
+- Button styles
+- Typography
+- Spacing
+- Error-message treatment
+- Page transitions
+
+Handle expiry, incorrect codes, attempt limits, resend cooldown, duplicates,
+and network failures.
+
+
+4.2 Pending approval
+--------------------
+
+Create a pending student shell that preserves the current student navigation
+style.
+
+Allow:
+
+- Profile
+- Inbox
+- Approval-status refresh
+- Sign out
+
+Block normal access to timetable, scanning, materials, and attendance until
+approval.
+
+Refresh approval state from /auth/profile, rather than relying permanently on
+login-time data.
+
+
+4.3 Password recovery
+---------------------
+
+Complete:
+
+1. Request reset code
+2. Enter code
+3. Enter and confirm new password
+4. Reset success
+5. Return to login
+
+The screens must visually match the current login screen.
+
+
+4.4 Friday - D-12
+-----------------
+
+Add Friday to the student and super-admin timetable controls without changing
+the existing selector's visual appearance.
+
+Remove helper logic that skips Friday.
+
+
+4.5 Profile errors - D-13
+-------------------------
+
+When materials return missing or invalid profile fields:
+
+- Navigate to Profile
+- Highlight the affected fields using existing form error styling
+- Explain why materials are unavailable
+- Return to Materials after correction
+
+
+4.6 Student account - D-15
+--------------------------
+
+Add full-name and password editing using the current profile page, cards,
+dialogs, fields, and buttons. Preserve all current academic-profile
+functionality.
+
+
+PHASE 5 - COMPLETE STAFF AND SUPER-ADMIN MOBILE FUNCTIONALITY
+=============================================================
+
+5.1 Staff attendance - D-14
+---------------------------
+
+Extend existing teaching and session screens with:
+
+- Open attendance
+- Active-session details
+- Rotating QR display
+- Live attendee count
+- Close-session confirmation
+- Closed and expired states
+
+Reuse existing cards and controls. Do not replace the current Sessions screen
+with a visually unrelated screen.
+
+
+5.2 Super-admin courses
+-----------------------
+
+Add create, edit, delete, search, and filtering using dialogs and forms styled
+like the existing timetable and materials editors.
+
+
+5.3 Students and staff
+----------------------
+
+Add:
+
+- Search and pagination
+- Account creation
+- Activation/deactivation
+- Password reset
+- Pending and profile-status indicators
+
+Preserve the existing directory cards and role styling.
+
+
+5.4 Device management
+---------------------
+
+Add:
+
+- Provisioning
+- One-time credential display
+- Name and room editing
+- Secret rotation
+- Revocation
+
+Credential dialogs must follow the existing modal design and clearly
+distinguish editing, rotation, and terminal revocation.
+
+
+5.5 Mobile exports
+------------------
+
+Replace the fake page with a working export flow:
+
+1. Select a course
+2. Select report type
+3. Generate the file
+4. Save or share it
+5. Display progress and errors
+
+Preserve the current Exports page layout where practical, but replace
+nonfunctional fields and buttons with real controls in the same design style.
+
+
+5.6 Account management
+----------------------
+
+Add name editing and password changing to staff and super-admin account pages
+without redesigning those pages.
+
+
+5.7 Dead code
+-------------
+
+Remove unused static mock destinations only after all still-used widgets have
+been extracted and verified. Removing dead code must not change visible
+design.
+
+
+PHASE 6 - MOBILE VISUAL VERIFICATION
+====================================
+
+After each mobile feature:
+
+1. Compare the updated screen against its reference screenshot.
+2. Run golden tests when the screen is in the targeted golden subset.
+3. Perform a documented manual screenshot comparison for every screen outside
+   that subset.
+4. Test common mobile dimensions.
+5. Verify text scaling and overflow.
+6. Verify keyboard appearance and field scrolling.
+7. Verify dialogs fit smaller screens.
+8. Verify dark background, gradients, spacing, and colors remain unchanged.
+9. Verify navigation and animations behave as before.
+10. Inspect every role independently.
+
+Any unintended visual difference is treated as a regression, even when
+functionality works.
+
+New screens must be reviewed for consistency with neighboring existing
+screens.
+
+
+PHASE 7 - DEPLOYMENT SECURITY
+=============================
+
+7.1 Migrations
+--------------
+
+Follow docs/MIGRATION_RUNBOOK.md as the authoritative procedure. Do not replace
+it with an improvised migration sequence.
+
+1. Back up the database.
+2. Inspect the live _prisma_migrations ledger read-only.
+3. Compare every migration to the live schema read-only.
+4. Produce a written classification for every migration: fully reflected,
+   partially reflected, or genuinely missing.
+5. Prepare the exact proposed prisma migrate resolve and prisma migrate deploy
+   commands, together with their expected effects and rollback procedure.
+6. Rehearse the complete proposal against staging or a safe database copy.
+7. EXPLICIT APPROVAL GATE: the project owner or designated database owner must
+   approve the written classification and the exact commands before any
+   migration ledger or schema write. Until that approval is recorded, do not
+   run migrate resolve, migrate deploy, or manual write SQL against the live
+   database.
+8. After approval, mark only migrations whose complete effects are already
+   present as applied.
+9. Apply only genuinely missing migrations.
+10. Run migration status, schema verification, and application smoke tests.
+
+
+7.2 Mail
+--------
+
+- Configure SMTP.
+- Set MAIL_PROVIDER=smtp.
+- Test OTP and password-reset delivery.
+- Ensure production logs do not contain codes.
+
+
+7.3 Device secret
+-----------------
+
+- Configure an independent strong DEVICE_JWT_SECRET.
+- Store it in the deployment secret manager.
+- Document rotation and device revocation.
+
+
+7.4 Staff-only QR
+-----------------
+
+After web, mobile, and robot QR flows are verified, enable:
+
+    QR_ENDPOINT_STAFF_ONLY=true
+
+Verify:
+
+- Students receive 403
+- Staff QR works
+- Mobile staff QR works
+- Device QR works
+- Attendance scanning still works
+
+
+PHASE 8 - TESTING
+=================
+
+Backend
+-------
+
+Test:
+
+- Course authorization
+- Tenant isolation
+- Session response contracts
+- Instructor course selection
+- Material ownership and reactivation
+- Pagination
+- QR restrictions
+
+
+Web
+---
+
+Test:
+
+- Pagination and filter reset
+- Role-specific course scope
+- Export visibility
+- Material status filtering
+- Device editing
+- Session course labels
+- Billing-disabled behavior
+
+
+Flutter
+-------
+
+Run:
+
+- flutter analyze
+- Unit tests
+- Widget tests
+- Targeted golden visual tests for login and one representative screen per
+  mobile role shell
+- Documented manual screenshot comparison for all other mobile screens
+- Integration tests
+- Android build
+- Emulator and real-device smoke tests
+
+Cover:
+
+- Registration and OTP
+- Pending approval
+- Password recovery
+- Friday
+- Profile error navigation
+- Attendance sessions
+- Course, user, and device management
+- Exports
+- Every role's navigation
+- Existing-screen visual regression
+
+
+PHASE 9 - DOCUMENTATION AND RELEASE
+===================================
+
+1. Update PAGES_AND_GAPS.txt.
+2. Document Flutter as an official in-repository client.
+3. Document mobile design-preservation requirements.
+4. Update the role and endpoint matrix.
+5. Record migration reconciliation results.
+6. Document feature flags and activation order.
+7. Remove or relabel unavailable placeholders.
+8. Create release and rollback checklists.
+
+
+9.1 Orphaned endpoint disposition
+---------------------------------
+
+No endpoint listed in section 9 of review.txt may silently disappear from the
+plan. Use the following explicit disposition:
+
+Scheduled in this remediation release:
+
+- GET /api/courses/my - Phase 2.3 and its web/mobile consumers
+- POST /api/auth/verify-email/start - Phase 4.1
+- POST /api/auth/verify-email/confirm - Phase 4.1
+- POST /api/auth/register - Phase 4.1
+- POST /api/auth/reset-password - Phase 4.3
+
+Explicitly deferred from this remediation release into a tracked follow-up
+backlog:
+
+- GET /api/schedules/:id/attendance-log - university attendance-compliance
+  reporting milestone
+- GET /api/attendance/analytics - university analytics milestone
+- GET /api/courses/:id/sessions - course-history/reporting milestone
+- POST /api/notifications/device-tokens - push-notification provider milestone
+- PATCH /api/notifications/device-tokens/deactivate - push-notification
+  provider milestone
+
+Before this remediation release closes, every deferred endpoint must have a
+tracked backlog item with an owner, target release or milestone, acceptance
+criteria, and an explicit keep-or-remove decision. Deferral means the endpoint
+is intentionally scheduled later; it does not mean it is forgotten.
+
+
+FINAL ACCEPTANCE CRITERIA
+=========================
+
+The work is accepted only when:
+
+- All reported functional defects are fixed.
+- Backend, web, and Flutter functionality agree.
+- Mobile works for students, instructors, super admins, and robots.
+- Existing mobile screens preserve their current design and details.
+- New screens match the existing mobile visual system.
+- The targeted golden tests and the documented manual screenshot comparisons
+  show no unintended visual regressions.
+- Flutter compiles and passes tests.
+- Mobile works on supported screen sizes.
+- Migration history is safely reconciled.
+- SMTP and device secrets are configured.
+- Students cannot generate staff QR tokens.
+- Full role-based end-to-end tests pass.
+
+INDICATIVE EFFORT AND BUDGET
+============================
+
+For one developer, retain the complete Phase 5 mobile scope and plan for
+approximately 5-7 weeks:
+
+- Source protection, baseline, and targeted visual-test infrastructure:
+  3-5 working days
+- Backend truth, authorization, contracts, and pagination: 5-7 working days
+- Web-console corrections: 4-6 working days
+- Student mobile onboarding and recovery: 6-8 working days
+- Staff and super-admin mobile parity, devices, and exports: 8-12 working days
+- Visual comparison, integration testing, deployment gates, and documentation:
+  5-8 working days
+
+These ranges may overlap, but the release must not be compressed back to the
+previous 2-3 week estimate without explicitly cutting Phase 5 scope and
+updating the acceptance criteria to name what was deferred.
