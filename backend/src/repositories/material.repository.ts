@@ -74,9 +74,14 @@ export class MaterialRepository {
         ...(query.section
           ? { section: { equals: query.section, mode: "insensitive" } }
           : {}),
-        // Defaults to the active ones: a soft-deleted link is history, not a
-        // listing, unless somebody explicitly asks for it.
-        isActive: query.isActive ?? true,
+        // Only the publisher's own links when the service says so. An ADMIN
+        // may not widen this - MaterialService overrides it from the token.
+        ...(query.addedById ? { addedById: query.addedById } : {}),
+
+        // Active by default: a withdrawn link is history, not a listing. But
+        // "all" and "withdrawn" are askable, because the row is kept precisely
+        // so it can be seen and reactivated (D-7).
+        ...(query.status === "all" ? {} : { isActive: query.status !== "withdrawn" }),
 
         // Last, and not optional.
         organizationId,

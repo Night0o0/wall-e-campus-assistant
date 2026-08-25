@@ -1,6 +1,6 @@
 import { useMemo, useState, type FormEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ExternalLink, EyeOff, Pencil, Plus } from 'lucide-react'
+import { ExternalLink, Eye, EyeOff, Pencil, Plus } from 'lucide-react'
 import { Page, Card } from '../../components/layout/Page'
 import { Button } from '../../components/ui/Button'
 import { Badge } from '../../components/ui/Badge'
@@ -53,16 +53,37 @@ export function Materials() {
   const [editing, setEditing] = useState<CourseMaterial | null>(null)
   const [withdrawing, setWithdrawing] = useState<CourseMaterial | null>(null)
 
+  /**
+   * Withdrawal is a soft delete and the row is deliberately kept, but the
+   * server defaults to active and this page never asked for anything else - so
+   * a withdrawn link vanished and could not be brought back from the UI (D-7).
+   */
+  const [status, setStatus] = useState<'active' | 'withdrawn' | 'all'>('active')
+
   const { data: materials = [], isLoading, error } = useQuery({
-    queryKey: ['campus', 'materials'],
-    queryFn: () => materialsApi.list(),
+    queryKey: ['campus', 'materials', status],
+    queryFn: () => materialsApi.list({ status }),
   })
 
   const invalidate = () =>
     void queryClient.invalidateQueries({ queryKey: ['campus', 'materials'] })
 
-  const withdraw = useMutation({
-    mutationFn: (id: string) => materialsApi.deactivate(id),
+  /**
+   * Bring a withdrawn link back.
+   *
+   * The row was always kept for exactly this, but with no way to SEE a
+   * withdrawn link there was no way to reach this either (D-7).
+   */
+  const reactivate = useMutation({
+    mutationFn: (id: string) => materialsApi.update(id, { isActive: true }),
+    onSuccess: () => {
+      invalidate()
+      toast.success('Link restored')
+    },
+    onError: (caught) => toast.error(getErrorMessage(caught)),
+  })
+
+
     onSuccess: () => {
       invalidate()
       toast.success('Link withdrawn')
@@ -97,9 +118,29 @@ export function Materials() {
           : 'The links you publish for the subjects you teach.'
       }
       actions={
-        <Button icon={Plus} onClick={() => setPublishing(true)}>
-          Publish a link
-        </Button>
+        <div className="flex items-center gap-2">
+          {/*
+            Withdrawn links are kept so they can be restored; without this
+            control there was no way to see one, so the Withdrawn badge and the
+            restore path were both unreachable (D-7).
+          */}
+          <select
+            value={status}
+            onChange={(event) =>
+              setStatus(event.target.value as 'active' | 'withdrawn' | 'all')
+            }
+            className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900"
+            aria-label="Filter by status"
+          >
+            <option value="active">Active</option>
+            <option value="withdrawn">Withdrawn</option>
+            <option value="all">All</option>
+          </select>
+
+          <Button icon={Plus} onClick={() => setPublishing(true)}>
+            Publish a link
+          </Button>
+        </div>
       }
     >
       {isLoading && (
@@ -172,13 +213,22 @@ export function Materials() {
                       icon={Pencil}
                       onClick={() => setEditing(material)}
                     />
-                    {material.isActive && (
+                    {material.isActive ? (
                       <Button
                         size="sm"
                         variant="ghost"
                         icon={EyeOff}
                         title="Withdraw"
                         onClick={() => setWithdrawing(material)}
+                      />
+                    ) : (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        icon={Eye}
+                        title="Restore this link"
+                        loading={reactivate.isPending}
+                        onClick={() => reactivate.mutate(material.id)}
                       />
                     )}
                   </div>

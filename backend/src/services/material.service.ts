@@ -114,8 +114,30 @@ export class MaterialService {
 
   /* --------------------------------- Staff -------------------------------- */
 
+  /**
+   * The staff listing.
+   *
+   * WHO you see is decided here, from the token, not from the query string.
+   *
+   *   ADMIN    only links they published. The page calls this "the links you
+   *            publish" and it now is. Before, the service passed the query
+   *            straight through with no addedById filter, so an instructor saw
+   *            every link in the university and got Edit and Withdraw buttons
+   *            on colleagues' rows that loadEditable then answered 403 for
+   *            (D-6).
+   *
+   *   SUPER    the whole university, which IS their job. They may narrow to one
+   *   ADMIN    publisher by passing addedById deliberately.
+   *
+   * The override is applied LAST and unconditionally for an ADMIN, so a
+   * hand-crafted ?addedById= cannot widen the scope - the same construction the
+   * tenant clause uses.
+   */
   async list(query: MaterialQuery, actor: MaterialActor) {
-    return this.materials.findManyInOrganization(actor.organizationId, query);
+    const scoped =
+      actor.role === "ADMIN" ? { ...query, addedById: actor.id } : query;
+
+    return this.materials.findManyInOrganization(actor.organizationId, scoped);
   }
 
   /**

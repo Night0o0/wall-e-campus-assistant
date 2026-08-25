@@ -123,10 +123,28 @@ export const materialQuerySchema = z.object({
   level: z.coerce.number().int().min(1).max(7).optional(),
   semester: z.coerce.number().int().min(1).max(2).optional(),
   section: z.string().trim().min(1).max(20).optional(),
-  isActive: z
-    .enum(["true", "false"])
-    .transform((value) => value === "true")
-    .optional(),
+  /**
+   * Which links to list.
+   *
+   * Tri-state on purpose, and named `status` rather than a boolean because
+   * "not asked" and "asked for both" are different questions that an optional
+   * boolean cannot tell apart.
+   *
+   * Withdrawal is a soft delete - the row is KEPT so a link can be brought
+   * back - but the repository hard-defaulted to active and the client never
+   * sent anything, so a withdrawn link vanished completely and the "Withdrawn"
+   * badge in Materials.tsx could never render (D-7).
+   */
+  status: z.enum(["active", "withdrawn", "all"]).default("active"),
+
+  /**
+   * List only links published by this person.
+   *
+   * Not settable by an ADMIN through the query string - the service overrides
+   * it from the authenticated actor. Present here so a super admin can narrow
+   * to one publisher deliberately.
+   */
+  addedById: z.string().uuid().optional(),
 });
 
 export type MaterialQuery = z.infer<typeof materialQuerySchema>;
