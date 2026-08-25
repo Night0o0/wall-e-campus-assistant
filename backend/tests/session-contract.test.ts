@@ -23,7 +23,7 @@ const calls: { model: string; method: string; args: any }[] = [];
 
 const record = (model: string, method: string) => (args: any) => {
   calls.push({ model, method, args });
-  return Promise.resolve(null);
+  return Promise.resolve([]);
 };
 
 vi.mock("../src/lib/prisma.js", () => ({
@@ -32,6 +32,10 @@ vi.mock("../src/lib/prisma.js", () => ({
       findUnique: record("session", "findUnique"),
       findMany: record("session", "findMany"),
       findFirst: record("session", "findFirst"),
+      // The list projections are paginated, so they issue a count alongside
+      // the findMany. Not what these tests assert, but they will not run
+      // without it.
+      count: () => Promise.resolve(0),
     },
   },
 }));
@@ -40,7 +44,9 @@ const { SessionRepository } = await import(
   "../src/repositories/session.repository.js"
 );
 
-const lastInclude = () => calls.at(-1)?.args?.include;
+/** The include of the last findMany or findUnique - never the count. */
+const lastInclude = () =>
+  calls.filter((call) => call.method !== "count").at(-1)?.args?.include;
 
 /** The shape every session projection must name a course with. */
 const COURSE_SUMMARY = {
@@ -81,7 +87,9 @@ describe("every session projection a client reads includes the course", () => {
     await repo.findByOrganization("org-a");
     await repo.findByCreator("instructor-1", "org-a");
 
-    const shapes = calls.map((call) => call.args.include.course);
+    const shapes = calls
+      .filter((call) => call.args?.include)
+      .map((call) => call.args.include.course);
     for (const shape of shapes) {
       expect(shape).toEqual(COURSE_SUMMARY);
     }

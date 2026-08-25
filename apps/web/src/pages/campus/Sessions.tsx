@@ -32,17 +32,17 @@ export function Sessions() {
   const queryClient = useQueryClient()
   const [closing, setClosing] = useState<CampusSession | null>(null)
 
-  const {
-    data: sessions = [],
-    isLoading,
-    error,
-    refetch,
-  } = useQuery({
-    queryKey: ['campus', 'sessions'],
-    queryFn: sessionsApi.list,
+  /** GET /sessions is paginated (D-2); this is unbounded history. */
+  const [page, setPage] = useState(1)
+
+  const { data, isLoading, error, refetch } = useQuery({
+    queryKey: ['campus', 'sessions', page],
+    queryFn: () => sessionsApi.list({ page, limit: 25 }),
     // An open session's attendee count moves while somebody is watching it.
     refetchInterval: 15_000,
   })
+
+  const sessions = data?.data ?? []
 
   const close = useMutation({
     mutationFn: (id: string) => sessionsApi.close(id),
@@ -168,6 +168,8 @@ export function Sessions() {
         rowKey={(session) => session.id}
         isLoading={isLoading}
         error={error}
+        meta={data?.meta}
+        onPageChange={setPage}
         onRetry={() => void refetch()}
         emptyTitle="No sessions yet"
         emptyMessage="Open attendance from a lecture on your timetable to start one."

@@ -166,10 +166,22 @@ export class SessionRepository {
         });
     }
 
-    async findByOrganization(organizationId: string) {
-        return prisma.session.findMany({
-            where: { organizationId },
+    /**
+     * One page of the organization's sessions, newest first.
+     *
+     * Paginated because this is unbounded history: every session ever opened in
+     * the university, growing by one per lecture per week forever, was returned
+     * whole and rendered as one table (D-2).
+     */
+    async findByOrganization(organizationId: string, page = { skip: 0, take: 25 }) {
+        const where = { organizationId };
+
+        const [data, total] = await Promise.all([
+            prisma.session.findMany({
+            where,
             orderBy: { createdAt: 'desc' },
+            skip: page.skip,
+            take: page.take,
             include: {
                 createdBy: {
                     select: { id: true, fullName: true },
@@ -178,7 +190,11 @@ export class SessionRepository {
                 lectureSchedule: scheduleSummary,
                 _count: attendedCount,
             },
-        });
+            }),
+            prisma.session.count({ where }),
+        ]);
+
+        return { data, total };
     }
 
     /**
@@ -241,16 +257,30 @@ export class SessionRepository {
         });
     }
 
-    async findByCreator(createdById: string, organizationId: string) {
-        return prisma.session.findMany({
-            where: { createdById, organizationId },
-            orderBy: { createdAt: 'desc' },
-            include: {
-                course: courseSummary,
-                lectureSchedule: scheduleSummary,
-                _count: attendedCount,
-            },
-        });
+    /** One page of the sessions this member of staff opened, newest first. */
+    async findByCreator(
+        createdById: string,
+        organizationId: string,
+        page = { skip: 0, take: 25 }
+    ) {
+        const where = { createdById, organizationId };
+
+        const [data, total] = await Promise.all([
+            prisma.session.findMany({
+                where,
+                orderBy: { createdAt: 'desc' },
+                skip: page.skip,
+                take: page.take,
+                include: {
+                    course: courseSummary,
+                    lectureSchedule: scheduleSummary,
+                    _count: attendedCount,
+                },
+            }),
+            prisma.session.count({ where }),
+        ]);
+
+        return { data, total };
     }
 
     /**

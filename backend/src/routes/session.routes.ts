@@ -1,8 +1,9 @@
 import { Router, RequestHandler } from "express";
 import { env } from "../config/env.js";
 import { authenticate, requireRole } from "../middleware/auth.middleware.js";
-import { validate } from "../middleware/validate.middleware.js";
+import { validate, validateQuery } from "../middleware/validate.middleware.js";
 import { createSessionSchema } from "../types/session.types.js";
+import { paginationSchema } from "../utils/pagination.js";
 import { createSession, getMySessions, getSession, closeSession, getQrToken } from "../controllers/session.controller.js";
 
 const router = Router();
@@ -31,7 +32,7 @@ const isStaff = requireRole('ADMIN', 'UNIVERSITY_SUPER_ADMIN', 'SYSTEM_OWNER');
 const qrGuard: RequestHandler[] = env.QR_ENDPOINT_STAFF_ONLY ? [isStaff] : [];
 
 router.post("/", isStaff, validate(createSessionSchema), createSession);
-router.get("/", isStaff, getMySessions);
+router.get("/", isStaff, validateQuery(paginationSchema), getMySessions);
 router.get("/:id", isStaff, getSession);
 router.get("/:id/qr", ...qrGuard, getQrToken);
 router.patch("/:id/close", isStaff, closeSession);

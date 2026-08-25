@@ -586,33 +586,36 @@ describe("listing sessions: the list agrees with the single-session rule", () =>
       { id: "other-org", organizationId: ORG_B, createdById: INSTRUCTOR.id },
     ]);
 
+  /** The default first page, as paginationSchema would produce it. */
+  const PAGE = { page: 1, limit: 10, sortOrder: "desc" } as const;
+
   const serviceOver = (sessions: FakeSessionRepository) =>
     new SessionService(sessions, new FakeScheduleRepository([makeSchedule()]));
 
   it("gives an instructor only the sessions they opened", async () => {
     const service = serviceOver(seeded());
 
-    const listed = await service.listSessionsFor(INSTRUCTOR);
+    const listed = await service.listSessionsFor(INSTRUCTOR, PAGE);
 
-    expect(listed.map((row) => row.id)).toEqual(["mine-1"]);
+    expect(listed.data.map((row) => row.id)).toEqual(["mine-1"]);
   });
 
   it("gives a super admin every session in their university", async () => {
     const service = serviceOver(seeded());
 
-    const listed = await service.listSessionsFor(SUPER_ADMIN);
+    const listed = await service.listSessionsFor(SUPER_ADMIN, PAGE);
 
     // Including the one they did not open — that is the whole point.
-    expect(listed.map((row) => row.id).sort()).toEqual(["mine-1", "theirs-1"]);
+    expect(listed.data.map((row) => row.id).sort()).toEqual(["mine-1", "theirs-1"]);
   });
 
   it("never lets a super admin see another university's sessions", async () => {
     const service = serviceOver(seeded());
 
-    const listed = await service.listSessionsFor(SUPER_ADMIN);
+    const listed = await service.listSessionsFor(SUPER_ADMIN, PAGE);
 
     // The tenant is absolute and no role widens past it.
-    expect(listed.map((row) => row.id)).not.toContain("other-org");
+    expect(listed.data.map((row) => row.id)).not.toContain("other-org");
   });
 
   it("lists exactly what canSeeSession would admit, for both roles", async () => {
@@ -620,12 +623,12 @@ describe("listing sessions: the list agrees with the single-session rule", () =>
     const service = serviceOver(sessions);
 
     for (const actor of [INSTRUCTOR, SUPER_ADMIN]) {
-      const listed = await service.listSessionsFor(actor);
+      const listed = await service.listSessionsFor(actor, PAGE);
       const admitted = sessions.rows
         .filter((row) => canSeeSession(row, actor))
         .map((row) => row.id);
 
-      expect(listed.map((row) => row.id).sort()).toEqual(admitted.sort());
+      expect(listed.data.map((row) => row.id).sort()).toEqual(admitted.sort());
     }
   });
 });
@@ -685,5 +688,83 @@ describe("getQrTokenForDevice: the room binding is an authorization check", () =
     await expect(
       service.getQrTokenForDevice({ organizationId: ORG_A, room: "B-204" }, "session-1")
     ).rejects.toMatchObject({ statusCode: 404 });
+  });
+});
+
+/* --------------------------- Pagination (D-2) ----------------------------- */
+
+describe("the session list is paginated", () => {
+  /**
+   * GET /api/sessions returned the entire history unpaginated - every session
+   * ever opened in the university, growing by one per lecture per week
+   * forever, rendered as one table (D-2).
+   */
+  const PAGE = { page: 1, limit: 10, sortOrder: "desc" } as const;
+
+  const manySessions = (count: number) =>
+    new FakeSessionRepository(
+      Array.from({ length: count }, (_, index) => ({
+        id: `session-${index}`,
+        organizationId: ORG_A,
+        createdById: INSTRUCTOR.id,
+      }))
+    );
+
+  const serviceOver = (sessions: FakeSessionRepository) =>
+    new SessionService(sessions, new FakeScheduleRepository([makeSchedule()]));
+
+  it("returns only one page of rows", async () => {
+    const service = serviceOver(manySessions(30));
+
+    const listed = await service.listSessionsFor(INSTRUCTOR, {
+      ...PAGE,
+      limit: 10,
+    });
+
+    expect(listed.data).toHaveLength(10);
+  });
+
+  it("reports the unpaginated total, not the page size", async () => {
+    // The pager needs to know there are more; a total of 10 would hide 20.
+    const service = serviceOver(manySessions(30));
+
+    const listed = await service.listSessionsFor(INSTRUCTOR, {
+      ...PAGE,
+      limit: 10,
+    });
+
+    expect(listed.meta.total).toBe(30);
+    expect(listed.meta.totalPages).toBe(3);
+    expect(listed.meta.hasNext).toBe(true);
+    expect(listed.meta.hasPrev).toBe(false);
+  });
+
+  it("moves to the next page", async () => {
+    const service = serviceOver(manySessions(30));
+
+    const listed = await service.listSessionsFor(INSTRUCTOR, {
+      ...PAGE,
+      page: 2,
+      limit: 10,
+    });
+
+    expect(listed.data.map((row: { id: string }) => row.id)).toEqual(
+      Array.from({ length: 10 }, (_, index) => `session-${index + 10}`)
+    );
+    expect(listed.meta.hasPrev).toBe(true);
+  });
+
+  it("paginates the super admin list too", async () => {
+    // Both projections grew the same skip/take, so neither role can be the one
+    // that still downloads everything.
+    const service = serviceOver(manySessions(30));
+
+    const listed = await service.listSessionsFor(SUPER_ADMIN, {
+      ...PAGE,
+      limit: 5,
+    });
+
+    expect(listed.data).toHaveLength(5);
+    expect(listed.meta.total).toBe(30);
   });
 });

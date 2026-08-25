@@ -279,17 +279,40 @@ export class FakeSessionRepository extends SessionRepository {
    * than only the visibility of one session by id. The list is where the two
    * had drifted apart.
    */
-  override async findByCreator(createdById: string, organizationId: string) {
-    return this.rows.filter(
+  override async findByCreator(
+    createdById: string,
+    organizationId: string,
+    page = { skip: 0, take: 25 }
+  ) {
+    const matched = this.rows.filter(
       (row) =>
         row.createdById === createdById && row.organizationId === organizationId
-    ) as never;
+    );
+
+    return this.pageOf(matched, page) as never;
   }
 
-  override async findByOrganization(organizationId: string) {
-    return this.rows.filter(
+  override async findByOrganization(
+    organizationId: string,
+    page = { skip: 0, take: 25 }
+  ) {
+    const matched = this.rows.filter(
       (row) => row.organizationId === organizationId
-    ) as never;
+    );
+
+    return this.pageOf(matched, page) as never;
+  }
+
+  /**
+   * Both list projections return one page plus the unpaginated total, so the
+   * service can build a meta envelope (D-2). Slicing here rather than returning
+   * everything means a test can actually observe that skip/take arrived.
+   */
+  private pageOf<T>(rows: T[], page: { skip: number; take: number }) {
+    return {
+      data: rows.slice(page.skip, page.skip + page.take),
+      total: rows.length,
+    };
   }
 
   /** Enough of the close to assert what was recorded, and why. */

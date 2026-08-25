@@ -216,7 +216,18 @@ export const coursesApi = {
 /* -------------------------------- Sessions -------------------------------- */
 
 export const sessionsApi = {
-  list: () => api.get<CampusSession[]>('/sessions').then((r) => r.data),
+  /**
+   * GET /sessions is paginated (D-2). Tolerates a bare array so a stale
+   * deployment does not blank the page.
+   */
+  list: (params: Record<string, unknown> = {}) =>
+    api
+      .get<Paginated<CampusSession> | CampusSession[]>('/sessions', {
+        params: clean(params),
+      })
+      .then((r) =>
+        Array.isArray(r.data) ? { data: r.data, meta: undefined } : r.data
+      ),
 
   get: (id: string) =>
     api

@@ -5,6 +5,11 @@ import { sessionWindowConfig } from "../config/attendance.config.js";
 import { CreateSessionInput } from "../types/session.types.js";
 import { generateQrToken } from "../utils/qr.util.js";
 import { canSeeSession, seesOnlyOwnSessions } from "../utils/session-access.js";
+import {
+    PaginationQuery,
+    paginate,
+    toSkipTake,
+} from "../utils/pagination.js";
 import { deviceMaySeeRoom } from "../utils/device-room-access.js";
 import { env } from "../config/env.js";
 import { sameOccurrenceWindow, sessionState } from "../utils/session-window.js";
@@ -103,10 +108,21 @@ export class SessionService {
      * The tenant is passed separately in both branches and is never derived
      * from anything the caller sent.
      */
-    async listSessionsFor(actor: SessionActor) {
-        return seesOnlyOwnSessions(actor)
-            ? this.sessions.findByCreator(actor.id, actor.organizationId)
-            : this.sessions.findByOrganization(actor.organizationId);
+    /**
+     * One page of the sessions this actor may see.
+     *
+     * An ADMIN sees the ones they opened; everybody else sees the whole
+     * university. Paginated: this is unbounded history and was returned whole
+     * (D-2).
+     */
+    async listSessionsFor(actor: SessionActor, query: PaginationQuery) {
+        const page = toSkipTake(query);
+
+        const { data, total } = seesOnlyOwnSessions(actor)
+            ? await this.sessions.findByCreator(actor.id, actor.organizationId, page)
+            : await this.sessions.findByOrganization(actor.organizationId, page);
+
+        return paginate(data, total, query);
     }
 
     async getMySessions(adminId: string, organizationId: string) {

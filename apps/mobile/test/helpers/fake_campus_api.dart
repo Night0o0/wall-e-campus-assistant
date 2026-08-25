@@ -225,7 +225,37 @@ class FakeCampusApi implements CampusGateway {
         }
       };
     }
-    if (path == '/sessions') return {'data': []};
+    // The paginated envelope GET /sessions now returns (D-2). The Flutter
+    // client needed no change for it: _send wraps a bare array as
+    // {'data': ...} anyway, so _items finds the same key either way. Shaped
+    // like the real response here so that stays true.
+    if (path == '/sessions') {
+      return {
+        'data': [
+          {
+            'id': 'session-1',
+            'title': 'MEC201 - Electronics',
+            'status': 'ACTIVE',
+            'startTime': '2026-08-18T09:00:00.000Z',
+            'room': 'B-204',
+            'course': {
+              'id': 'course-1',
+              'courseCode': 'MEC201',
+              'courseName': 'Electronics',
+            },
+            '_count': {'attendances': 12},
+          },
+        ],
+        'meta': {
+          'page': 1,
+          'limit': 25,
+          'total': 1,
+          'totalPages': 1,
+          'hasNext': false,
+          'hasPrev': false,
+        },
+      };
+    }
     if (path.contains('/pending')) return {'data': [], 'total': 0};
     if (path == '/devices/me/sessions/active') {
       return {'room': 'B-204', 'count': 0, 'sessions': []};

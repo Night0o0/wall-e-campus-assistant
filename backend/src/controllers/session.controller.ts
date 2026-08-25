@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 import { SessionService } from "../services/session.service.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
+import { PaginationQuery, paginationSchema } from "../utils/pagination.js";
 
 const sessionService = new SessionService();
 
@@ -29,8 +30,18 @@ export const createSession = asyncHandler(
  */
 export const getMySessions = asyncHandler(
   async (req: Request, res: Response) => {
-    const sessions = await sessionService.listSessionsFor(req.user!);
-    res.status(200).json(sessions.map(sanitizeSession));
+    const page = await sessionService.listSessionsFor(
+      req.user!,
+      (req.validatedQuery ?? paginationSchema.parse({})) as PaginationQuery
+    );
+
+    // Envelope, not a bare array. Both clients already cope: the web api layer
+    // unwraps { data, meta }, and the Flutter client wraps a bare array into
+    // { data: ... } itself, so _items finds the same key either way.
+    res.status(200).json({
+      ...page,
+      data: page.data.map(sanitizeSession),
+    });
   }
 );
 
