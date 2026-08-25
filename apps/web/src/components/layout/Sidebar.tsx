@@ -1,32 +1,38 @@
+import { useEffect, useState } from 'react'
 import { NavLink } from 'react-router-dom'
-import {
-  LayoutDashboard,
-  Building2,
-  Users,
-  CreditCard,
-  FileText,
-  Settings,
-  Bot,
-  Layers,
-  TrendingUp,
-  LogOut,
-  X,
-} from 'lucide-react'
+import { Bot, LogOut, X } from 'lucide-react'
 import { cn } from '../../lib/utils'
-import { billingEnabled } from '../../lib/features'
 import { useAuth } from '../../context/AuthContext'
+import {
+  consoleNameFor,
+  mobileNavigationFor,
+  navigationFor,
+} from '../../lib/navigation'
 
-const navigation = [
-  { name: 'Dashboard', href: '/', icon: LayoutDashboard, end: true },
-  { name: 'Revenue', href: '/revenue', icon: TrendingUp, billing: true },
-  { name: 'Organizations', href: '/organizations', icon: Building2 },
-  { name: 'Users', href: '/users', icon: Users },
-  { name: 'Subscriptions', href: '/subscriptions', icon: CreditCard, billing: true },
-  { name: 'Plans', href: '/plans', icon: Layers, billing: true },
-  { name: 'Invoices', href: '/invoices', icon: FileText, billing: true },
-  { name: 'Robots', href: '/robots', icon: Bot },
-  { name: 'Settings', href: '/settings', icon: Settings },
-].filter((item) => billingEnabled || !item.billing)
+/**
+ * Tracks whether this is a small screen, so the sidebar can show the reduced
+ * per-role menu rather than all nine entries.
+ *
+ * A media query rather than a user-agent test: what matters is how much room
+ * the menu has, not what kind of hardware is underneath. A robot screen, a
+ * tablet in a lecture hall and a phone are the same problem.
+ */
+function useIsSmallScreen() {
+  const [isSmall, setIsSmall] = useState(
+    () => typeof window !== 'undefined' && window.innerWidth < 1024
+  )
+
+  useEffect(() => {
+    const query = window.matchMedia('(max-width: 1023px)')
+    const update = () => setIsSmall(query.matches)
+
+    update()
+    query.addEventListener('change', update)
+    return () => query.removeEventListener('change', update)
+  }, [])
+
+  return isSmall
+}
 
 const initials = (name: string) =>
   name
@@ -45,6 +51,13 @@ export function Sidebar({
   onClose: () => void
 }) {
   const { user, logout } = useAuth()
+  const isSmallScreen = useIsSmallScreen()
+
+  // The reduced menu is an editorial choice per role, not a breakpoint: every
+  // page below works at every width. See lib/navigation.ts.
+  const navigation = isSmallScreen
+    ? mobileNavigationFor(user)
+    : navigationFor(user)
 
   return (
     <>
@@ -69,7 +82,7 @@ export function Sidebar({
           </div>
           <div className="flex-1">
             <h1 className="text-lg font-bold text-slate-900">WALL-E</h1>
-            <p className="text-xs text-slate-500">Platform Console</p>
+            <p className="text-xs text-slate-500">{consoleNameFor(user)}</p>
           </div>
           <button
             onClick={onClose}

@@ -3,6 +3,7 @@ import { Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { Bot, Eye, EyeOff, AlertCircle } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { getErrorMessage } from '../lib/api'
+import { homeRouteFor } from '../lib/navigation'
 import { Button } from '../components/ui/Button'
 import { Input } from '../components/ui/Field'
 
@@ -29,18 +30,9 @@ export function Login() {
 
     try {
       const profile = await login(email.trim(), password)
+      const from = (location.state as { from?: string } | null)?.from
 
-      if (profile.role !== 'SYSTEM_OWNER') {
-        // Signed in successfully, but this console isn't for them.
-        setError(
-          'This dashboard is for platform owners. Your account does not have access.'
-        )
-        return
-      }
-
-      navigate((location.state as { from?: string } | null)?.from ?? '/', {
-        replace: true,
-      })
+      navigate(from ?? homeRouteFor(profile.role), { replace: true })
     } catch (err) {
       setError(getErrorMessage(err, 'Unable to sign in'))
     } finally {
@@ -58,19 +50,21 @@ export function Login() {
           </div>
           <div>
             <p className="text-lg font-bold text-white">WALL-E</p>
-            <p className="text-xs text-white/70">Platform Console</p>
+            <p className="text-xs text-white/70">Campus Assistant</p>
           </div>
         </div>
 
+        {/* One login for three roles now, so the copy no longer describes only
+            the platform owner's console. Students sign in on the mobile app. */}
         <div className="max-w-md">
           <h1 className="text-4xl font-bold leading-tight text-white">
             Campus attendance,
             <br />
-            run as a platform.
+            without the paperwork.
           </h1>
           <p className="mt-4 text-white/80">
-            Manage every university on WALL-E — subscriptions, billing, users and
-            revenue — from a single console.
+            Timetables, attendance sessions and course material for teaching
+            staff and university administrators. Students use the mobile app.
           </p>
         </div>
 
@@ -88,13 +82,13 @@ export function Login() {
             </div>
             <div>
               <p className="font-bold text-slate-900">WALL-E</p>
-              <p className="text-xs text-slate-500">Platform Console</p>
+              <p className="text-xs text-slate-500">Campus Assistant</p>
             </div>
           </div>
 
           <h2 className="text-2xl font-bold text-slate-900">Welcome back</h2>
           <p className="mt-1 text-sm text-slate-500">
-            Sign in to your platform owner account.
+            Sign in to your WALL-E account.
           </p>
 
           <form onSubmit={handleSubmit} className="mt-8 space-y-4">
