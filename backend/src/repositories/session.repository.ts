@@ -111,6 +111,7 @@ export class SessionRepository {
                         email: true,
                     },
                 },
+                course: courseSummary,
                 lectureSchedule: scheduleSummary,
             },
         });
@@ -173,6 +174,7 @@ export class SessionRepository {
                 createdBy: {
                     select: { id: true, fullName: true },
                 },
+                course: courseSummary,
                 lectureSchedule: scheduleSummary,
                 _count: attendedCount,
             },
@@ -244,6 +246,7 @@ export class SessionRepository {
             where: { createdById, organizationId },
             orderBy: { createdAt: 'desc' },
             include: {
+                course: courseSummary,
                 lectureSchedule: scheduleSummary,
                 _count: attendedCount,
             },

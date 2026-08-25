@@ -87,7 +87,20 @@ export interface CampusSession {
   endTime?: string | null
   room?: string | null
   courseId?: string | null
-  course?: CourseSummary | null
+  /**
+   * The course this session belongs to, or null for a genuinely ad-hoc one.
+   *
+   * REQUIRED, not optional, and the distinction matters. While this was
+   * optional the server simply never sent it on three of its four session
+   * projections, TypeScript had nothing to complain about, and every session
+   * on /sessions and /sessions/:id was labelled "Ad-hoc session - no course"
+   * including ones opened straight from a lecture (D-1, D-3).
+   *
+   * Making it required-but-nullable means a projection that forgets it is a
+   * compile error, and null now means "ad-hoc" rather than "nobody asked for
+   * it".
+   */
+  course: CourseSummary | null
   createdBy?: { id: string; fullName: string } | null
   lectureSchedule?: {
     id: string
