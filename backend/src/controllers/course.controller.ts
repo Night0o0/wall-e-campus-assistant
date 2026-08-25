@@ -16,7 +16,7 @@ export const createCourse = asyncHandler(async (req: Request, res: Response) => 
 
 export const getMyCourses = asyncHandler(async (req: Request, res: Response) => {
   const courses = await courseService.getMyCourses(
-    req.user!.id,
+    { id: req.user!.id, role: req.user!.role },
     req.user!.organizationId
   );
   res.status(200).json(courses);
@@ -25,6 +25,7 @@ export const getMyCourses = asyncHandler(async (req: Request, res: Response) => 
 export const getOrgCourses = asyncHandler(
   async (req: Request, res: Response) => {
     const courses = await courseService.getOrgCourses(
+      { id: req.user!.id, role: req.user!.role },
       req.user!.organizationId,
       (req.validatedQuery ?? {}) as CourseQuery
     );

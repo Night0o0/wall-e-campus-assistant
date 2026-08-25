@@ -37,7 +37,17 @@ export function Courses() {
   const toast = useToast()
   const queryClient = useQueryClient()
 
-  const canManage = user?.role === 'UNIVERSITY_SUPER_ADMIN'
+  const isSuperAdmin = user?.role === 'UNIVERSITY_SUPER_ADMIN'
+
+  /**
+   * An ADMIN gets the courses they are assigned to or created; a super admin
+   * gets the whole university.
+   *
+   * This page used to call the university-wide endpoint for BOTH roles while
+   * its own subtitle told an instructor these were the subjects they are
+   * assigned to (D-4). coursesApi.mine() existed and was called from nowhere.
+   */
+  const canManage = isSuperAdmin
 
   const [search, setSearch] = useState('')
   const [department, setDepartment] = useState('')
@@ -51,8 +61,8 @@ export function Courses() {
   const params = { search: debouncedSearch, department, level }
 
   const { data, isLoading, error, refetch } = useQuery({
-    queryKey: ['campus', 'courses', params],
-    queryFn: () => coursesApi.list(params),
+    queryKey: ['campus', 'courses', isSuperAdmin ? 'org' : 'mine', params],
+    queryFn: () => (isSuperAdmin ? coursesApi.list(params) : coursesApi.mine()),
   })
 
   const invalidate = () =>
@@ -130,13 +140,21 @@ export function Courses() {
       align: 'right',
       render: (course) => (
         <div className="flex justify-end gap-1">
-          <Button
-            size="sm"
-            variant="ghost"
-            icon={Download}
-            title="Export the student roster"
-            onClick={() => void download(course)}
-          />
+          {/*
+            Gated on what the SERVER said, not on the role. The export rule is
+            "created it OR instructs an active lecture of it", which this page
+            cannot evaluate; rendering the button unconditionally produced a
+            403 toast on every course the caller did not teach (D-5).
+          */}
+          {course.canExport && (
+            <Button
+              size="sm"
+              variant="ghost"
+              icon={Download}
+              title="Export the student roster"
+              onClick={() => void download(course)}
+            />
+          )}
           {canManage && (
             <>
               <Button

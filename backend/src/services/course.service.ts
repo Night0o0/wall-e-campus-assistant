@@ -1,7 +1,11 @@
 import { CourseRepository } from "../repositories/course.repository.js";
 import { CourseQuery, CreateCourseInput, UpdateCourseInput } from "../types/course.types.js";
 import { conflict, forbidden, notFound } from "../utils/AppError.js";
-import { CourseActor, canManageCourse } from "../utils/course-access.js";
+import {
+    CourseActor,
+    canExportCourse,
+    canManageCourse,
+} from "../utils/course-access.js";
 
 const courseRepo = new CourseRepository();
 
@@ -38,12 +42,41 @@ export class CourseService {
         return course;
     }
 
-    async getMyCourses(adminId: string, organizationId: string) {
-        return courseRepo.findByCreator(adminId, organizationId);
+    /**
+     * The courses this member of staff is responsible for.
+     *
+     * "Assigned to OR created" - see CourseRepository.findAssignedTo. This is
+     * what /courses/my now means, and what the web My Courses page now calls
+     * instead of the university-wide list (D-4).
+     */
+    async getMyCourses(actor: CourseActor, organizationId: string) {
+        const courses = await courseRepo.findAssignedTo(actor.id, organizationId);
+        return courses.map((course) => this.withPermissions(course, actor));
     }
 
-    async getOrgCourses(organizationId: string, query: CourseQuery = {}) {
-        return courseRepo.findByOrganization(organizationId, query);
+    async getOrgCourses(actor: CourseActor, organizationId: string, query: CourseQuery = {}) {
+        const courses = await courseRepo.findByOrganization(organizationId, query);
+        return courses.map((course) => this.withPermissions(course, actor));
+    }
+
+    /**
+     * Tell the client what it may do with this row.
+     *
+     * Without this the Courses page rendered a roster-download button on every
+     * row and produced a 403 toast on the ones the caller was not assigned to
+     * (D-5). Deciding it here means one source of truth - the same policy the
+     * export endpoint itself enforces - rather than the client reimplementing
+     * the rule and drifting from it.
+     */
+    private withPermissions<T extends { createdById: string; lectureSchedules?: { instructorId: string }[] }>(
+        course: T,
+        actor: CourseActor
+    ) {
+        return {
+            ...course,
+            canExport: canExportCourse(course, actor),
+            canManage: canManageCourse(course, actor),
+        };
     }
 
     /**

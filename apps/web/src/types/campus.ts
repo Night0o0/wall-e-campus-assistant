@@ -40,6 +40,20 @@ export interface Course extends CourseSummary {
   createdById?: string
   createdBy?: { id: string; fullName: string } | null
   _count?: { sessions?: number }
+
+  /**
+   * What the SERVER says this caller may do with this row.
+   *
+   * Sent by /courses and /courses/my. The client must not re-derive these:
+   * the export rule is "created it OR instructs an active lecture of it", and
+   * a client that guessed rendered a download button on every row and produced
+   * a 403 toast on most of them (D-5).
+   *
+   * Optional only so a cached older response does not fail to parse. Treat an
+   * absent value as "not permitted".
+   */
+  canExport?: boolean
+  canManage?: boolean
 }
 
 /**

@@ -1,6 +1,21 @@
 import prisma from "../lib/prisma.js";
 import { CourseQuery, CreateCourseInput, UpdateCourseInput } from "../types/course.types.js";
 
+/**
+ * The active teaching assignments of a course, projected small.
+ *
+ * LectureSchedule IS the teaching assignment - there is no CourseInstructor
+ * model - and only ACTIVE rows count, so a course dropped from this year's
+ * timetable stops being "yours" the way it stops being taught.
+ *
+ * Needed on every listing because the client is told per row whether it may
+ * export and manage, rather than guessing and getting a 403 (D-5).
+ */
+const activeAssignments = {
+    where: { isActive: true },
+    select: { instructorId: true },
+} as const;
+
 export class CourseRepository {
 
     async create(data: CreateCourseInput & { createdById: string; organizationId: string }) {
@@ -89,9 +104,45 @@ export class CourseRepository {
                 createdBy: {
                     select: { id: true, fullName: true },
                 },
+                lectureSchedules: activeAssignments,
                 _count: {
                     select: { sessions: true },
                 },
+            },
+        });
+    }
+
+    /**
+     * The courses one member of staff is responsible for.
+     *
+     * "Assigned to OR created" - the rule PAGES_AND_GAPS.txt states for My
+     * Courses, and the rule the export endpoint already enforced. Until now
+     * getMyCourses used findByCreator (created-by only), and the web page did
+     * not call it at all: it called the university-wide list, so an instructor
+     * saw the entire catalogue under a heading reading "My Courses" (D-4).
+     *
+     * lectureSchedules is projected so the service can tell the client, per
+     * row, whether it may export and manage - rather than the client rendering
+     * a button that predictably 403s (D-5).
+     */
+    async findAssignedTo(userId: string, organizationId: string) {
+        return prisma.course.findMany({
+            where: {
+                organizationId,
+                OR: [
+                    { createdById: userId },
+                    {
+                        lectureSchedules: {
+                            some: { instructorId: userId, isActive: true },
+                        },
+                    },
+                ],
+            },
+            orderBy: { createdAt: 'desc' },
+            include: {
+                createdBy: { select: { id: true, fullName: true } },
+                lectureSchedules: activeAssignments,
+                _count: { select: { sessions: true } },
             },
         });
     }
