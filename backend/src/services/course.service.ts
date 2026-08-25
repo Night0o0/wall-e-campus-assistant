@@ -1,6 +1,7 @@
 import { CourseRepository } from "../repositories/course.repository.js";
 import { CourseQuery, CreateCourseInput, UpdateCourseInput } from "../types/course.types.js";
 import { conflict, forbidden, notFound } from "../utils/AppError.js";
+import { CourseActor, canManageCourse } from "../utils/course-access.js";
 
 const courseRepo = new CourseRepository();
 
@@ -45,24 +46,31 @@ export class CourseService {
         return courseRepo.findByOrganization(organizationId, query);
     }
 
-    async updateCourse(courseId: string, data: UpdateCourseInput, adminId: string, organizationId: string) {
+    /**
+     * Edit a course.
+     *
+     * The tenant check comes first and reports a foreign course as MISSING, so
+     * the endpoint cannot be used to discover that an id exists in another
+     * university. Only then does the role policy decide.
+     */
+    async updateCourse(courseId: string, data: UpdateCourseInput, actor: CourseActor, organizationId: string) {
         const course = await courseRepo.findById(courseId);
         if (!course || course.organizationId !== organizationId) {
             throw notFound("Course not found");
         }
-        if (course.createdById !== adminId) {
+        if (!canManageCourse(course, actor)) {
             throw forbidden("Unauthorized to modify this course");
         }
 
         return courseRepo.update(courseId, data);
     }
 
-    async deleteCourse(courseId: string, adminId: string, organizationId: string) {
+    async deleteCourse(courseId: string, actor: CourseActor, organizationId: string) {
         const course = await courseRepo.findWithSessions(courseId);
         if (!course || course.organizationId !== organizationId) {
             throw notFound("Course not found");
         }
-        if (course.createdById !== adminId) {
+        if (!canManageCourse(course, actor)) {
             throw forbidden("Unauthorized to delete this course");
         }
         // Check if course has active sessions

@@ -55,7 +55,7 @@ export const updateCourse = asyncHandler(async (req: Request, res: Response) => 
   const course = await courseService.updateCourse(
     req.params.id as string,
     req.body,
-    req.user!.id,
+    { id: req.user!.id, role: req.user!.role },
     req.user!.organizationId
   );
   res.status(200).json(course);
@@ -64,7 +64,7 @@ export const updateCourse = asyncHandler(async (req: Request, res: Response) => 
 export const deleteCourse = asyncHandler(async (req: Request, res: Response) => {
   await courseService.deleteCourse(
     req.params.id as string,
-    req.user!.id,
+    { id: req.user!.id, role: req.user!.role },
     req.user!.organizationId
   );
   res.status(200).json({ message: "Course deleted successfully" });

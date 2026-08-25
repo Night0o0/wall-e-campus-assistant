@@ -5,6 +5,7 @@ import { SessionRepository } from "../repositories/session.repository.js";
 import { StudentRepository } from "../repositories/student.repository.js";
 import { parseSemesterNumber } from "../types/schedule.types.js";
 import { forbidden, notFound } from "../utils/AppError.js";
+import { canExportCourse } from "../utils/course-access.js";
 import {
   CellValue,
   SheetColumn,
@@ -129,37 +130,13 @@ export class StudentExportService {
       throw notFound("Course not found");
     }
 
-    if (actor.role === "ADMIN" && !this.isAssignedTo(course, actor.id)) {
+    if (!canExportCourse(course, actor)) {
       // Inside their own university, so the course does exist for them — the
       // honest answer is that they are not on it.
       throw forbidden("You are not assigned to this course");
     }
 
     return course;
-  }
-
-  /**
-   * Whether an ADMIN is assigned to a course.
-   *
-   * Two relationships count, both already in the schema:
-   *  - they instruct an active lecture of it (LectureSchedule is the teaching
-   *    assignment — there is no CourseInstructor model), or
-   *  - they created the course, which is the ownership CourseService already
-   *    uses to decide who may edit or delete it.
-   *
-   * A UNIVERSITY_SUPER_ADMIN never reaches this check: the whole of their own
-   * university's timetable is theirs to administer.
-   */
-  private isAssignedTo(
-    course: { createdById: string; lectureSchedules: { instructorId: string }[] },
-    adminId: string
-  ) {
-    return (
-      course.createdById === adminId ||
-      course.lectureSchedules.some(
-        (schedule) => schedule.instructorId === adminId
-      )
-    );
   }
 
   /**
