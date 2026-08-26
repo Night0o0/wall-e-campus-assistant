@@ -13,8 +13,8 @@ import { formatDate } from '../lib/utils'
 
 const ROLE_LABELS: Record<string, string> = {
   SYSTEM_OWNER: 'System Owner',
-  UNIVERSITY_SUPER_ADMIN: 'University Administrator',
-  ADMIN: 'Teaching Staff',
+  UNIVERSITY_ADMIN: 'University Administrator',
+  INSTRUCTOR: 'Teaching Staff',
   STUDENT: 'Student',
 }
 
@@ -77,7 +77,7 @@ export function Account() {
   }
 
   const isStaff =
-    user?.role === 'ADMIN' || user?.role === 'UNIVERSITY_SUPER_ADMIN'
+    user?.role === 'INSTRUCTOR' || user?.role === 'UNIVERSITY_ADMIN'
 
   return (
     <Page title="Account" subtitle="Your name, sign-in email and password.">

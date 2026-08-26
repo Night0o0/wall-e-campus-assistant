@@ -1,10 +1,18 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'core/app_theme.dart';
 import 'data/campus_api.dart';
 import 'presentation/login_page.dart';
 
-void main() {
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  if (CampusApi.supabaseConfigured) {
+    await Supabase.initialize(
+      url: CampusApi.supabaseUrl,
+      anonKey: CampusApi.supabasePublishableKey,
+    );
+  }
   runApp(const WallEApp());
 }
 

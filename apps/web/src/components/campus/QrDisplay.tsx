@@ -101,10 +101,9 @@ export function QrCountdown({ seconds }: { seconds: number }) {
 /**
  * Fetches a token, then keeps fetching one every `intervalMs`.
  *
- * The fetcher is passed in rather than chosen here because the two callers use
- * different principals: staff read /api/sessions/:id/qr with a user token, and
- * a robot reads /api/devices/me/sessions/:id/qr with a device token. The
- * display is identical; the authority behind it is not.
+ * The fetcher is passed in rather than chosen here so the same display can be
+ * reused by any staff-owned session view without coupling this component to a
+ * specific API route.
  */
 export function useRotatingQr(
   fetchToken: () => Promise<{ token: string }>,

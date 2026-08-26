@@ -2,10 +2,9 @@
 
 Flutter client for four campus account types:
 
-- `UNIVERSITY_SUPER_ADMIN`
-- `ADMIN`
+- `UNIVERSITY_ADMIN`
+- `INSTRUCTOR`
 - `STUDENT`
-- Robot devices (authenticated as a separate device principal)
 
 `SYSTEM_OWNER` is intentionally web-only. The backend enforces that policy on
 `POST /api/auth/mobile-login`; it is not just a Flutter navigation rule.
@@ -45,24 +44,17 @@ Run the non-destructive credential setup against a development database:
 
 ```powershell
 cd backend
-npm run db:seed:mobile
+npm run db:seed
 ```
 
-It refreshes the four known NCTU credentials and non-destructively prepares a
-mobile showcase: timetable and attendance history, course materials, inbox
-notices, pending students, staff data, and a fresh B-204 robot QR session. Run
-it again whenever the live robot session has expired; it does not wipe data.
+It prepares a development showcase with timetable and attendance history,
+course materials, inbox notices, pending students, and staff data.
 
 | App account | Email | Password |
 |---|---|---|
-| Super admin | `ahmed.hassan@nctu.edu.eg` | `Demo@12345` |
-| Admin | `adel.mansour@nctu.edu.eg` | `Demo@12345` |
+| University admin | `ahmed.hassan@nctu.edu.eg` | `Demo@12345` |
+| Instructor | `adel.mansour@nctu.edu.eg` | `Demo@12345` |
 | Student | `mechatronics.a@student.nctu.edu.eg` | `Demo@12345` |
-| Robot | `robot@nctu.edu.eg` | `Robot@12345-Demo-Only` |
-
-The robot's email is an email-shaped device key. Its token is signed with the
-device key and can access only the robot endpoints; it never becomes a human
-user account.
 
 ## Connected flows
 
@@ -72,7 +64,6 @@ user account.
 - Notifications and account/profile data
 - Student timetable, materials and attendance summary
 - Camera QR scanning to record attendance
-- Robot active-session discovery and rotating QR display
 - Student password-reset request
 
 Run checks with:

@@ -22,6 +22,7 @@ export const safeUserSelect = {
     fullName: true,
     email: true,
     role: true,
+    accountStatus: true,
     isVerified: true,
     // Who let this student in, and when. Written by the approval queue; null on
     // staff, on students still waiting, and on anyone approved before the audit
@@ -30,6 +31,7 @@ export const safeUserSelect = {
     verifiedById: true,
     isActive: true,
     organizationId: true,
+    departmentId: true,
     createdAt: true,
     updatedAt: true,
 } satisfies Prisma.UserSelect;
@@ -40,6 +42,10 @@ export class UserRepository {
         return prisma.user.findUnique({
             where: { email }
         });
+    }
+
+    async findByAuthUserId(authUserId: string) {
+        return prisma.user.findUnique({ where: { authUserId } });
     }
 
     async findById(id: string) {
@@ -135,9 +141,12 @@ export class UserRepository {
         universityId: string;
         fullName: string;
         email: string;
-        passwordHash: string;
+        passwordHash?: string;
+        authUserId?: string;
         role: UserRole;
         organizationId: string;
+        departmentId?: string;
+        accountStatus?: "PENDING" | "ACTIVE" | "REJECTED" | "DISABLED";
         isVerified?: boolean;
         jobTitle?: string;
         office?: string;
@@ -153,7 +162,9 @@ export class UserRepository {
                 // Both university staff roles carry the profile that holds their
                 // title. Creating one without it leaves the directory and
                 // timetable with an account that cannot describe its job.
-                ...(data.role === "ADMIN" || data.role === "UNIVERSITY_SUPER_ADMIN"
+                ...(data.role === "INSTRUCTOR" ||
+                data.role === "DEPARTMENT_ADMIN" ||
+                data.role === "UNIVERSITY_ADMIN"
                     ? { adminProfile: { create: { jobTitle: jobTitle!, office } } }
                     : {}),
             },
@@ -292,7 +303,8 @@ export class UserRepository {
      */
     async findPendingStudentsInOrganization(
         organizationId: string,
-        query: PendingStudentQuery
+        query: PendingStudentQuery,
+        cohortIds: string[] | null = null
     ) {
         const where: Prisma.UserWhereInput = {
             ...(query.search
@@ -304,14 +316,22 @@ export class UserRepository {
                       ],
                   }
                 : {}),
-            ...(query.profileStatus
-                ? { studentProfile: { is: { status: query.profileStatus } } }
+            ...(query.profileStatus || cohortIds
+                ? {
+                      studentProfile: {
+                          is: {
+                              ...(query.profileStatus ? { status: query.profileStatus } : {}),
+                              ...(cohortIds ? { cohortId: { in: cohortIds } } : {}),
+                          },
+                      },
+                  }
                 : {}),
 
             // Fixed by the endpoint, not by the caller.
             role: "STUDENT",
             isVerified: false,
             isActive: true,
+            accountStatus: "PENDING",
             organizationId,
         };
 
@@ -341,6 +361,7 @@ export class UserRepository {
                             groupName: true,
                             academicYear: true,
                             phoneNumber: true,
+                            cohortId: true,
                         },
                     },
                 },
@@ -374,25 +395,36 @@ export class UserRepository {
                         level: true,
                         semester: true,
                         section: true,
+                        cohortId: true,
                     },
                 },
             },
         });
     }
 
+    async findAuthUserIdInOrganization(id: string, organizationId: string) {
+        return prisma.user.findFirst({
+            where: { id, organizationId },
+            select: { authUserId: true },
+        });
+    }
+
     /**
      * Creates a staff or student account inside one university, together with
      * the profile row its role requires, in a single transaction — Prisma's
-     * nested create is one statement, so an ADMIN can never exist without the
+     * nested create is one statement, so an INSTRUCTOR can never exist without the
      * AdminProfile that carries their job title.
      */
     async createInOrganization(data: {
         universityId: string;
         fullName: string;
         email: string;
-        passwordHash: string;
-        role: "ADMIN" | "STUDENT";
+        passwordHash?: string;
+        authUserId?: string;
+        role: "DEPARTMENT_ADMIN" | "INSTRUCTOR" | "STUDENT";
         organizationId: string;
+        departmentId?: string;
+        accountStatus?: "PENDING" | "ACTIVE" | "REJECTED" | "DISABLED";
         isVerified: boolean;
         jobTitle?: string;
         office?: string;
@@ -402,7 +434,7 @@ export class UserRepository {
         return prisma.user.create({
             data: {
                 ...user,
-                ...(user.role === "ADMIN"
+                ...(user.role === "INSTRUCTOR" || user.role === "DEPARTMENT_ADMIN"
                     ? { adminProfile: { create: { jobTitle: jobTitle!, office } } }
                     : { studentProfile: { create: {} } }),
             },

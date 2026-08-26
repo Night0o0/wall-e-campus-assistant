@@ -74,7 +74,7 @@ export class MaterialRepository {
         ...(query.section
           ? { section: { equals: query.section, mode: "insensitive" } }
           : {}),
-        // Only the publisher's own links when the service says so. An ADMIN
+        // Only the publisher's own links when the service says so. An INSTRUCTOR
         // may not widen this - MaterialService overrides it from the token.
         ...(query.addedById ? { addedById: query.addedById } : {}),
 

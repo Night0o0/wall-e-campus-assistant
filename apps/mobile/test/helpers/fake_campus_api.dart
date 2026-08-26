@@ -11,8 +11,11 @@ import 'package:wall_e_mobile/models/account_role.dart';
 
 class FakeCampusApi implements CampusGateway {
   @override
+  Future<void> logout() async {}
+
+  @override
   Future<AuthSession> login(String identifier, String password) async {
-    if (identifier == 'owner@wall-e.io') {
+    if (identifier == 'owner@leornian.local') {
       throw const ApiException(
         'System owner accounts are available on the web console only',
         statusCode: 403,
@@ -21,26 +24,36 @@ class FakeCampusApi implements CampusGateway {
     }
 
     final role = identifier.contains('super')
-        ? AccountRole.superAdmin
-        : identifier.contains('admin')
-            ? AccountRole.admin
-            : identifier.contains('robot')
-                ? AccountRole.robot
+        ? AccountRole.universityAdmin
+        : identifier.contains('department')
+            ? AccountRole.departmentAdmin
+            : identifier.contains('admin')
+                ? AccountRole.instructor
                 : AccountRole.student;
     return AuthSession(
       token: 'test-token',
       role: role,
       id: 'test-id',
       name: switch (role) {
-        AccountRole.superAdmin => 'Salma Hassan',
-        AccountRole.admin => 'Omar Adel',
+        AccountRole.universityAdmin => 'Salma Hassan',
+        AccountRole.departmentAdmin => 'Mona Adel',
+        AccountRole.instructor => 'Omar Adel',
         AccountRole.student => 'Ali Mahmoud',
-        AccountRole.robot => 'WALL-E Hall A',
       },
       identifier: identifier,
       organizationId: 'org-1',
-      isDevice: role == AccountRole.robot,
     );
+  }
+
+  @override
+  Future<RegistrationResult> registerStudent({
+    required String organizationCode,
+    required String universityId,
+    required String fullName,
+    required String email,
+    required String password,
+  }) async {
+    return const RegistrationResult(emailConfirmationRequired: false);
   }
 
   @override
@@ -124,7 +137,7 @@ class FakeCampusApi implements CampusGateway {
             'id': 'admin-1',
             'fullName': 'Adel Mansour',
             'email': 'admin@campus.edu',
-            'role': 'ADMIN',
+            'role': 'INSTRUCTOR',
           }
         ]
       };
@@ -256,9 +269,6 @@ class FakeCampusApi implements CampusGateway {
       };
     }
     if (path.contains('/pending')) return {'data': [], 'total': 0};
-    if (path == '/devices/me/sessions/active') {
-      return {'room': 'B-204', 'count': 0, 'sessions': []};
-    }
     return {'data': []};
   }
 

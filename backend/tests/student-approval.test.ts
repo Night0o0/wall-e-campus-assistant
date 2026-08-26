@@ -17,10 +17,10 @@ import { pendingStudentQuerySchema } from "../src/types/admin.types.js";
 const ORG_A = "org-a";
 const ORG_B = "org-b";
 
-const INSTRUCTOR = { id: "a-staff", role: "ADMIN", organizationId: ORG_A };
+const INSTRUCTOR = { id: "a-staff", role: "INSTRUCTOR", organizationId: ORG_A };
 const SUPER_ADMIN = {
   id: "a-super",
-  role: "UNIVERSITY_SUPER_ADMIN",
+  role: "UNIVERSITY_ADMIN",
   organizationId: ORG_A,
 };
 
@@ -40,7 +40,11 @@ const runGuard = (user: Record<string, unknown> | undefined) => {
 
 describe("the approval gate", () => {
   it("stops an unapproved student", () => {
-    const next = runGuard({ role: "STUDENT", isVerified: false });
+    const next = runGuard({
+      role: "STUDENT",
+      isVerified: false,
+      accountStatus: "PENDING",
+    });
 
     expect(next).toHaveBeenCalledTimes(1);
     expect(next.mock.calls[0][0]).toMatchObject({
@@ -51,7 +55,11 @@ describe("the approval gate", () => {
   });
 
   it("lets an approved student through", () => {
-    const next = runGuard({ role: "STUDENT", isVerified: true });
+    const next = runGuard({
+      role: "STUDENT",
+      isVerified: true,
+      accountStatus: "ACTIVE",
+    });
 
     expect(next).toHaveBeenCalledWith();
   });
@@ -59,7 +67,7 @@ describe("the approval gate", () => {
   it("does not gate staff, who are never pending", () => {
     // Staff accounts are created by an administrator who has already decided.
     // isVerified is false on this fixture precisely to prove it is not read.
-    for (const role of ["ADMIN", "UNIVERSITY_SUPER_ADMIN", "SYSTEM_OWNER"]) {
+    for (const role of ["INSTRUCTOR", "UNIVERSITY_ADMIN", "SYSTEM_OWNER"]) {
       expect(runGuard({ role, isVerified: false })).toHaveBeenCalledWith();
     }
   });
@@ -206,7 +214,7 @@ describe("the approval queue", () => {
 
     const result = await service.listPendingStudents(
       pendingStudentQuerySchema.parse({}),
-      INSTRUCTOR
+      SUPER_ADMIN
     );
 
     expect(listedFor).toEqual([ORG_A]);
@@ -218,7 +226,7 @@ describe("the approval queue", () => {
 
     const result = await service.listPendingStudents(
       pendingStudentQuerySchema.parse({}),
-      INSTRUCTOR
+      SUPER_ADMIN
     );
 
     // Enough to decide: department, level and section. The point of letting a
@@ -232,7 +240,7 @@ describe("the approval queue", () => {
 
   it("does not let the caller ask for a different role or verification state", () => {
     const query = pendingStudentQuerySchema.parse({
-      role: "ADMIN",
+      role: "INSTRUCTOR",
       isVerified: "true",
     } as Record<string, string>);
 
@@ -245,7 +253,7 @@ describe("approving a student", () => {
   it("records who approved, in the same write as the flag", async () => {
     const { service, updates } = buildService([PENDING]);
 
-    const result = await service.approveStudent("pending-student", INSTRUCTOR);
+    const result = await service.approveStudent("pending-student", SUPER_ADMIN);
 
     expect(updates).toHaveLength(1);
     expect(updates[0].id).toBe("pending-student");
@@ -254,7 +262,8 @@ describe("approving a student", () => {
     // prevent, so the three move together or not at all.
     expect(updates[0].data).toMatchObject({
       isVerified: true,
-      verifiedBy: { connect: { id: INSTRUCTOR.id } },
+      accountStatus: "ACTIVE",
+      verifiedBy: { connect: { id: SUPER_ADMIN.id } },
     });
     expect(updates[0].data.verifiedAt).toBeInstanceOf(Date);
 
@@ -265,8 +274,8 @@ describe("approving a student", () => {
   it("is idempotent, so two people working the queue do not collide", async () => {
     const { service, updates } = buildService([PENDING]);
 
-    await service.approveStudent("pending-student", INSTRUCTOR);
-    const second = await service.approveStudent("pending-student", INSTRUCTOR);
+    await service.approveStudent("pending-student", SUPER_ADMIN);
+    const second = await service.approveStudent("pending-student", SUPER_ADMIN);
 
     expect(second.alreadyApproved).toBe(true);
     // The second call wrote nothing.
@@ -279,7 +288,7 @@ describe("approving a student", () => {
     ]);
 
     await expect(
-      service.approveStudent("pending-student", INSTRUCTOR)
+      service.approveStudent("pending-student", SUPER_ADMIN)
     ).rejects.toMatchObject({ statusCode: 404 });
 
     expect(updates).toEqual([]);
@@ -287,7 +296,7 @@ describe("approving a student", () => {
 
   it("404s rather than approving a member of staff", async () => {
     const { service } = buildService([
-      { ...PENDING, role: "ADMIN" },
+      { ...PENDING, role: "INSTRUCTOR" },
     ]);
 
     await expect(
@@ -298,7 +307,7 @@ describe("approving a student", () => {
   it("tells the student, in the same write as the approval", async () => {
     const { service, notices } = buildService([PENDING]);
 
-    await service.approveStudent("pending-student", INSTRUCTOR);
+    await service.approveStudent("pending-student", SUPER_ADMIN);
 
     expect(notices).toHaveLength(1);
     expect(notices[0].id).toBe("pending-student");
@@ -317,7 +326,7 @@ describe("approving a student", () => {
   it("does not notify twice when two people approve the same student", async () => {
     const { service, notices } = buildService([PENDING]);
 
-    await service.approveStudent("pending-student", INSTRUCTOR);
+    await service.approveStudent("pending-student", SUPER_ADMIN);
     await service.approveStudent("pending-student", SUPER_ADMIN);
 
     expect(notices).toHaveLength(1);
@@ -328,10 +337,13 @@ describe("rejecting a student", () => {
   it("deactivates rather than deletes, so the university ID stays claimed", async () => {
     const { service, updates } = buildService([PENDING]);
 
-    const result = await service.rejectStudent("pending-student", INSTRUCTOR);
+    const result = await service.rejectStudent("pending-student", SUPER_ADMIN);
 
     expect(updates).toEqual([
-      { id: "pending-student", data: { isActive: false } },
+      {
+        id: "pending-student",
+        data: { isActive: false, accountStatus: "REJECTED" },
+      },
     ]);
     expect(result.isActive).toBe(false);
   });
@@ -340,7 +352,7 @@ describe("rejecting a student", () => {
     const { service } = buildService([{ ...PENDING, isVerified: true }]);
 
     await expect(
-      service.rejectStudent("pending-student", INSTRUCTOR)
+      service.rejectStudent("pending-student", SUPER_ADMIN)
     ).rejects.toMatchObject({ statusCode: 400 });
   });
 
@@ -350,7 +362,7 @@ describe("rejecting a student", () => {
     ]);
 
     await expect(
-      service.rejectStudent("pending-student", INSTRUCTOR)
+      service.rejectStudent("pending-student", SUPER_ADMIN)
     ).rejects.toMatchObject({ statusCode: 404 });
 
     expect(updates).toEqual([]);
@@ -359,7 +371,7 @@ describe("rejecting a student", () => {
   it("tells the student they were turned away", async () => {
     const { service, notices } = buildService([PENDING]);
 
-    await service.rejectStudent("pending-student", INSTRUCTOR);
+    await service.rejectStudent("pending-student", SUPER_ADMIN);
 
     expect(notices).toHaveLength(1);
     expect(notices[0].notice).toMatchObject({
@@ -373,10 +385,10 @@ describe("rejecting a student", () => {
     // decision read as a personal one sends the student to the wrong door.
     const { service, notices } = buildService([PENDING]);
 
-    await service.rejectStudent("pending-student", INSTRUCTOR);
+    await service.rejectStudent("pending-student", SUPER_ADMIN);
 
     const notice = notices[0].notice as { title: string; body: string };
 
-    expect(`${notice.title} ${notice.body}`).not.toContain(INSTRUCTOR.id);
+    expect(`${notice.title} ${notice.body}`).not.toContain(SUPER_ADMIN.id);
   });
 });

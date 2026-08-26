@@ -1,8 +1,8 @@
 /**
  * The university-facing half of the API.
  *
- * `types/api.ts` describes the platform-owner console — organizations, plans,
- * invoices. Everything here belongs to a single university and is scoped by the
+ * `types/api.ts` describes the platform-owner console — organizations, users,
+ * and platform metrics. Everything here belongs to a single university and is scoped by the
  * caller's own token: no request in this file carries an organization id, and
  * none may ever be given one. See "THE TENANT RULE" in PAGES_AND_GAPS.txt.
  */
@@ -208,7 +208,7 @@ export interface PendingStudent {
   profile?: AcademicProfile | null
 }
 
-export type CampusRole = 'UNIVERSITY_SUPER_ADMIN' | 'ADMIN' | 'STUDENT'
+export type CampusRole = 'UNIVERSITY_ADMIN' | 'INSTRUCTOR' | 'STUDENT'
 
 export interface CampusUser {
   id: string
@@ -257,41 +257,6 @@ export interface OrganizationOverview {
   window?: { timeZone: string; weekStartedAt: string }
 }
 
-export type DeviceStatus = 'PENDING' | 'ACTIVE' | 'SUSPENDED' | 'REVOKED'
-
-export interface RobotDevice {
-  id: string
-  name: string
-  room?: string | null
-  deviceKeyId: string
-  status: DeviceStatus
-  /** Always `["qr:display"]` today. There is no session-opening capability. */
-  capabilities?: string[]
-  lastSeenAt?: string | null
-  lastIpAddress?: string | null
-  revokedAt?: string | null
-  revokedReason?: string | null
-  createdAt: string
-}
-
-/**
- * The one response that ever carries a secret. Shown once, never re-readable.
- *
- * The credential is NESTED under `credentials`, and the field is
- * `deviceSecret`. Reading a flat `secret` off the top level rendered two empty
- * boxes in the pairing dialog — which made provisioning a robot impossible from
- * the console, and typechecked perfectly.
- */
-export interface ProvisionedDevice {
-  device: RobotDevice
-  credentials: {
-    deviceKeyId: string
-    deviceSecret: string
-    /** The server's own "store this now" wording. Shown rather than restated. */
-    warning?: string
-  }
-}
-
 export interface CampusNotification {
   id: string
   type: string
@@ -301,25 +266,4 @@ export interface CampusNotification {
   sentAt?: string | null
   readAt?: string | null
   status: string
-}
-
-/** What a robot sees: only sessions it may display, already window-filtered. */
-export interface DeviceSession {
-  id: string
-  title: string
-  status: SessionStatus
-  startTime: string
-  courseId?: string | null
-  course?: CourseSummary | null
-  room?: string | null
-}
-
-export interface DeviceSelf {
-  id: string
-  name: string
-  room?: string | null
-  deviceKeyId: string
-  status: DeviceStatus
-  organizationId: string
-  capabilities?: string[]
 }

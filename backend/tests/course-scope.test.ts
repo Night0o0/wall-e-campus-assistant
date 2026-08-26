@@ -34,10 +34,10 @@ vi.mock("../src/repositories/course.repository.js", () => ({
 const { CourseService } = await import("../src/services/course.service.js");
 
 const ORG = "org-a";
-const CREATOR = { id: "instructor-1", role: "ADMIN" };
-const TEACHER = { id: "instructor-3", role: "ADMIN" };
-const STRANGER = { id: "instructor-9", role: "ADMIN" };
-const SUPER_ADMIN = { id: "super-1", role: "UNIVERSITY_SUPER_ADMIN" };
+const CREATOR = { id: "instructor-1", role: "INSTRUCTOR" };
+const TEACHER = { id: "instructor-3", role: "INSTRUCTOR" };
+const STRANGER = { id: "instructor-9", role: "INSTRUCTOR" };
+const SUPER_ADMIN = { id: "super-1", role: "UNIVERSITY_ADMIN" };
 
 /** Created by CREATOR, taught by TEACHER. */
 const COURSE = {

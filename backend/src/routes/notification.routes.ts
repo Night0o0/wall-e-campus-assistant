@@ -61,7 +61,7 @@ router.patch(
  * Simulation is still confined to the caller's own organization.
  */
 if (env.devToolsEnabled) {
-  const canSimulate = requireRole("UNIVERSITY_SUPER_ADMIN", "SYSTEM_OWNER");
+  const canSimulate = requireRole("UNIVERSITY_ADMIN", "SYSTEM_OWNER");
 
   router.post(
     "/dev/generate",

@@ -22,11 +22,11 @@ import {
 const ORG_A = "org-a";
 const ORG_B = "org-b";
 
-const INSTRUCTOR = { id: "instructor-1", role: "ADMIN", organizationId: ORG_A };
-const OTHER_INSTRUCTOR = { id: "instructor-2", role: "ADMIN", organizationId: ORG_A };
+const INSTRUCTOR = { id: "instructor-1", role: "INSTRUCTOR", organizationId: ORG_A };
+const OTHER_INSTRUCTOR = { id: "instructor-2", role: "INSTRUCTOR", organizationId: ORG_A };
 const SUPER_ADMIN = {
   id: "super-1",
-  role: "UNIVERSITY_SUPER_ADMIN",
+  role: "UNIVERSITY_ADMIN",
   organizationId: ORG_A,
 };
 const STUDENT = { id: "student-1", role: "STUDENT", organizationId: ORG_A };

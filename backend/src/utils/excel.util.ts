@@ -38,7 +38,7 @@ export const buildWorkbook = async (
   sheet: SheetDefinition
 ): Promise<Buffer> => {
   const workbook = new ExcelJS.Workbook();
-  workbook.creator = "WALL-E Campus Assistant";
+  workbook.creator = "Leornian Campus Assistant";
   workbook.created = new Date();
 
   const worksheet = workbook.addWorksheet(toSheetName(sheet.name));

@@ -151,7 +151,7 @@ void main() {
   tearDownAll(() {
     // ignore: avoid_print
     print('\n=== MOBILE RUNTIME VERIFICATION ===');
-    for (final role in ['STUDENT', 'ADMIN', 'SUPER_ADMIN', 'ROBOT']) {
+    for (final role in ['STUDENT', 'INSTRUCTOR', 'SUPER_ADMIN', 'ROBOT']) {
       final rows = reports.where((r) => r.role == role);
       if (rows.isEmpty) continue;
       // ignore: avoid_print
@@ -176,7 +176,7 @@ void main() {
 
     // Timetable is the landing tab, so record it without a tap.
     await _visit(tester, 'STUDENT', 'Timetable', alreadyOpen: true);
-    for (final tab in ['Attendance', 'Material', 'Inbox', 'Scan QR']) {
+    for (final tab in ['Attendance', 'Material', 'Work', 'Inbox', 'Scan QR']) {
       await _visit(tester, 'STUDENT', tab);
     }
     await _visit(
@@ -187,11 +187,11 @@ void main() {
     );
   });
 
-  testWidgets('ADMIN: every destination', (tester) async {
+  testWidgets('INSTRUCTOR: every destination', (tester) async {
     await _pumpApp(tester);
     await signIn(tester, 'admin@campus.edu');
 
-    await _visit(tester, 'ADMIN', 'Overview', alreadyOpen: true);
+    await _visit(tester, 'INSTRUCTOR', 'Overview', alreadyOpen: true);
     for (final label in [
       'My Teaching',
       'Sessions',
@@ -201,7 +201,7 @@ void main() {
       'Inbox',
       'Account',
     ]) {
-      await _visit(tester, 'ADMIN', label);
+      await _visit(tester, 'INSTRUCTOR', label);
     }
   });
 
@@ -217,7 +217,6 @@ void main() {
       'Students & Staff',
       'Pending Students',
       'Materials',
-      'Devices',
       'Exports',
       'Inbox',
       'Account',
@@ -226,13 +225,4 @@ void main() {
     }
   });
 
-  testWidgets('ROBOT: every destination', (tester) async {
-    await _pumpApp(tester);
-    await signIn(tester, 'robot@campus.edu');
-
-    await _visit(tester, 'ROBOT', 'QR Display', alreadyOpen: true);
-    for (final label in ['Campus Map']) {
-      await _visit(tester, 'ROBOT', label);
-    }
-  });
 }

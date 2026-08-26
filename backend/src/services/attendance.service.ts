@@ -107,9 +107,8 @@ export class AttendanceService {
          * this: a worker that is disabled, crashed, or between passes would
          * otherwise leave every expired lecture scannable.
          *
-         * Enforced here, on the write, against the same `sessionState` the
-         * robot's active-session list and the QR endpoint use. Exactly one
-         * state may record attendance.
+         * Enforced here, on the write, against the same `sessionState` the QR
+         * endpoint uses. Exactly one state may record attendance.
          */
         const state = sessionState(session, now, sessionWindowConfig);
 
@@ -423,7 +422,7 @@ export class AttendanceService {
 
     /**
      * The same visibility rule the session routes apply, from the same
-     * definition: the tenant is absolute, and an ADMIN is an instructor who
+     * definition: the tenant is absolute, and an INSTRUCTOR is an instructor who
      * reads their own sessions. Answering "not found" rather than "forbidden"
      * keeps a roster from confirming that somebody else's session id is real.
      */

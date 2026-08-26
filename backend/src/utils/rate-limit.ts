@@ -8,10 +8,9 @@ import { env } from "../config/env.js";
  *
  * Per-IP limiting is the wrong model for a campus product. Every student on the
  * university WiFi leaves through one NAT address, so a single shared bucket has
- * to cover a 200-seat lecture hall scanning attendance at the same minute, plus
- * every robot polling for a QR code. The bucket empties, the API starts
- * answering 429, and attendance stops for everybody — during the exact minute
- * it matters most.
+ * to cover a 200-seat lecture hall scanning attendance at the same minute. The
+ * bucket empties, the API starts answering 429, and attendance stops for
+ * everybody during the exact minute it matters most.
  *
  * So: if a request carries a token we can verify, it is counted against that
  * principal. Only traffic we cannot attribute falls back to the IP address.
@@ -51,34 +50,15 @@ export const principalKey = (req: Request): string | null => {
     return `user:${req.user.id}`;
   }
 
-  if (req.device) {
-    return `device:${req.device.id}`;
-  }
-
   const token = bearerToken(req);
 
   if (!token) {
     return null;
   }
 
-  // Two keys, tried in turn. A token can only verify against one of them —
-  // that separation is what keeps device and user traffic in separate buckets.
   try {
     const payload = jwt.verify(token, env.JWT_SECRET) as { id?: string };
     return payload.id ? `user:${payload.id}` : null;
-  } catch {
-    // Not a user token. Fall through.
-  }
-
-  try {
-    const payload = jwt.verify(token, env.deviceJwtSecret) as {
-      sub?: string;
-      typ?: string;
-    };
-
-    return payload.typ === "device" && payload.sub
-      ? `device:${payload.sub}`
-      : null;
   } catch {
     return null;
   }
@@ -149,20 +129,4 @@ export const otpLimiter = rateLimit({
   message: {
     message: "Too many attempts, please try again later",
   },
-});
-
-/**
- * Device credential exchange. Stays IP-keyed on purpose: the caller has not
- * proved who it is yet, which is exactly the case per-IP limiting is for.
- *
- * Its own bucket rather than a shared one with user logins, so a campus full of
- * students failing to sign in cannot lock the robots out of authenticating.
- */
-export const deviceAuthLimiter = rateLimit({
-  windowMs: WINDOW_MS,
-  limit: env.isProduction ? 20 : 1000,
-  skipSuccessfulRequests: true,
-  standardHeaders: "draft-7",
-  legacyHeaders: false,
-  message: { message: "Too many attempts, please try again later" },
 });

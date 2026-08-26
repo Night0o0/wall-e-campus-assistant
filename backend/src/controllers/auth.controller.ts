@@ -20,6 +20,27 @@ export const register = asyncHandler(async (req: Request, res: Response) => {
   });
 });
 
+export const completeSupabaseRegistration = asyncHandler(
+  async (req: Request, res: Response) => {
+    const user = await authService.completeSupabaseRegistration(
+      req.identity!,
+      req.body
+    );
+
+    res.status(201).json({
+      message: "Registration submitted for university approval",
+      user: {
+        id: user.id,
+        universityId: user.universityId,
+        fullName: user.fullName,
+        email: user.email,
+        role: user.role,
+        accountStatus: user.accountStatus,
+      },
+    });
+  }
+);
+
 /* ------------------------- Email verification (OTP) ------------------------ */
 
 /**

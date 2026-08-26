@@ -4,6 +4,7 @@ import '../core/app_theme.dart';
 import '../data/campus_api.dart';
 import 'app_shell.dart';
 import 'brand_logo.dart';
+import 'register_page.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({required this.api, super.key});
@@ -175,6 +176,23 @@ class _LoginPageState extends State<LoginPage> {
                                           'Forgot password?',
                                           style: TextStyle(fontSize: 12),
                                         ),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 8),
+                                    TextButton(
+                                      key: const ValueKey('open-registration'),
+                                      onPressed: _submitting
+                                          ? null
+                                          : () => Navigator.of(context).push(
+                                                MaterialPageRoute<void>(
+                                                  builder: (_) => RegisterPage(
+                                                    api: widget.api,
+                                                  ),
+                                                ),
+                                              ),
+                                      child: const Text(
+                                        'New student? Create an account',
+                                        style: TextStyle(fontSize: 12),
                                       ),
                                     ),
                                   ],

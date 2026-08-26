@@ -94,13 +94,4 @@ void main() {
     );
   });
 
-  testWidgets('golden: robot QR display', (tester) async {
-    await _pumpAt(tester, WallEApp(api: FakeCampusApi()));
-    await signIn(tester, 'robot@campus.edu');
-    await tester.pumpAndSettle();
-    await expectLater(
-      find.byType(WallEApp),
-      matchesGoldenFile('goldens/baseline_robot_qr.png'),
-    );
-  });
 }

@@ -1,5 +1,5 @@
 import { Navigate, Outlet, useLocation } from 'react-router-dom'
-import { Bot, ShieldAlert, Smartphone } from 'lucide-react'
+import { Bot, Clock3, ShieldAlert } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 import { homeRouteFor } from '../../lib/navigation'
 
@@ -28,9 +28,8 @@ function BootScreen() {
  * problem look like a routing quirk. It says what happened instead, and offers
  * the way back.
  *
- * Serve STUDENT anything. There is no student web client — students use the
- * Flutter app — so a student signing in here gets an explanation rather than a
- * shell that would 403 on every request inside it.
+ * Pending students may authenticate to finish account setup, but cannot enter
+ * academic feature routes before university approval.
  */
 export function ProtectedRoute({ roles }: { roles: string[] }) {
   const { user, isLoading } = useAuth()
@@ -44,8 +43,8 @@ export function ProtectedRoute({ roles }: { roles: string[] }) {
     return <Navigate to="/login" state={{ from: location.pathname }} replace />
   }
 
-  if (user.role === 'STUDENT') {
-    return <StudentNotice />
+  if (user.role === 'STUDENT' && user.accountStatus !== 'ACTIVE') {
+    return <PendingNotice />
   }
 
   if (!roles.includes(user.role)) {
@@ -83,20 +82,20 @@ function Shell({
   )
 }
 
-function StudentNotice() {
+function PendingNotice() {
   return (
     <Shell
       icon={
         <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-primary-50">
-          <Smartphone className="h-7 w-7 text-primary-600" />
+          <Clock3 className="h-7 w-7 text-primary-600" />
         </div>
       }
-      title="Use the mobile app"
+      title="Waiting for university approval"
     >
       <p>
-        Student accounts work in the Wall-E mobile app, where your timetable,
-        QR scanning, course material and attendance live. There is no student
-        version of this web console.
+        Your email identity is ready, but academic access remains locked until
+        authorized staff verify your university record. You can sign out and
+        return later; no new registration is needed.
       </p>
     </Shell>
   )

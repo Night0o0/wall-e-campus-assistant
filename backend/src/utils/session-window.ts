@@ -142,11 +142,11 @@ export const sessionState = (
 /**
  * Whether attendance may be recorded against this session right now.
  *
- * THIS IS THE ONLY DEFINITION OF "SCANNABLE" IN THE SYSTEM. Both the student
- * scan path and the robot's active-session list call it, so the code a robot
- * displays and the code the server will accept cannot disagree — and neither
- * depends on the attendance worker having run. The worker closes expired
- * sessions for the sake of the record; it is not what stops them being scanned.
+ * THIS IS THE ONLY DEFINITION OF "SCANNABLE" IN THE SYSTEM. QR projection and
+ * the student scan path both call it, so the code staff display and the code
+ * the server will accept cannot disagree — and neither depends on the
+ * attendance worker having run. The worker closes expired sessions for the sake
+ * of the record; it is not what stops them being scanned.
  *
  * Exactly one state passes: IN_PROGRESS.
  */

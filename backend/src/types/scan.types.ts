@@ -133,7 +133,7 @@ export const scanError = (
  *
  * `course` and `lecture` are nullable because an ad-hoc session has neither.
  * The client has to handle that rather than assume a lecture behind every
- * session — the same requirement the robot's screen already has.
+ * session.
  */
 export interface ScanSuccess {
   message: string;

@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react'
-import { Navigate, useLocation, useNavigate } from 'react-router-dom'
-import { Bot, Eye, EyeOff, AlertCircle } from 'lucide-react'
+import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom'
+import { GraduationCap, Eye, EyeOff, AlertCircle } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { getErrorMessage } from '../lib/api'
 import { homeRouteFor } from '../lib/navigation'
@@ -46,11 +46,11 @@ export function Login() {
       <div className="relative hidden w-1/2 flex-col justify-between gradient-primary p-12 lg:flex">
         <div className="flex items-center gap-3">
           <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-white/15 backdrop-blur">
-            <Bot className="h-6 w-6 text-white" />
+            <GraduationCap className="h-6 w-6 text-white" />
           </div>
           <div>
-            <p className="text-lg font-bold text-white">WALL-E</p>
-            <p className="text-xs text-white/70">Campus Assistant</p>
+            <p className="text-lg font-bold text-white">Leornian</p>
+            <p className="text-xs text-white/70">University platform</p>
           </div>
         </div>
 
@@ -64,12 +64,12 @@ export function Login() {
           </h1>
           <p className="mt-4 text-white/80">
             Timetables, attendance sessions and course material for teaching
-            staff and university administrators. Students use the mobile app.
+            staff, university administrators, and students on web and mobile.
           </p>
         </div>
 
         <p className="text-sm text-white/60">
-          © {new Date().getFullYear()} WALL-E Campus Assistant
+          © {new Date().getFullYear()} Leornian
         </p>
       </div>
 
@@ -78,17 +78,17 @@ export function Login() {
         <div className="w-full max-w-sm">
           <div className="mb-8 flex items-center gap-3 lg:hidden">
             <div className="flex h-10 w-10 items-center justify-center rounded-xl gradient-primary">
-              <Bot className="h-6 w-6 text-white" />
+              <GraduationCap className="h-6 w-6 text-white" />
             </div>
             <div>
-              <p className="font-bold text-slate-900">WALL-E</p>
-              <p className="text-xs text-slate-500">Campus Assistant</p>
+              <p className="font-bold text-slate-900">Leornian</p>
+              <p className="text-xs text-slate-500">University platform</p>
             </div>
           </div>
 
           <h2 className="text-2xl font-bold text-slate-900">Welcome back</h2>
           <p className="mt-1 text-sm text-slate-500">
-            Sign in to your WALL-E account.
+            Sign in to your Leornian account.
           </p>
 
           <form onSubmit={handleSubmit} className="mt-8 space-y-4">
@@ -109,7 +109,7 @@ export function Login() {
               required
               value={email}
               onChange={(event) => setEmail(event.target.value)}
-              placeholder="owner@wall-e.io"
+              placeholder="owner@leornian.local"
             />
 
             <div className="relative">
@@ -145,6 +145,12 @@ export function Login() {
               Sign in
             </Button>
           </form>
+          <p className="mt-5 text-center text-sm text-slate-500">
+            Student without an account?{' '}
+            <Link className="font-semibold text-primary-600" to="/register">
+              Register
+            </Link>
+          </p>
         </div>
       </div>
     </div>

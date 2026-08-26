@@ -160,10 +160,10 @@ export function Overview() {
               hint="Create accounts, reset passwords"
             />
             <QuickLink
-              to="/devices"
+              to="/courses"
               icon={QrCode}
-              label="Robot Devices"
-              hint="Provision a display screen"
+              label="Course workspace"
+              hint="Manage teaching and content"
             />
           </div>
         </Card>

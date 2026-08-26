@@ -1,5 +1,5 @@
 import bcrypt from "bcrypt";
-import { Prisma } from "@prisma/client";
+import { Prisma, type UserRole } from "@prisma/client";
 import { env } from "../config/env.js";
 import { AdminRepository } from "../repositories/admin.repository.js";
 import { UserRepository } from "../repositories/user.repository.js";
@@ -16,6 +16,8 @@ import {
 import { badRequest, conflict, notFound } from "../utils/AppError.js";
 import { partsInZone, zonedTimeToUtc } from "../utils/occurrence.util.js";
 import { paginate } from "../utils/pagination.js";
+import { getSupabaseAdmin } from "../lib/supabase-auth.js";
+import prisma from "../lib/prisma.js";
 
 const SALT_ROUNDS = 10;
 
@@ -35,8 +37,9 @@ const SALT_ROUNDS = 10;
 /** Just enough of the authenticated user to scope a query. */
 export interface AdminActor {
   id: string;
-  role: string;
+  role: UserRole;
   organizationId: string;
+  departmentId: string | null;
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -126,15 +129,17 @@ export class AdminService {
   /**
    * Students who have registered and are waiting to be let in.
    *
-   * Open to a plain ADMIN as well as a super admin, and that is the point of
+   * Open to a plain INSTRUCTOR as well as a super admin, and that is the point of
    * the feature: vetting a first-year who has just signed up is routine
    * teaching-staff work, not university administration. The route guard admits
    * both; the tenant still comes from the token either way.
    */
   async listPendingStudents(query: PendingStudentQuery, actor: AdminActor) {
+    const cohortIds = await this.approvalCohortIds(actor);
     const { data, total } = await this.users.findPendingStudentsInOrganization(
       actor.organizationId,
-      query
+      query,
+      cohortIds
     );
 
     return paginate(
@@ -164,6 +169,7 @@ export class AdminService {
       // records no approver is the thing the audit columns exist to prevent.
       data: {
         isVerified: true,
+        accountStatus: "ACTIVE",
         verifiedAt: new Date(),
         verifiedBy: { connect: { id: actor.id } },
       },
@@ -200,7 +206,7 @@ export class AdminService {
     }
 
     const updated = await this.decide(student.id, student.organizationId, {
-      data: { isActive: false },
+      data: { isActive: false, accountStatus: "REJECTED" },
       type: "ACCOUNT_REJECTED",
       render: accountRejectedContent,
     });
@@ -265,7 +271,7 @@ export class AdminService {
   /**
    * Create a member of staff or a student inside the caller's own university.
    *
-   * The role is constrained by the schema to ADMIN or STUDENT — see
+   * The role is constrained by the schema to INSTRUCTOR or STUDENT — see
    * createCampusUserSchema — so nothing here can mint a super admin or an
    * owner. The organization is taken from the actor and is not a parameter.
    */
@@ -285,22 +291,48 @@ export class AdminService {
       throw conflict("University ID already exists");
     }
 
-    const passwordHash = await bcrypt.hash(input.password, SALT_ROUNDS);
+    let authUserId: string | undefined;
+    let passwordHash: string | undefined;
 
-    return this.users.createInOrganization({
-      universityId: input.universityId,
-      fullName: input.fullName,
-      email: input.email,
-      passwordHash,
-      role: input.role,
-      organizationId: actor.organizationId,
-      // An account an administrator created by hand needs no second approval:
-      // the decision was made at the moment of creation. Only self-registration
-      // produces a pending student.
-      isVerified: true,
-      jobTitle: input.jobTitle,
-      office: input.office,
-    });
+    if (env.AUTH_PROVIDER === "legacy") {
+      passwordHash = await bcrypt.hash(input.password, SALT_ROUNDS);
+    } else {
+      const { data, error } = await getSupabaseAdmin().auth.admin.createUser({
+        email: input.email,
+        password: input.password,
+        email_confirm: true,
+        user_metadata: { fullName: input.fullName },
+      });
+      if (error || !data.user) {
+        throw badRequest("Unable to provision the login identity");
+      }
+      authUserId = data.user.id;
+    }
+
+    try {
+      return await this.users.createInOrganization({
+        authUserId,
+        universityId: input.universityId,
+        fullName: input.fullName,
+        email: input.email,
+        passwordHash,
+        role: input.role,
+        organizationId: actor.organizationId,
+        // An account an administrator created by hand needs no second approval:
+        // the decision was made at the moment of creation. Only self-registration
+        // produces a pending student.
+        accountStatus: "ACTIVE",
+        isVerified: true,
+        departmentId: input.departmentId,
+        jobTitle: input.jobTitle,
+        office: input.office,
+      });
+    } catch (error) {
+      if (authUserId) {
+        await getSupabaseAdmin().auth.admin.deleteUser(authUserId);
+      }
+      throw error;
+    }
   }
 
   async updateUser(
@@ -320,8 +352,8 @@ export class AdminService {
 
     const { jobTitle, office, ...userFields } = input;
 
-    if ((jobTitle || office) && existing.role !== "ADMIN") {
-      throw badRequest("jobTitle and office only apply to an ADMIN");
+    if ((jobTitle || office) && existing.role !== "INSTRUCTOR") {
+      throw badRequest("jobTitle and office only apply to an INSTRUCTOR");
     }
 
     if (jobTitle || office) {
@@ -346,6 +378,19 @@ export class AdminService {
    */
   async resetPassword(userId: string, newPassword: string, actor: AdminActor) {
     await this.requireInOrganization(userId, actor);
+    const identity = await this.users.findAuthUserIdInOrganization(
+      userId,
+      actor.organizationId
+    );
+
+    if (identity?.authUserId) {
+      const { error } = await getSupabaseAdmin().auth.admin.updateUserById(
+        identity.authUserId,
+        { password: newPassword }
+      );
+      if (error) throw badRequest("Unable to update the login identity");
+      return;
+    }
 
     const passwordHash = await bcrypt.hash(newPassword, SALT_ROUNDS);
     await this.users.updatePassword(userId, passwordHash);
@@ -371,7 +416,7 @@ export class AdminService {
 
     // A super admin administers staff and students. Editing a peer, or the
     // platform owner's own account, is not part of that job.
-    if (user.role !== "ADMIN" && user.role !== "STUDENT") {
+    if (user.role !== "INSTRUCTOR" && user.role !== "STUDENT") {
       throw notFound("User not found");
     }
 
@@ -389,7 +434,63 @@ export class AdminService {
       throw notFound("Student not found");
     }
 
+    const cohortIds = await this.approvalCohortIds(actor);
+    if (
+      cohortIds &&
+      (!student.studentProfile?.cohortId ||
+        !cohortIds.includes(student.studentProfile.cohortId))
+    ) {
+      throw notFound("Student not found");
+    }
+
     return student;
+  }
+
+  /** Cohorts whose registrations this actor may review; null means university-wide. */
+  private async approvalCohortIds(actor: AdminActor): Promise<string[] | null> {
+    if (actor.role === "SYSTEM_OWNER" || actor.role === "UNIVERSITY_ADMIN") {
+      return null;
+    }
+
+    if (actor.role === "DEPARTMENT_ADMIN") {
+      if (!actor.departmentId) return [];
+      const cohorts = await prisma.cohort.findMany({
+        where: {
+          organizationId: actor.organizationId,
+          departmentId: actor.departmentId,
+          isActive: true,
+        },
+        select: { id: true },
+      });
+      return cohorts.map(({ id }) => id);
+    }
+
+    if (actor.role === "INSTRUCTOR") {
+      const assignments = await prisma.teachingAssignment.findMany({
+        where: {
+          organizationId: actor.organizationId,
+          instructorId: actor.id,
+          isActive: true,
+        },
+        select: {
+          cohortId: true,
+          offering: {
+            select: { cohorts: { select: { cohortId: true } } },
+          },
+        },
+      });
+      return [
+        ...new Set(
+          assignments.flatMap((assignment) =>
+            assignment.cohortId
+              ? [assignment.cohortId]
+              : assignment.offering.cohorts.map(({ cohortId }) => cohortId)
+          )
+        ),
+      ];
+    }
+
+    return [];
   }
 
   /**

@@ -25,8 +25,8 @@ router.post("/scan", requireRole('STUDENT'), requireApproved, scanLimiter, valid
 // per-subject tallies behind it. Both read the student from the token.
 router.get("/history", requireRole('STUDENT'), requireApproved, validateQuery(myAttendanceQuerySchema), getMyAttendance);
 router.get("/summary", requireRole('STUDENT'), requireApproved, getMyAttendanceSummary);
-router.get("/session/:sessionId", requireRole('ADMIN', 'UNIVERSITY_SUPER_ADMIN', 'SYSTEM_OWNER'), getSessionAttendance);
-router.get("/session/:sessionId/stats", requireRole('ADMIN', 'UNIVERSITY_SUPER_ADMIN', 'SYSTEM_OWNER'), getSessionStats);
-router.get("/analytics", requireRole('ADMIN', 'UNIVERSITY_SUPER_ADMIN', 'SYSTEM_OWNER'), getAdminAnalytics);
+router.get("/session/:sessionId", requireRole('INSTRUCTOR', 'UNIVERSITY_ADMIN', 'SYSTEM_OWNER'), getSessionAttendance);
+router.get("/session/:sessionId/stats", requireRole('INSTRUCTOR', 'UNIVERSITY_ADMIN', 'SYSTEM_OWNER'), getSessionStats);
+router.get("/analytics", requireRole('INSTRUCTOR', 'UNIVERSITY_ADMIN', 'SYSTEM_OWNER'), getAdminAnalytics);
 
 export default router;

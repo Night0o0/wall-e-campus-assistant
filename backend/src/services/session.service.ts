@@ -10,8 +10,6 @@ import {
     paginate,
     toSkipTake,
 } from "../utils/pagination.js";
-import { deviceMaySeeRoom } from "../utils/device-room-access.js";
-import { env } from "../config/env.js";
 import { sameOccurrenceWindow, sessionState } from "../utils/session-window.js";
 import { badRequest, conflict, notFound } from "../utils/AppError.js";
 
@@ -37,9 +35,8 @@ export class SessionService {
     /**
      * Opens an attendance session.
      *
-     * A human act, always — there is no device path to this method, and
-     * `Session.createdById` is a non-nullable foreign key to User which a device
-     * principal could not satisfy even if one were wired up.
+     * A human act, always. `Session.createdById` is a non-nullable foreign key
+     * to User because attendance sessions are opened by staff.
      *
      * When a lecture is named, the room AND the course are copied from it
      * rather than taken from the request.
@@ -111,7 +108,7 @@ export class SessionService {
     /**
      * One page of the sessions this actor may see.
      *
-     * An ADMIN sees the ones they opened; everybody else sees the whole
+     * An INSTRUCTOR sees the ones they opened; everybody else sees the whole
      * university. Paginated: this is unbounded history and was returned whole
      * (D-2).
      */
@@ -163,56 +160,6 @@ export class SessionService {
         return this.mintQrToken(await this.loadVisible(sessionId, actor));
     }
 
-    /**
-     * The same token, for a device principal.
-     *
-     * A robot is not a user: it has no role, so the instructor rule above has
-     * nothing to say about it, and its tenant comes off its own row rather than
-     * from a request. Kept as a separate entry point rather than an optional
-     * actor so neither principal can be smuggled in as the other.
-     */
-    /**
-     * A rotating QR token, for a device principal.
-     *
-     * Takes the whole device rather than just its tenant, because the room
-     * binding is part of the authorization and not merely a display filter.
-     * Before it did, this endpoint checked the organization alone: a device
-     * bound to B-204 could not discover a session in C-101, but could mint a
-     * valid code for it given the id — and the id is inside every code that
-     * device has ever displayed, readable without any secret.
-     *
-     * The room predicate is the same one discovery applies, from one
-     * definition, so the two cannot disagree — see utils/device-room-access.ts.
-     *
-     * "Not found" rather than "forbidden", consistently with every other read
-     * in this system: a 403 would confirm the session id is real, which is
-     * exactly what a caller who may not act on it must not learn.
-     */
-    async getQrTokenForDevice(
-        device: { organizationId: string; room: string | null },
-        sessionId: string
-    ) {
-        const session = await this.sessions.findById(sessionId);
-
-        // The tenant first, and unconditionally: no room match can stand in for
-        // it, because two universities may both have a room called "B-204".
-        if (!session || session.organizationId !== device.organizationId) {
-            throw notFound("Session not found");
-        }
-
-        if (
-            !deviceMaySeeRoom(device, session, {
-                includeUnlocated: !env.DEVICE_ROOM_FILTER_STRICT,
-            })
-        ) {
-            throw notFound("Session not found");
-        }
-
-        // Still the last word on whether a code may be issued at all: a session
-        // whose lecture has ended is ACTIVE until something closes it.
-        return this.mintQrToken(session);
-    }
-
     /* ------------------------------ Internals ------------------------------- */
 
     /**
@@ -236,13 +183,11 @@ export class SessionService {
      * Issues the code, once the caller has been established as entitled to it.
      *
      * The check is `isScannable`, not `status === 'ACTIVE'`, and that is the
-     * same correction made on the scan path and on the robot's session list: a
-     * session whose lecture has ended is still ACTIVE until something closes
-     * it, so a status-only test hands out a live-looking code for a lecture
-     * that finished. The server would refuse the resulting scan — the window is
-     * enforced on the write too — but a QR that cannot be scanned is not a code
-     * worth putting on a screen, and disagreeing with the scan path about what
-     * is open is how the two drift.
+     * same correction made on the scan path: a session whose lecture has ended
+     * is still ACTIVE until something closes it, so a status-only test hands
+     * out a live-looking code for a lecture that finished. The server would
+     * refuse the resulting scan because the window is enforced on the write
+     * too, but a QR that cannot be scanned is not a code worth projecting.
      */
     private mintQrToken(session: {
         id: string;
@@ -329,7 +274,7 @@ export class SessionService {
      * Three checks, and the order matters. Tenant first, and reported as "not
      * found" rather than "forbidden", so the endpoint cannot be used to discover
      * that a schedule id exists at another university — the same answer
-     * ScheduleService gives. Then ownership: an ADMIN teaches their own lectures
+     * ScheduleService gives. Then ownership: an INSTRUCTOR teaches their own lectures
      * and opens attendance for their own lectures, which is the rule
      * ScheduleService.getSchedule already applies to reads. A super admin is
      * scoped to the organization and no further.
@@ -345,7 +290,7 @@ export class SessionService {
             throw notFound("Schedule not found");
         }
 
-        if (actor.role === "ADMIN" && schedule.instructorId !== actor.id) {
+        if (actor.role === "INSTRUCTOR" && schedule.instructorId !== actor.id) {
             throw notFound("Schedule not found");
         }
 
@@ -357,8 +302,7 @@ export class SessionService {
 
         // Defensive: the schedule validator requires a room, so this cannot be
         // reached through the API. It would fire on data written around it, and
-        // a session with no room is invisible to a room-bound robot — better a
-        // clear refusal now than a code that never appears on a screen.
+        // a clear refusal now is better than projecting a code with no room.
         if (!schedule.room?.trim()) {
             throw badRequest("This lecture has no room recorded");
         }

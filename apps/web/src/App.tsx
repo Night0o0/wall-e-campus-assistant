@@ -3,18 +3,16 @@ import { useAuth } from './context/AuthContext'
 import { DashboardLayout } from './components/layout/DashboardLayout'
 import { ProtectedRoute } from './components/auth/ProtectedRoute'
 import { Login } from './pages/Login'
+import { CompleteRegistration, Register } from './pages/Register'
 import { Account } from './pages/Account'
+import { StudentDashboard } from './pages/student/StudentDashboard'
+import { StudentAssignments } from './pages/student/Assignments'
 
 // Platform owner
 import { Dashboard } from './pages/Dashboard'
-import { Revenue } from './pages/Revenue'
 import { Organizations } from './pages/Organizations'
 import { OrganizationDetail } from './pages/OrganizationDetail'
 import { Users } from './pages/Users'
-import { Subscriptions } from './pages/Subscriptions'
-import { Plans } from './pages/Plans'
-import { Invoices } from './pages/Invoices'
-import { Robots } from './pages/Robots'
 import { Settings } from './pages/Settings'
 
 // University
@@ -29,15 +27,9 @@ import { PendingStudents } from './pages/campus/PendingStudents'
 import { Notifications } from './pages/campus/Notifications'
 import { Timetable } from './pages/campus/Timetable'
 import { Directory } from './pages/campus/Directory'
-import { Devices } from './pages/campus/Devices'
 
-// Robot
-import { RobotConsole } from './pages/robot/RobotConsole'
-
-import { billingEnabled } from './lib/features'
-
-const STAFF = ['ADMIN', 'UNIVERSITY_SUPER_ADMIN']
-const SUPER_ADMIN = ['UNIVERSITY_SUPER_ADMIN']
+const STAFF = ['INSTRUCTOR', 'DEPARTMENT_ADMIN', 'UNIVERSITY_ADMIN']
+const SUPER_ADMIN = ['UNIVERSITY_ADMIN']
 const OWNER = ['SYSTEM_OWNER']
 
 /**
@@ -51,13 +43,16 @@ function RoleHome() {
   const { user } = useAuth()
 
   if (user?.role === 'SYSTEM_OWNER') return <Dashboard />
-  if (user?.role === 'UNIVERSITY_SUPER_ADMIN') return <Overview />
+  if (user?.role === 'STUDENT') return <StudentDashboard />
+  if (user?.role === 'UNIVERSITY_ADMIN' || user?.role === 'DEPARTMENT_ADMIN') {
+    return <Overview />
+  }
 
   return <Navigate to="/teaching" replace />
 }
 
 /**
- * Three route trees behind one login, plus the robot's, which is behind none.
+ * Role-scoped route trees behind one human identity session.
  *
  * ── Why the trees are separate rather than one list with guards ────────────
  *
@@ -72,21 +67,14 @@ function RoleHome() {
  * lib/navigation.ts drives the sidebar from the same role split, so a link and
  * a route cannot disagree.
  *
- * ── Why /robot is outside every tree ───────────────────────────────────────
- *
- * A robot is not a user. It authenticates as a device, against different
- * endpoints, with a token signed by a different key — so it must not sit behind
- * a gate that asks a user context whether it may pass. It is a public route
- * that authenticates itself.
  */
 function App() {
   return (
     <BrowserRouter>
       <Routes>
         <Route path="/login" element={<Login />} />
-
-        {/* The robot. No user session; it pairs with a device credential. */}
-        <Route path="/robot" element={<RobotConsole />} />
+        <Route path="/register" element={<Register />} />
+        <Route path="/register/complete" element={<CompleteRegistration />} />
 
         {/* Full-bleed, deliberately outside DashboardLayout: this goes on a
             projector in front of a room, where a sidebar of admin links is both
@@ -95,17 +83,24 @@ function App() {
           <Route path="/sessions/:id/qr" element={<LiveQr />} />
         </Route>
 
+        <Route element={<ProtectedRoute roles={['STUDENT']} />}>
+          <Route element={<DashboardLayout />}>
+            <Route path="/assignments" element={<StudentAssignments />} />
+            <Route path="/account" element={<Account />} />
+          </Route>
+        </Route>
+
         {/* ------------------------- Teaching staff ------------------------- */}
         {/* Only an instructor has a teaching timetable of their own. */}
-        <Route element={<ProtectedRoute roles={['ADMIN']} />}>
+        <Route element={<ProtectedRoute roles={['INSTRUCTOR']} />}>
           <Route element={<DashboardLayout />}>
             <Route path="/teaching" element={<TeachingSchedule />} />
           </Route>
         </Route>
 
         {/* Shared by both staff roles: the server decides scope, not the page.
-            The approval queue belongs here and not under ADMIN — `canApprove`
-            on the server admits UNIVERSITY_SUPER_ADMIN too, and vetting a
+            The approval queue belongs here and not under INSTRUCTOR — `canApprove`
+            on the server admits UNIVERSITY_ADMIN too, and vetting a
             first-year is routine departmental work that must not bottleneck on
             one person at the start of term. */}
         <Route element={<ProtectedRoute roles={STAFF} />}>
@@ -125,7 +120,6 @@ function App() {
           <Route element={<DashboardLayout />}>
             <Route path="/timetable" element={<Timetable />} />
             <Route path="/directory" element={<Directory />} />
-            <Route path="/devices" element={<Devices />} />
             <Route path="/exports" element={<Exports />} />
           </Route>
         </Route>
@@ -136,19 +130,6 @@ function App() {
             <Route path="/organizations" element={<Organizations />} />
             <Route path="/organizations/:id" element={<OrganizationDetail />} />
             <Route path="/users" element={<Users />} />
-
-            {/* Billing routes disappear with the feature flag; the catch-all
-                below sends any stale bookmark back to the dashboard. */}
-            {billingEnabled && (
-              <>
-                <Route path="/revenue" element={<Revenue />} />
-                <Route path="/subscriptions" element={<Subscriptions />} />
-                <Route path="/plans" element={<Plans />} />
-                <Route path="/invoices" element={<Invoices />} />
-              </>
-            )}
-
-            <Route path="/robots" element={<Robots />} />
             <Route path="/settings" element={<Settings />} />
           </Route>
         </Route>
@@ -157,7 +138,7 @@ function App() {
             that dispatches rather than several competing for the same path —
             React Router resolves the first match, so duplicates would silently
             hand every role whichever one happened to be declared first. */}
-        <Route element={<ProtectedRoute roles={[...OWNER, ...STAFF]} />}>
+        <Route element={<ProtectedRoute roles={[...OWNER, ...STAFF, 'STUDENT']} />}>
           <Route element={<DashboardLayout />}>
             <Route index element={<RoleHome />} />
           </Route>

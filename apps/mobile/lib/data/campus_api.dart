@@ -2,11 +2,13 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+
 import '../models/account_role.dart';
 
-/// A signed-in human or robot principal. Robot tokens are intentionally kept
-/// separate from user tokens by the backend; [isDevice] selects the matching
-/// API surface.
+/// A signed-in university user. Authentication comes from Supabase when it is
+/// configured; the legacy endpoint remains a local migration fallback.
 class AuthSession {
   const AuthSession({
     required this.token,
@@ -15,7 +17,6 @@ class AuthSession {
     required this.name,
     required this.identifier,
     required this.organizationId,
-    required this.isDevice,
     this.isVerified = true,
   });
 
@@ -25,7 +26,6 @@ class AuthSession {
   final String name;
   final String identifier;
   final String organizationId;
-  final bool isDevice;
   final bool isVerified;
 }
 
@@ -41,8 +41,21 @@ class ApiException implements Exception {
   String toString() => message;
 }
 
+class RegistrationResult {
+  const RegistrationResult({required this.emailConfirmationRequired});
+  final bool emailConfirmationRequired;
+}
+
 abstract class CampusGateway {
   Future<AuthSession> login(String identifier, String password);
+
+  Future<RegistrationResult> registerStudent({
+    required String organizationCode,
+    required String universityId,
+    required String fullName,
+    required String email,
+    required String password,
+  });
 
   Future<Map<String, dynamic>> get(
     String path,
@@ -63,6 +76,8 @@ abstract class CampusGateway {
   ]);
 
   Future<void> requestPasswordReset(String email);
+
+  Future<void> logout();
 }
 
 class CampusApi implements CampusGateway {
@@ -79,6 +94,12 @@ class CampusApi implements CampusGateway {
     defaultValue: '',
   );
 
+  static const supabaseUrl = String.fromEnvironment('SUPABASE_URL');
+  static const supabasePublishableKey =
+      String.fromEnvironment('SUPABASE_PUBLISHABLE_KEY');
+  static bool get supabaseConfigured =>
+      supabaseUrl.isNotEmpty && supabasePublishableKey.isNotEmpty;
+
   static String get _defaultBaseUrl {
     if (_configuredBaseUrl.isNotEmpty) return _configuredBaseUrl;
     return Platform.isAndroid
@@ -88,60 +109,138 @@ class CampusApi implements CampusGateway {
 
   final String baseUrl;
   final HttpClient _client;
+  static const _registrationStorageKey = 'leornian.pendingRegistration';
+  static const _secureStorage = FlutterSecureStorage();
 
   @override
   Future<AuthSession> login(String identifier, String password) async {
     final normalized = identifier.trim().toLowerCase();
 
-    try {
-      final response = await _send(
-        'POST',
-        '/auth/mobile-login',
-        body: {'email': normalized, 'password': password},
+    if (supabaseConfigured) {
+      final response = await Supabase.instance.client.auth.signInWithPassword(
+        email: normalized,
+        password: password,
       );
-      final user = _map(response['user']);
-      final role = AccountRoleDetails.fromApi(user['role']?.toString());
+      final accessToken = response.session?.accessToken;
+      if (accessToken == null) {
+        throw const ApiException('Sign in did not create a session.');
+      }
 
+
+      await _completePendingRegistration(accessToken);
+
+      final provisional = AuthSession(
+        token: accessToken,
+        role: AccountRole.student,
+        id: response.user?.id ?? '',
+        name: '',
+        identifier: normalized,
+        organizationId: '',
+      );
+      final profileResponse = await _send(
+        'GET',
+        '/auth/profile',
+        session: provisional,
+      );
+      final user = _map(profileResponse['user']);
+      final role = AccountRoleDetails.fromApi(user['role']?.toString());
       if (role == null) {
-        throw const ApiException(
-            'This account type cannot use the mobile app.');
+        throw const ApiException('This account type cannot use the mobile app.');
       }
 
       return AuthSession(
-        token: response['token'] as String,
+        token: accessToken,
         role: role,
         id: user['id']?.toString() ?? '',
         name: user['fullName']?.toString() ?? role.label,
         identifier: user['email']?.toString() ?? normalized,
         organizationId: user['organizationId']?.toString() ?? '',
-        isDevice: false,
         isVerified: user['isVerified'] == true,
       );
-    } on ApiException catch (error) {
-      // A web-only account is a valid human login with an explicit product
-      // policy response. Never reinterpret it as a robot credential.
-      if (error.code == 'WEB_ONLY_ACCOUNT') rethrow;
-      if (error.statusCode != 401) rethrow;
     }
 
-    // Robot accounts are device principals. The email-shaped device key and
-    // password are exchanged on the isolated device-auth route.
     final response = await _send(
       'POST',
-      '/devices/auth',
-      body: {'deviceKeyId': normalized, 'deviceSecret': password},
+      '/auth/mobile-login',
+      body: {'email': normalized, 'password': password},
     );
-    final device = _map(response['device']);
+    final user = _map(response['user']);
+    final role = AccountRoleDetails.fromApi(user['role']?.toString());
+
+    if (role == null) {
+      throw const ApiException('This account type cannot use the mobile app.');
+    }
 
     return AuthSession(
       token: response['token'] as String,
-      role: AccountRole.robot,
-      id: device['id']?.toString() ?? '',
-      name: device['name']?.toString() ?? 'WALL-E Robot',
-      identifier: normalized,
-      organizationId: device['organizationId']?.toString() ?? '',
-      isDevice: true,
+      role: role,
+      id: user['id']?.toString() ?? '',
+      name: user['fullName']?.toString() ?? role.label,
+      identifier: user['email']?.toString() ?? normalized,
+      organizationId: user['organizationId']?.toString() ?? '',
+      isVerified: user['isVerified'] == true,
     );
+  }
+
+  @override
+  Future<RegistrationResult> registerStudent({
+    required String organizationCode,
+    required String universityId,
+    required String fullName,
+    required String email,
+    required String password,
+  }) async {
+    final normalizedEmail = email.trim().toLowerCase();
+    final registration = jsonEncode({
+      'organizationCode': organizationCode.trim().toUpperCase(),
+      'universityId': universityId.trim(),
+      'fullName': fullName.trim(),
+    });
+
+    if (!supabaseConfigured) {
+      await _send('POST', '/auth/register', body: {
+        ...jsonDecode(registration) as Map<String, dynamic>,
+        'email': normalizedEmail,
+        'password': password,
+      });
+      return const RegistrationResult(emailConfirmationRequired: false);
+    }
+
+    await _secureStorage.write(
+      key: _registrationStorageKey,
+      value: registration,
+    );
+    final response = await Supabase.instance.client.auth.signUp(
+      email: normalizedEmail,
+      password: password,
+    );
+    final accessToken = response.session?.accessToken;
+    if (accessToken != null) await _completePendingRegistration(accessToken);
+
+    return RegistrationResult(
+      emailConfirmationRequired: accessToken == null,
+    );
+  }
+
+  Future<void> _completePendingRegistration(String accessToken) async {
+    final raw = await _secureStorage.read(key: _registrationStorageKey);
+    if (raw == null) return;
+
+    final provisional = AuthSession(
+      token: accessToken,
+      role: AccountRole.student,
+      id: '',
+      name: '',
+      identifier: '',
+      organizationId: '',
+    );
+    await _send(
+      'POST',
+      '/auth/register/supabase',
+      session: provisional,
+      body: jsonDecode(raw) as Map<String, dynamic>,
+    );
+    await _secureStorage.delete(key: _registrationStorageKey);
   }
 
   @override
@@ -173,11 +272,24 @@ class CampusApi implements CampusGateway {
 
   @override
   Future<void> requestPasswordReset(String email) async {
+    if (supabaseConfigured) {
+      await Supabase.instance.client.auth.resetPasswordForEmail(
+        email.trim().toLowerCase(),
+      );
+      return;
+    }
     await _send(
       'POST',
       '/auth/forgot-password',
       body: {'email': email.trim().toLowerCase()},
     );
+  }
+
+  @override
+  Future<void> logout() async {
+    if (supabaseConfigured) {
+      await Supabase.instance.client.auth.signOut();
+    }
   }
 
   Future<Map<String, dynamic>> _send(

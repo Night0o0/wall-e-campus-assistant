@@ -8,7 +8,7 @@ import {
  * Who may edit, delete or export a course.
  *
  * The defect these tests pin down (D-10): CourseService compared createdById to
- * the caller with no role branch, so a UNIVERSITY_SUPER_ADMIN could not edit or
+ * the caller with no role branch, so a UNIVERSITY_ADMIN could not edit or
  * delete a course somebody else had created - contradicting the documented rule
  * "Create / edit / delete any course", and contradicting the branch
  * StudentExportService had already got right. A course left behind by a
@@ -21,10 +21,10 @@ import {
 
 const ORG_A = "org-a";
 
-const CREATOR = { id: "instructor-1", role: "ADMIN" };
-const OTHER_INSTRUCTOR = { id: "instructor-2", role: "ADMIN" };
-const TEACHING_INSTRUCTOR = { id: "instructor-3", role: "ADMIN" };
-const SUPER_ADMIN = { id: "super-1", role: "UNIVERSITY_SUPER_ADMIN" };
+const CREATOR = { id: "instructor-1", role: "INSTRUCTOR" };
+const OTHER_INSTRUCTOR = { id: "instructor-2", role: "INSTRUCTOR" };
+const TEACHING_INSTRUCTOR = { id: "instructor-3", role: "INSTRUCTOR" };
+const SUPER_ADMIN = { id: "super-1", role: "UNIVERSITY_ADMIN" };
 const SYSTEM_OWNER = { id: "owner-1", role: "SYSTEM_OWNER" };
 
 /** Created by CREATOR, with an active lecture taught by TEACHING_INSTRUCTOR. */

@@ -6,7 +6,7 @@
  * super admins, `getSession`, `getQrToken`, `getSessionAttendance` and
  * `getSessionStats` demanded only the right tenant, and `occurrenceStates`
  * applied the instructor narrowing that all of them were reaching for. The
- * result was an ADMIN who could read a colleague's attendance roster and mint
+ * result was an INSTRUCTOR who could read a colleague's attendance roster and mint
  * their QR code but not close their session, and a super admin who could do
  * neither — an inconsistency with no reading under which all four were right.
  *
@@ -15,8 +15,8 @@
  * AttendanceLifecycleService.occurrenceStates):
  *
  *   * the tenant is absolute — nothing crosses it, whatever the role;
- *   * an ADMIN is an instructor, and sees the sessions they opened;
- *   * UNIVERSITY_SUPER_ADMIN and SYSTEM_OWNER are scoped to their organization
+ *   * an INSTRUCTOR is an instructor, and sees the sessions they opened;
+ *   * UNIVERSITY_ADMIN and SYSTEM_OWNER are scoped to their organization
  *     and no further;
  *   * a STUDENT is scoped to the organization only. Narrowing students to their
  *     own cohort is a separate question that belongs with the QR endpoint guard
@@ -50,11 +50,11 @@ export interface SessionAuthSubject {
  * its roster, but could not find it in the list it should have been in.
  *
  * That is the same class of inconsistency this file was written to end, so the
- * predicate lives here rather than being restated as `role === "ADMIN"` at each
+ * predicate lives here rather than being restated as `role === "INSTRUCTOR"` at each
  * call site.
  */
 export const seesOnlyOwnSessions = (actor: SessionAuthActor): boolean =>
-  actor.role === "ADMIN";
+  actor.role === "INSTRUCTOR";
 
 export const canSeeSession = (
   session: SessionAuthSubject,

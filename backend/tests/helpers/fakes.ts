@@ -82,7 +82,7 @@ export const makeSchedule = (
     instructor: {
       id: options.instructorId ?? "instructor-1",
       fullName: "Adel Mansour",
-      role: (options.instructorRole ?? "ADMIN") as never,
+      role: (options.instructorRole ?? "INSTRUCTOR") as never,
       isActive: options.instructorActive ?? true,
       organizationId: options.organizationId ?? ORG_A,
     },

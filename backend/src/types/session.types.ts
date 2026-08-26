@@ -11,8 +11,7 @@ import { z } from "zod";
  *
  * `room` is only read when no schedule is given. Sending both is rejected
  * rather than silently resolved: a session cannot be in two places, and quietly
- * picking one of the two answers is how a room-bound robot ends up displaying
- * the wrong code.
+ * picking one of the two answers would make the attendance record lie.
  *
  * Note what is absent, as everywhere else in this API: `organizationId`. A
  * session always inherits the authenticated user's organization.
@@ -24,7 +23,7 @@ export const createSessionSchema = z
       .string()
       .uuid("lectureScheduleId must be a valid id")
       .optional(),
-    /** Free text, matched case-insensitively against a device's binding. */
+    /** Free text, used only for ad-hoc sessions. */
     room: z.string().trim().min(1).max(50).optional(),
   })
   .refine((data) => !(data.lectureScheduleId && data.room), {

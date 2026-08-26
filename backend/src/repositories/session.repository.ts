@@ -21,8 +21,8 @@ const scheduleSummary = {
 
 /**
  * The course a session belongs to. Small on purpose, and the same shape
- * wherever a session is projected, so a robot's screen and an admin's list
- * name a course identically.
+ * wherever a session is projected, so lists and detail views name a course
+ * identically.
  */
 const courseSummary = {
     select: { id: true, courseCode: true, courseName: true },
@@ -41,34 +41,13 @@ const courseSummary = {
  *
  * This is the same rule AttendanceRepository.getSessionStats already applies to
  * its `total`, and it is defined here as one object used by every session
- * projection so the robot's screen, the admin's list and the attendance log
- * cannot answer the question differently from each other. Where the roll size
- * is what is wanted, `getSessionStats` reports it separately as `roll`.
+ * projection so session lists, detail views, and attendance logs cannot answer
+ * the question differently from each other. Where the roll size is what is
+ * wanted, `getSessionStats` reports it separately as `roll`.
  */
 export const attendedCount = {
     select: { attendances: { where: { status: { not: 'ABSENT' } } } },
 } satisfies Prisma.SessionCountOutputTypeDefaultArgs;
-
-/**
- * How a room-bound device's request is turned into a filter.
- *
- * `room: null` on the device means unbound — it serves every open session in
- * its university, and no room clause is applied at all.
- */
-export interface ActiveSessionFilter {
-    /** The device's binding. Null or undefined means "no room filter". */
-    room?: string | null;
-    /**
-     * Whether sessions with no room recorded are visible to a bound device.
-     *
-     * A session opened before Phase 2, or opened ad hoc with no timetable entry,
-     * has `room = null` — it is not in another room, it is in no known room, so
-     * a binding has nothing to exclude it by. Including them keeps every
-     * existing deployment working; excluding them is the stricter reading, and
-     * is what DEVICE_ROOM_FILTER_STRICT selects. Ignored when `room` is null.
-     */
-    includeUnlocated?: boolean;
-}
 
 export class SessionRepository {
 
@@ -124,9 +103,9 @@ export class SessionRepository {
      * shared `scheduleSummary`, for two reasons. The academic address —
      * faculty, department, level, semester, section — is what decides whether a
      * student is entitled to be in this lecture, and it has no business
-     * appearing in the robot's session list or an admin's session view, which
-     * both use that summary. And the scan response is a contract with the
-     * mobile client: it should be visible here exactly which columns feed it.
+     * appearing in ordinary session summaries. And the scan response is a
+     * contract with the mobile client: it should be visible here exactly which
+     * columns feed it.
      *
      * `qrSecret` is selected because verifying the presented token is the whole
      * point of this read. It never reaches a response — see ScanSuccess.
@@ -195,66 +174,6 @@ export class SessionRepository {
         ]);
 
         return { data, total };
-    }
-
-    /**
-     * The organization's currently open sessions, for the robot/tablet that has
-     * to decide which QR code to put on screen.
-     *
-     * `organizationId` is a required argument rather than an optional filter:
-     * this is read on behalf of a device, and a device must never be able to see
-     * a session belonging to another university. The room filter can only ever
-     * narrow that further — it is applied on top of the tenant clause, never
-     * instead of it.
-     *
-     * Room comparison is case-insensitive because `room` is free text on both
-     * sides: whoever typed "b-204" into the timetable and whoever typed "B-204"
-     * onto the device meant the same wall.
-     */
-    async findActiveByOrganization(
-        organizationId: string,
-        filter: ActiveSessionFilter = {}
-    ) {
-        const where: Prisma.SessionWhereInput = {
-            organizationId,
-            status: 'ACTIVE',
-        };
-
-        if (filter.room) {
-            const inThisRoom: Prisma.SessionWhereInput = {
-                room: { equals: filter.room, mode: 'insensitive' },
-            };
-
-            Object.assign(
-                where,
-                filter.includeUnlocated
-                    ? { OR: [inThisRoom, { room: null }] }
-                    : inThisRoom
-            );
-        }
-
-        return prisma.session.findMany({
-            where,
-            orderBy: { startTime: 'desc' },
-            select: {
-                id: true,
-                title: true,
-                // `status` and `startTime` are also what isScannable needs. The
-                // window depends on the linked lecture's duration, so the
-                // expiry test cannot be pushed into this WHERE clause without
-                // reimplementing that arithmetic in SQL — it is applied in the
-                // service instead, against the one definition in
-                // utils/session-window.ts.
-                status: true,
-                startTime: true,
-                courseId: true,
-                course: courseSummary,
-                room: true,
-                lectureScheduleId: true,
-                lectureSchedule: scheduleSummary,
-                _count: attendedCount,
-            },
-        });
     }
 
     /** One page of the sessions this member of staff opened, newest first. */

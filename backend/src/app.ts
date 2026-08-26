@@ -6,8 +6,9 @@ import rateLimit from "express-rate-limit";
 import { env } from "./config/env.js";
 import { apiLimiter } from "./utils/rate-limit.js";
 import authRoutes from "./routes/auth.routes.js";
-import deviceRoutes from "./routes/device.routes.js";
 import healthRoutes from "./routes/health.routes.js";
+import departmentRoutes from "./routes/department.routes.js";
+import assignmentRoutes from "./routes/assignment.routes.js";
 import sessionRoutes from "./routes/session.routes.js";
 import attendanceRoutes from "./routes/attendance.routes.js";
 import courseRoutes from "./routes/course.routes.js";
@@ -18,10 +19,6 @@ import notificationRoutes from "./routes/notification.routes.js";
 import adminRoutes from "./routes/admin.routes.js";
 import organizationRoutes from "./routes/organization.routes.js";
 import userRoutes from "./routes/user.routes.js";
-import planRoutes from "./routes/plan.routes.js";
-import subscriptionRoutes from "./routes/subscription.routes.js";
-import invoiceRoutes from "./routes/invoice.routes.js";
-import paymentRoutes from "./routes/payment.routes.js";
 import metricsRoutes from "./routes/metrics.routes.js";
 import { errorHandler, notFoundHandler } from "./middleware/error.middleware.js";
 
@@ -44,10 +41,10 @@ app.use(express.json({ limit: "1mb" }));
  * Broad limiter for the whole API, counted per caller rather than per address.
  *
  * A campus leaves through one NAT gateway, so an IP-keyed bucket is shared by
- * every student on the WiFi and every robot in every building. A lecture hall
- * scanning attendance at the same minute would exhaust it between them and
- * start receiving 429s — so the key is the authenticated principal wherever one
- * can be established, and the IP only when it cannot. See utils/rate-limit.ts.
+ * every student on the WiFi. A lecture hall scanning attendance at the same
+ * minute would exhaust it quickly and start receiving 429s, so the key is the
+ * authenticated principal wherever one can be established, and the IP only when
+ * it cannot. See utils/rate-limit.ts.
  */
 app.use("/api", apiLimiter);
 
@@ -63,6 +60,8 @@ const authLimiter = rateLimit({
 
 // Routes
 app.use("/api/health", healthRoutes);
+app.use("/api/departments", departmentRoutes);
+app.use("/api/assignments", assignmentRoutes);
 app.use("/api/auth", authLimiter, authRoutes);
 
 // Campus operations
@@ -75,22 +74,10 @@ app.use("/api/schedules", scheduleRoutes);
 app.use("/api/notifications", notificationRoutes);
 app.use("/api/admin", adminRoutes);
 
-// Robot/tablet surface. Its own principal type: see device.middleware.ts.
-app.use("/api/devices", deviceRoutes);
-
 // Platform administration
 app.use("/api/organizations", organizationRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/metrics", metricsRoutes);
-
-// Billing. Left unmounted while BILLING_ENABLED is off, so every route below
-// 404s rather than half-working against data nobody is maintaining.
-if (env.BILLING_ENABLED) {
-  app.use("/api/plans", planRoutes);
-  app.use("/api/subscriptions", subscriptionRoutes);
-  app.use("/api/invoices", invoiceRoutes);
-  app.use("/api/payments", paymentRoutes);
-}
 
 // Error handling
 app.use(notFoundHandler);

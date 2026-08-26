@@ -19,10 +19,10 @@ import type { Course } from '../../types/campus'
  * Courses.
  *
  * Two roles, one page, and the difference is what the server will let through
- * rather than what this file renders: an ADMIN sees the courses they are
+ * rather than what this file renders: an INSTRUCTOR sees the courses they are
  * assigned to or created and can export only those; a super admin sees and
  * edits every course in the university. Create, edit and delete are hidden for
- * an ADMIN because the endpoints would refuse them — showing a button that
+ * an INSTRUCTOR because the endpoints would refuse them — showing a button that
  * always 403s is worse than not showing it.
  *
  * ── On `level` ─────────────────────────────────────────────────────────────
@@ -37,10 +37,10 @@ export function Courses() {
   const toast = useToast()
   const queryClient = useQueryClient()
 
-  const isSuperAdmin = user?.role === 'UNIVERSITY_SUPER_ADMIN'
+  const isSuperAdmin = user?.role === 'UNIVERSITY_ADMIN'
 
   /**
-   * An ADMIN gets the courses they are assigned to or created; a super admin
+   * An INSTRUCTOR gets the courses they are assigned to or created; a super admin
    * gets the whole university.
    *
    * This page used to call the university-wide endpoint for BOTH roles while

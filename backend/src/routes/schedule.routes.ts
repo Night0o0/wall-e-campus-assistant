@@ -24,11 +24,11 @@ router.use(authenticate);
  * keeps the access it has on every other admin route, but is still confined to
  * its own organization like everyone else.
  *
- * A plain ADMIN is an instructor here, not a planner: read-only, and only the
+ * A plain INSTRUCTOR is an instructor here, not a planner: read-only, and only the
  * lectures assigned to them. Every read below is narrowed by role inside
  * ScheduleService.
  */
-const canManage = requireRole("UNIVERSITY_SUPER_ADMIN", "SYSTEM_OWNER");
+const canManage = requireRole("UNIVERSITY_ADMIN", "SYSTEM_OWNER");
 
 router.post("/", canManage, validate(createScheduleSchema), createSchedule);
 
@@ -42,12 +42,12 @@ router.get("/:id", getSchedule);
  *
  * Teaching staff, not students. Which lectures nobody bothered to take
  * attendance for is a question about the institution's own record-keeping, and
- * the answer names the instructor responsible. An ADMIN sees only their own
+ * the answer names the instructor responsible. An INSTRUCTOR sees only their own
  * lectures; the narrowing happens inside the service.
  */
 router.get(
   "/:id/attendance-log",
-  requireRole("ADMIN", "UNIVERSITY_SUPER_ADMIN", "SYSTEM_OWNER"),
+  requireRole("INSTRUCTOR", "UNIVERSITY_ADMIN", "SYSTEM_OWNER"),
   getScheduleAttendanceLog
 );
 

@@ -1,8 +1,5 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
-import 'package:qr_flutter/qr_flutter.dart';
 
 import '../core/app_theme.dart';
 import '../data/campus_api.dart';
@@ -18,7 +15,7 @@ List<AppDestination> connectedDestinationsFor(
   VoidCallback onLogout,
 ) =>
     switch (role) {
-      AccountRole.admin => [
+      AccountRole.instructor => [
           AppDestination('Overview', Icons.grid_view_rounded,
               ConnectedDashboard(api: api, session: session)),
           AppDestination('My Teaching', Icons.calendar_month_rounded,
@@ -36,7 +33,7 @@ List<AppDestination> connectedDestinationsFor(
           AppDestination('Account', Icons.person_rounded,
               ConnectedProfile(api: api, session: session, onLogout: onLogout)),
         ],
-      AccountRole.superAdmin => [
+      AccountRole.universityAdmin => [
           AppDestination('Dashboard', Icons.grid_view_rounded,
               ConnectedDashboard(api: api, session: session)),
           AppDestination('Timetable', Icons.calendar_month_rounded,
@@ -51,8 +48,6 @@ List<AppDestination> connectedDestinationsFor(
               ConnectedPeople(api: api, session: session, pendingOnly: true)),
           AppDestination('Materials', Icons.folder_copy_rounded,
               ConnectedMaterials(api: api, session: session)),
-          AppDestination('Devices', Icons.smart_toy_rounded,
-              ConnectedDevices(api: api, session: session)),
           const AppDestination(
               'Exports', Icons.download_rounded, ExportsPage()),
           AppDestination('Inbox', Icons.notifications_rounded,
@@ -60,11 +55,17 @@ List<AppDestination> connectedDestinationsFor(
           AppDestination('Account', Icons.person_rounded,
               ConnectedProfile(api: api, session: session, onLogout: onLogout)),
         ],
-      AccountRole.robot => [
-          AppDestination('QR Display', Icons.qr_code_2_rounded,
-              ConnectedRobotDisplay(api: api, session: session)),
-          const AppDestination(
-              'Campus Map', Icons.map_rounded, CampusMapPage()),
+      AccountRole.departmentAdmin => [
+          AppDestination('Dashboard', Icons.grid_view_rounded,
+              ConnectedDashboard(api: api, session: session)),
+          AppDestination('Timetable', Icons.calendar_month_rounded,
+              ConnectedTimetable(api: api, session: session)),
+          AppDestination('Courses', Icons.menu_book_rounded,
+              ConnectedCourses(api: api, session: session)),
+          AppDestination('Students', Icons.groups_rounded,
+              ConnectedPeople(api: api, session: session)),
+          AppDestination('Account', Icons.person_rounded,
+              ConnectedProfile(api: api, session: session, onLogout: onLogout)),
         ],
       AccountRole.student => [],
     };
@@ -78,7 +79,7 @@ class ConnectedDashboard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (session.role == AccountRole.admin) {
+    if (session.role == AccountRole.instructor) {
       return _DataPage(
         title: 'Good morning, ${_firstName(session.name)}',
         subtitle: 'Your live teaching schedule and attendance sessions.',
@@ -248,10 +249,10 @@ class _ConnectedTimetableState extends State<ConnectedTimetable> {
 
   var version = 0;
 
-  bool get canManage => widget.session.role == AccountRole.superAdmin;
+  bool get canManage => widget.session.role == AccountRole.universityAdmin;
 
   Future<Map<String, dynamic>> _load() async {
-    final schedulePath = widget.session.role == AccountRole.admin
+    final schedulePath = widget.session.role == AccountRole.instructor
         ? '/admin/schedule'
         : '/schedules';
     if (!canManage) {
@@ -541,7 +542,7 @@ class _ConnectedTimetableState extends State<ConnectedTimetable> {
                 keys: const ['schedules', 'data']);
             final courses = _items(_map(data['courses']));
             final instructors = _items(_map(data['users']))
-                .where((row) => row['role'] == 'ADMIN')
+                .where((row) => row['role'] == 'INSTRUCTOR')
                 .toList();
             return [
               if (canManage)
@@ -866,69 +867,6 @@ class _ApprovalButtonsState extends State<_ApprovalButtons> {
   }
 }
 
-class ConnectedDevices extends StatelessWidget {
-  const ConnectedDevices({required this.api, required this.session, super.key});
-  final CampusGateway api;
-  final AuthSession session;
-
-  @override
-  Widget build(BuildContext context) => _DataPage(
-        title: 'Robot Devices',
-        subtitle: 'Provisioned QR display devices in this university.',
-        load: () => api.get('/admin/devices', session),
-        builder: (data) {
-          final rows = _items(data);
-          final online = rows.where((row) => row['status'] == 'ACTIVE').length;
-          final offline = rows.length - online;
-          return [
-            if (rows.isEmpty)
-              const _EmptyMessage('No robot devices provisioned.'),
-            ResponsiveMetricGrid(
-              children: [
-                MetricCard(
-                  label: 'Online',
-                  value: '$online',
-                  icon: Icons.smart_toy_rounded,
-                  accent: AppColors.success,
-                ),
-                MetricCard(
-                  label: 'Offline',
-                  value: '$offline',
-                  icon: Icons.portable_wifi_off_rounded,
-                  accent: AppColors.danger,
-                ),
-                MetricCard(
-                  label: 'Total devices',
-                  value: '${rows.length}',
-                  icon: Icons.qr_code_2_rounded,
-                ),
-              ],
-            ),
-            SectionCard(
-                title: 'Campus robots',
-                child: Column(children: [
-                  for (final row in rows)
-                    AppListTile(
-                      title: '${row['name'] ?? 'Robot'}',
-                      subtitle:
-                          '${row['room'] ?? 'All rooms'} · ${row['deviceKeyId'] ?? ''}',
-                      icon: Icons.smart_toy_rounded,
-                      iconColor: row['status'] == 'ACTIVE'
-                          ? AppColors.success
-                          : AppColors.danger,
-                      trailing: StatusPill(
-                        row['status'] == 'ACTIVE' ? 'Online' : 'Offline',
-                        color: row['status'] == 'ACTIVE'
-                            ? AppColors.success
-                            : AppColors.danger,
-                      ),
-                    ),
-                ])),
-          ];
-        },
-      );
-}
-
 class ConnectedMaterials extends StatefulWidget {
   const ConnectedMaterials(
       {required this.api, required this.session, super.key});
@@ -946,11 +884,11 @@ class _ConnectedMaterialsState extends State<ConnectedMaterials> {
     final values = await Future.wait([
       widget.api.get('/materials', widget.session),
       widget.api.get(
-        widget.session.role == AccountRole.admin
+        widget.session.role == AccountRole.instructor
             ? '/admin/schedule'
             : '/schedules',
         widget.session,
-        query: widget.session.role == AccountRole.superAdmin
+        query: widget.session.role == AccountRole.universityAdmin
             ? const {'limit': '100'}
             : null,
       ),
@@ -1344,7 +1282,7 @@ class _ConnectedScanState extends State<ConnectedScan> {
   Widget build(BuildContext context) => PageCanvas(
         title: 'Scan Attendance QR',
         subtitle:
-            'Point the camera at the rotating code shown by the classroom robot.',
+            'Point the camera at the rotating code shown by your instructor.',
         children: [
           SectionCard(
             child: Column(children: [
@@ -1386,119 +1324,6 @@ class _ConnectedScanState extends State<ConnectedScan> {
       );
 }
 
-class ConnectedRobotDisplay extends StatefulWidget {
-  const ConnectedRobotDisplay(
-      {required this.api, required this.session, super.key});
-  final CampusGateway api;
-  final AuthSession session;
-
-  @override
-  State<ConnectedRobotDisplay> createState() => _ConnectedRobotDisplayState();
-}
-
-class _ConnectedRobotDisplayState extends State<ConnectedRobotDisplay> {
-  late Future<Map<String, dynamic>> future;
-  String? selectedId;
-  String? qrToken;
-  Timer? rotationTimer;
-
-  @override
-  void initState() {
-    super.initState();
-    future = widget.api.get('/devices/me/sessions/active', widget.session);
-  }
-
-  Future<void> _loadQr(String id) async {
-    rotationTimer?.cancel();
-    setState(() {
-      selectedId = id;
-      qrToken = null;
-    });
-    await _refreshQr(id);
-    rotationTimer = Timer.periodic(
-      const Duration(seconds: 20),
-      (_) => _refreshQr(id),
-    );
-  }
-
-  Future<void> _refreshQr(String id) async {
-    try {
-      final response =
-          await widget.api.get('/devices/me/sessions/$id/qr', widget.session);
-      if (mounted && selectedId == id) {
-        setState(() => qrToken = response['token']?.toString());
-      }
-    } on ApiException catch (error) {
-      if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(error.message)));
-      }
-    }
-  }
-
-  void _refresh() => setState(() {
-        rotationTimer?.cancel();
-        selectedId = null;
-        qrToken = null;
-        future = widget.api.get('/devices/me/sessions/active', widget.session);
-      });
-
-  @override
-  void dispose() {
-    rotationTimer?.cancel();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) => FutureBuilder<Map<String, dynamic>>(
-        future: future,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState != ConnectionState.done) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          if (snapshot.hasError) {
-            return _ErrorPanel(error: snapshot.error, onRetry: _refresh);
-          }
-          final data = snapshot.data ?? {};
-          final rows = _items(data, keys: const ['sessions']);
-          return PageCanvas(
-            title: 'Attendance display',
-            subtitle:
-                '${widget.session.name} · ${data['room'] ?? 'All rooms'} · ${rows.length} active',
-            actions: const [StatusPill('Device online')],
-            children: [
-              if (rows.isEmpty)
-                const _EmptyMessage(
-                    'No scannable session is active for this robot.'),
-              for (final row in rows)
-                SectionCard(
-                  title: '${row['title'] ?? 'Attendance session'}',
-                  subtitle:
-                      '${row['room'] ?? 'No room'} · ${_map(row['course'])['courseCode'] ?? ''}',
-                  child: Column(children: [
-                    if (selectedId == '${row['id']}' && qrToken != null)
-                      Container(
-                        color: Colors.white,
-                        padding: const EdgeInsets.all(14),
-                        child: QrImageView(data: qrToken!, size: 230),
-                      )
-                    else
-                      FilledButton.icon(
-                        onPressed: () => _loadQr('${row['id']}'),
-                        icon: const Icon(Icons.qr_code_2_rounded),
-                        label: const Text('Display rotating QR'),
-                      ),
-                    const SizedBox(height: 10),
-                    Text('${row['attendanceCount'] ?? 0} students checked in',
-                        style: Theme.of(context).textTheme.bodyMedium),
-                  ]),
-                ),
-            ],
-          );
-        },
-      );
-}
-
 class ConnectedProfile extends StatelessWidget {
   const ConnectedProfile(
       {required this.api, required this.session, this.onLogout, super.key});
@@ -1508,28 +1333,23 @@ class ConnectedProfile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final path = session.isDevice ? '/devices/me' : '/auth/profile';
     return _DataPage(
-      title: session.isDevice ? 'Robot Account' : 'My Account',
+      title: 'My Account',
       subtitle:
           'Identity and organization details from the authenticated backend.',
-      load: () => api.get(path, session),
+      load: () => api.get('/auth/profile', session),
       builder: (data) {
-        final value = _map(data[session.isDevice ? 'device' : 'user']);
+        final value = _map(data['user']);
         return [
           SectionCard(
               child: Column(children: [
             AppListTile(
                 title: '${value['fullName'] ?? value['name'] ?? session.name}',
                 subtitle: '${value['email'] ?? session.identifier}',
-                icon: session.isDevice
-                    ? Icons.smart_toy_rounded
-                    : Icons.person_rounded),
+                icon: Icons.person_rounded),
             AppListTile(
                 title: session.role.label,
-                subtitle: session.isDevice
-                    ? 'Device principal · ${value['room'] ?? 'All rooms'}'
-                    : '${value['universityId'] ?? ''}',
+                subtitle: '${value['universityId'] ?? ''}',
                 icon: Icons.verified_user_rounded),
             AppListTile(
                 title:

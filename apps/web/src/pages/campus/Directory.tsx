@@ -15,7 +15,7 @@ import { useDebounce } from '../../hooks/useDebounce'
 import { cn } from '../../lib/utils'
 import type { CampusUser } from '../../types/campus'
 
-type Tab = 'STUDENT' | 'ADMIN'
+type Tab = 'STUDENT' | 'INSTRUCTOR'
 
 /**
  * Students and staff, in one directory.
@@ -28,7 +28,7 @@ type Tab = 'STUDENT' | 'ADMIN'
  *
  * ── What this page cannot do, and why ──────────────────────────────────────
  *
- * Create a UNIVERSITY_SUPER_ADMIN. The creatable roles are ADMIN and STUDENT
+ * Create a UNIVERSITY_ADMIN. The creatable roles are INSTRUCTOR and STUDENT
  * only: a super admin who can mint super admins is an escalation with no
  * ceiling, so that role is granted by the platform owner and by nobody else.
  *
@@ -173,7 +173,7 @@ export function Directory() {
       }
     >
       <div className="flex gap-1 rounded-lg bg-slate-100 p-1">
-        {(['STUDENT', 'ADMIN'] as Tab[]).map((value) => (
+        {(['STUDENT', 'INSTRUCTOR'] as Tab[]).map((value) => (
           <button
             key={value}
             onClick={() => setTab(value)}
@@ -254,7 +254,7 @@ function CreateAccountModal({
   const toast = useToast()
 
   const [form, setForm] = useState({
-    role: 'ADMIN',
+    role: 'INSTRUCTOR',
     universityId: '',
     fullName: '',
     email: '',
@@ -271,17 +271,17 @@ function CreateAccountModal({
         fullName: form.fullName,
         email: form.email,
         password: form.password,
-        // Required for an ADMIN and rejected for a STUDENT: AdminProfile.jobTitle
+        // Required for an INSTRUCTOR and rejected for a STUDENT: AdminProfile.jobTitle
         // is non-nullable, and it is where the academic title lives, because
         // there is no separate professor role.
-        ...(form.role === 'ADMIN'
+        ...(form.role === 'INSTRUCTOR'
           ? { jobTitle: form.jobTitle, office: form.office || undefined }
           : {}),
       }),
     onSuccess: () => {
       toast.success('Account created')
       setForm({
-        role: 'ADMIN',
+        role: 'INSTRUCTOR',
         universityId: '',
         fullName: '',
         email: '',
@@ -312,7 +312,7 @@ function CreateAccountModal({
           value={form.role}
           onChange={(event) => setForm({ ...form, role: event.target.value })}
         >
-          <option value="ADMIN">Teaching staff</option>
+          <option value="INSTRUCTOR">Teaching staff</option>
           <option value="STUDENT">Student</option>
         </Select>
 
@@ -351,7 +351,7 @@ function CreateAccountModal({
           onChange={(event) => setForm({ ...form, password: event.target.value })}
         />
 
-        {form.role === 'ADMIN' && (
+        {form.role === 'INSTRUCTOR' && (
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Input
               label="Academic title"

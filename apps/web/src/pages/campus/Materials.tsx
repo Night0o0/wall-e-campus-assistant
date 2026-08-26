@@ -17,13 +17,13 @@ import type { CourseMaterial, LectureSchedule } from '../../types/campus'
 /**
  * Google Drive links, addressed to a cohort.
  *
- * ── The two ways to publish, and why an ADMIN only gets one ────────────────
+ * ── The two ways to publish, and why an INSTRUCTOR only gets one ────────────────
  *
  * An instructor publishes by picking one of THEIR OWN lectures. The server
  * copies the academic address — faculty, department, level, semester, section —
  * off that lecture, and doing so is simultaneously the proof that they teach the
  * cohort they are publishing to. Naming a cohort directly is refused for an
- * ADMIN, because that parameter is precisely the one through which an
+ * INSTRUCTOR, because that parameter is precisely the one through which an
  * instructor could address a year they have nothing to do with.
  *
  * A super admin administers the whole university and may legitimately publish
@@ -47,7 +47,7 @@ export function Materials() {
   const toast = useToast()
   const queryClient = useQueryClient()
 
-  const isSuperAdmin = user?.role === 'UNIVERSITY_SUPER_ADMIN'
+  const isSuperAdmin = user?.role === 'UNIVERSITY_ADMIN'
 
   const [publishing, setPublishing] = useState(false)
   const [editing, setEditing] = useState<CourseMaterial | null>(null)
@@ -83,7 +83,8 @@ export function Materials() {
     onError: (caught) => toast.error(getErrorMessage(caught)),
   })
 
-
+  const withdraw = useMutation({
+    mutationFn: (id: string) => materialsApi.deactivate(id),
     onSuccess: () => {
       invalidate()
       toast.success('Link withdrawn')

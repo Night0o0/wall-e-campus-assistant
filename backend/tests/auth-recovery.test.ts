@@ -28,7 +28,7 @@ import { env } from "../src/config/env.js";
 interface UserFixture {
   id: string;
   email: string;
-  role: "STUDENT" | "ADMIN" | "UNIVERSITY_SUPER_ADMIN";
+  role: "STUDENT" | "INSTRUCTOR" | "UNIVERSITY_ADMIN";
   isActive: boolean;
   passwordHash: string;
 }
@@ -190,7 +190,7 @@ beforeEach(async () => {
     {
       id: "staff-1",
       email: "doctor@uni.test",
-      role: "ADMIN",
+      role: "INSTRUCTOR",
       isActive: true,
       passwordHash: await bcrypt.hash("staff-password-1", 10),
     },

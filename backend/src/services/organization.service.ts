@@ -23,19 +23,7 @@ const blankToNull = <T extends Record<string, unknown>>(data: T) => {
 export class OrganizationService {
   async list(query: OrganizationQuery) {
     const { data, total } = await orgRepo.findMany(query);
-
-    const revenue = await orgRepo.revenueByOrganization(
-      data.map((org) => org.id)
-    );
-
-    const enriched = data.map((org) => ({
-      ...org,
-      revenue: revenue.get(org.id) ?? 0,
-      planName: org.subscription?.plan.name ?? null,
-      status: org.subscription?.status ?? "NONE",
-    }));
-
-    return paginate(enriched, total, query);
+    return paginate(data, total, query);
   }
 
   async getById(id: string) {
@@ -45,17 +33,11 @@ export class OrganizationService {
       throw notFound("Organization not found");
     }
 
-    const [revenue, userBreakdown] = await Promise.all([
-      orgRepo.revenueByOrganization([id]),
-      orgRepo.userBreakdown(id),
-    ]);
+    const userBreakdown = await orgRepo.userBreakdown(id);
 
     return {
       ...organization,
-      revenue: revenue.get(id) ?? 0,
       userBreakdown,
-      planName: organization.subscription?.plan.name ?? null,
-      status: organization.subscription?.status ?? "NONE",
     };
   }
 
@@ -96,7 +78,7 @@ export class OrganizationService {
             fullName: admin.fullName,
             email: admin.email,
             passwordHash: await bcrypt.hash(admin.password, 10),
-            role: "UNIVERSITY_SUPER_ADMIN",
+            role: "UNIVERSITY_ADMIN",
             isVerified: true,
             organizationId: organization.id,
           },
@@ -106,9 +88,8 @@ export class OrganizationService {
       return tx.organization.findUniqueOrThrow({
         where: { id: organization.id },
         include: {
-          subscription: { include: { plan: true } },
           _count: {
-            select: { users: true, courses: true, sessions: true, invoices: true },
+            select: { users: true, courses: true, sessions: true },
           },
         },
       });
@@ -137,12 +118,6 @@ export class OrganizationService {
     if (organization._count.users > 0) {
       throw badRequest(
         `Cannot delete an organization with ${organization._count.users} user(s). Remove its users first.`
-      );
-    }
-
-    if (organization._count.invoices > 0 || organization._count.payments > 0) {
-      throw badRequest(
-        "Cannot delete an organization that has billing history. Cancel its subscription instead."
       );
     }
 

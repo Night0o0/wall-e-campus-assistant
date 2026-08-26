@@ -42,6 +42,7 @@ class _StudentShellState extends State<StudentShell> {
         _AttendancePage(api: widget.api, session: widget.session),
         _ScanQrPage(api: widget.api, session: widget.session),
         _MaterialPage(api: widget.api, session: widget.session),
+        _AssignmentsPage(api: widget.api, session: widget.session),
         _InboxPage(api: widget.api, session: widget.session),
       ];
 
@@ -177,6 +178,7 @@ class _StudentBottomNav extends StatelessWidget {
     ('Attendance', Icons.bar_chart_rounded),
     ('Scan QR', Icons.qr_code_2_rounded),
     ('Material', Icons.menu_book_outlined),
+    ('Work', Icons.assignment_outlined),
     ('Inbox', Icons.notifications_none_rounded),
   ];
 
@@ -1611,6 +1613,126 @@ class _MaterialFile extends StatelessWidget {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _AssignmentsPage extends StatefulWidget {
+  const _AssignmentsPage({required this.api, required this.session});
+
+  final CampusGateway api;
+  final AuthSession session;
+
+  @override
+  State<_AssignmentsPage> createState() => _AssignmentsPageState();
+}
+
+class _AssignmentsPageState extends State<_AssignmentsPage> {
+  late Future<Map<String, dynamic>> _future;
+
+  @override
+  void initState() {
+    super.initState();
+    _future = widget.api.get('/assignments', widget.session);
+  }
+
+  Future<void> _refresh() async {
+    final next = widget.api.get('/assignments', widget.session);
+    setState(() => _future = next);
+    await next;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<Map<String, dynamic>>(
+      future: _future,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState != ConnectionState.done) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        if (snapshot.hasError) {
+          return _StudentLoadError(error: snapshot.error, onRetry: _refresh);
+        }
+        final assignments =
+            _studentItems(snapshot.data ?? const {}, const ['assignments']);
+        return RefreshIndicator(
+          onRefresh: _refresh,
+          child: _StudentPage(
+            eyebrow: 'COURSEWORK',
+            title: 'Assignments',
+            children: [
+              if (assignments.isEmpty)
+                const _StudentEmptyCard('No assignments have been published.'),
+              for (final assignment in assignments)
+                _AssignmentCard(assignment: assignment),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _AssignmentCard extends StatelessWidget {
+  const _AssignmentCard({required this.assignment});
+
+  final Map<String, dynamic> assignment;
+
+  @override
+  Widget build(BuildContext context) {
+    final offering = _studentMap(assignment['offering']);
+    final course = _studentMap(offering['course']);
+    final code = '${course['courseCode'] ?? 'COURSE'}';
+    final color = _subjectColor(code);
+    final grades = _studentItems(assignment, const ['grades']);
+    final grade = grades.isEmpty ? null : grades.first;
+    final deadline = DateTime.tryParse('${assignment['deadline'] ?? ''}');
+
+    return _AppCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              _CourseBadge(code: code, color: color),
+              const Spacer(),
+              Text(
+                deadline == null ? 'No deadline' : _shortDate(deadline.toIso8601String()),
+                style: const TextStyle(color: AppColors.muted, fontSize: 11),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text(
+            '${assignment['title'] ?? 'Assignment'}',
+            style: const TextStyle(
+              color: AppColors.ink,
+              fontSize: 16,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            '${assignment['description'] ?? 'No additional instructions.'}',
+            style: const TextStyle(color: AppColors.muted, height: 1.4),
+          ),
+          const SizedBox(height: 14),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: color.withOpacity(.08),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Text(
+              grade == null
+                  ? 'Result not published · Maximum ${assignment['maxScore']}'
+                  : 'Result: ${grade['score']} / ${assignment['maxScore']}${grade['feedback'] == null ? '' : '\n${grade['feedback']}'}',
+              style: TextStyle(color: grade == null ? AppColors.muted : color),
+            ),
+          ),
+        ],
       ),
     );
   }

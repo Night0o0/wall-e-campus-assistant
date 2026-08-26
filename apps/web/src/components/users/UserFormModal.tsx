@@ -12,8 +12,8 @@ interface Props {
 }
 
 const ROLES: Array<{ value: UserRole; label: string }> = [
-  { value: 'ADMIN', label: 'Admin' },
-  { value: 'UNIVERSITY_SUPER_ADMIN', label: 'University Super Admin' },
+  { value: 'INSTRUCTOR', label: 'Admin' },
+  { value: 'UNIVERSITY_ADMIN', label: 'University Super Admin' },
   { value: 'STUDENT', label: 'Student' },
   { value: 'SYSTEM_OWNER', label: 'System Owner' },
 ]
@@ -23,7 +23,7 @@ const emptyForm = {
   universityId: '',
   email: '',
   password: '',
-  role: 'ADMIN' as UserRole,
+  role: 'INSTRUCTOR' as UserRole,
   organizationId: '',
   isVerified: true,
   isActive: true,
@@ -32,7 +32,7 @@ const emptyForm = {
 }
 
 const carriesAdminProfile = (role: UserRole) =>
-  role === 'ADMIN' || role === 'UNIVERSITY_SUPER_ADMIN'
+  role === 'INSTRUCTOR' || role === 'UNIVERSITY_ADMIN'
 
 export function UserFormModal({ open, onClose, user }: Props) {
   const isEdit = Boolean(user)

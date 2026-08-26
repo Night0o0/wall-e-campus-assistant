@@ -1,84 +1,44 @@
-# Architecture Decision Records (ADR)
+# Architecture decisions
 
-## ADR-001
-Only the Backend can access the database directly.
+## Status
 
-## ADR-002
-The ESP32 is responsible only for hardware control, not business logic.
+This file records the current product decisions as of August 26, 2026.
 
-## ADR-003: Tablet as the Robot Intelligence Hub
+## Decision 1 — remove robot/device scope
 
-### Decision
+The robot/device feature is no longer part of the active product.
 
-The tablet will handle high-level robot intelligence functions including:
+Reason:
 
-- User interface
-- QR attendance interface
-- Campus map display
-- Face recognition processing
-- Voice interaction management
+- it is not part of the target release
+- it increases finish risk
+- the academic and attendance platform can ship without it
 
-The ESP32-S3 will only handle low-level hardware control.
+## Decision 2 — remove billing/payment scope
 
-### Reason
+Billing, subscriptions, invoices, and payments are no longer part of the active product.
 
-The tablet has much higher processing power compared to ESP32-S3, making it more suitable for:
+Reason:
 
-- Face recognition
-- UI rendering
-- AI models
-- Data processing
+- not needed for the intended project direction
+- removing it simplifies the schema, APIs, and UI
+- it reduces end-to-end validation scope
 
-This keeps the ESP32 firmware simple and reliable.
+## Decision 3 — backend-enforced authorization
 
----
+Authorization remains enforced on the backend.
 
-## ADR-004: ESP32-S3 Communication with Tablet
+Reason:
 
-### Decision
+- role checks must not depend on client behavior
+- tenant isolation must be guaranteed server-side
 
-The tablet and ESP32-S3 will communicate using Wi-Fi.
+## Decision 4 — finish current auth path before changing providers
 
-Communication protocols may include:
+The project should finish on its current auth direction before considering Clerk or another provider migration.
 
-- HTTP API
-- WebSocket
+Reason:
 
-### Reason
-
-Wi-Fi provides:
-
-- Flexible hardware placement
-- No dependency on USB compatibility
-- Easier future expansion
-- Support for multiple devices
-
----
-
-## ADR-005: Event-Based Robot Control
-
-### Decision
-
-The Backend and Tablet will send high-level events instead of direct hardware commands.
-
-Example:
-
-Good:
-
-{
-"event":"attendance_success",
-"student":"Ahmed"
-}
-
-Bad:
-
-{
-"servo1":90,
-"servo2":45
-}
-
-### Reason
-
-The ESP32 should control hardware behavior only.
-
-Hardware details should not affect the software architecture.
+- the codebase already contains the current auth flow
+- swapping auth providers now would create a separate migration project
+- finish risk is lower when stabilizing the existing system

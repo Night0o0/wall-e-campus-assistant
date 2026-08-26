@@ -10,9 +10,7 @@ import type {
   LectureSchedule,
   OrganizationOverview,
   PendingStudent,
-  ProvisionedDevice,
   QrToken,
-  RobotDevice,
   SessionStats,
 } from '../types/campus'
 
@@ -74,7 +72,7 @@ export const campusAdminApi = {
     api.patch<CampusUser>(`/admin/users/${id}`, data).then((r) => r.data),
 
   /**
-   * Set somebody else's password. This is the staff recovery path: an ADMIN who
+   * Set somebody else's password. This is the staff recovery path: an INSTRUCTOR who
    * forgets theirs contacts the super admin, who uses this. Staff are
    * deliberately excluded from the emailed self-service reset — see
    * AuthService.requestPasswordReset.
@@ -102,40 +100,6 @@ export const campusAdminApi = {
     api
       .patch<{ message?: string }>(`/admin/students/${id}/reject`)
       .then((r) => r.data),
-}
-
-/* --------------------------------- Devices -------------------------------- */
-
-export const devicesApi = {
-  list: (params: ListParams & Record<string, unknown> = {}) =>
-    api
-      .get<Paginated<RobotDevice>>('/admin/devices', { params: clean(params) })
-      .then((r) => r.data),
-
-  get: (id: string) =>
-    api
-      .get<{ device: RobotDevice }>(`/admin/devices/${id}`)
-      .then((r) => r.data.device),
-
-  /** The only response that ever carries a secret. It is not re-readable. */
-  provision: (data: { name: string; room?: string | null }) =>
-    api.post<ProvisionedDevice>('/admin/devices', data).then((r) => r.data),
-
-  update: (id: string, data: Record<string, unknown>) =>
-    api
-      .patch<{ device: RobotDevice }>(`/admin/devices/${id}`, data)
-      .then((r) => r.data.device),
-
-  rotateSecret: (id: string) =>
-    api
-      .post<ProvisionedDevice>(`/admin/devices/${id}/rotate-secret`)
-      .then((r) => r.data),
-
-  /** Terminal. A revoked device is replaced, never reactivated. */
-  revoke: (id: string, reason?: string) =>
-    api
-      .patch<{ device: RobotDevice }>(`/admin/devices/${id}/revoke`, { reason })
-      .then((r) => r.data.device),
 }
 
 /* -------------------------------- Timetable ------------------------------- */
@@ -178,7 +142,9 @@ export const coursesApi = {
   mine: () =>
     api
       .get<Paginated<Course> | Course[]>('/courses/my')
-      .then((r) => (Array.isArray(r.data) ? r.data : r.data.data)),
+      .then((r) =>
+        Array.isArray(r.data) ? { data: r.data, meta: undefined } : r.data
+      ),
 
   get: (id: string) =>
     api
@@ -195,7 +161,7 @@ export const coursesApi = {
     api.delete<{ message: string }>(`/courses/${id}`).then((r) => r.data),
 
   /**
-   * The roster export. An ADMIN may only export a course they are assigned to;
+   * The roster export. An INSTRUCTOR may only export a course they are assigned to;
    * a super admin may export any course in their own university.
    *
    * Returned as a blob because the server sends a real .xlsx — reading it as
@@ -211,6 +177,50 @@ export const coursesApi = {
             String(r.headers['content-disposition'] ?? '')
           )?.[1] ?? 'students.xlsx',
       })),
+}
+
+/* ------------------------------ Assignments ------------------------------ */
+
+export interface CampusAssignment {
+  id: string
+  title: string
+  description?: string | null
+  deadline: string
+  maxScore: string | number
+  isPublished: boolean
+  publishedAt?: string | null
+  offering: {
+    id: string
+    displayName?: string | null
+    course: { id: string; courseCode: string; courseName: string }
+    term: { id: string; name: string }
+  }
+  cohorts: Array<{ cohort: { id: string; name: string; code: string } }>
+  grades?: Array<{
+    score: string | number
+    feedback?: string | null
+    gradedAt: string
+    publishedAt: string
+  }>
+}
+
+export const assignmentsApi = {
+  list: () =>
+    api
+      .get<{ assignments: CampusAssignment[] }>('/assignments')
+      .then((response) => response.data.assignments),
+  create: (data: Record<string, unknown>) =>
+    api
+      .post<{ assignment: CampusAssignment }>('/assignments', data)
+      .then((response) => response.data.assignment),
+  update: (id: string, data: Record<string, unknown>) =>
+    api
+      .patch<{ assignment: CampusAssignment }>(`/assignments/${id}`, data)
+      .then((response) => response.data.assignment),
+  publish: (id: string) =>
+    api
+      .post<{ assignment: CampusAssignment }>(`/assignments/${id}/publish`)
+      .then((response) => response.data.assignment),
 }
 
 /* -------------------------------- Sessions -------------------------------- */
@@ -279,9 +289,9 @@ export const materialsApi = {
       .then((r) => (Array.isArray(r.data) ? r.data : r.data.data)),
 
   /**
-   * An ADMIN publishes by naming one of their OWN lectures: the service copies
+   * An INSTRUCTOR publishes by naming one of their OWN lectures: the service copies
    * the academic address off it, which is simultaneously the proof they teach
-   * that cohort. Naming a cohort directly is refused for an ADMIN and is the
+   * that cohort. Naming a cohort directly is refused for an INSTRUCTOR and is the
    * super admin's form of the same call.
    */
   create: (data: {
@@ -333,7 +343,7 @@ export const notificationsApi = {
    *
    * These paths only exist when the SERVER has dev tools enabled, which is
    * forced off in production regardless of configuration — there they 404 like
-   * any unknown route. They are also restricted to UNIVERSITY_SUPER_ADMIN and
+   * any unknown route. They are also restricted to UNIVERSITY_ADMIN and
    * SYSTEM_OWNER, never a plain admin. The client hides them behind its own dev
    * check as well, so the buttons do not appear in a production build.
    */

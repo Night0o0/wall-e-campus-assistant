@@ -10,7 +10,7 @@ const router = Router();
 
 router.use(authenticate);
 
-const isStaff = requireRole('ADMIN', 'UNIVERSITY_SUPER_ADMIN', 'SYSTEM_OWNER');
+const isStaff = requireRole('INSTRUCTOR', 'UNIVERSITY_ADMIN', 'SYSTEM_OWNER');
 
 /**
  * The QR guard, and why it is a flag rather than a plain middleware.
@@ -22,12 +22,10 @@ const isStaff = requireRole('ADMIN', 'UNIVERSITY_SUPER_ADMIN', 'SYSTEM_OWNER');
  * which defeats the short expiry that is the only thing standing between this
  * system and unlimited proxy attendance.
  *
- * The robot must be moved onto /api/devices/me/sessions/:id/qr before this
- * closes, or attendance stops campus-wide. So the guard ships switched off:
- * set QR_ENDPOINT_STAFF_ONLY=true once the robot is provisioned and verified.
- * A flag rather than an edit makes that cutover instant and its rollback
- * instant too, which matters when the thing being cut over is the only way a
- * lecture can take attendance.
+ * Staff now own QR projection. The guard is still a flag for rollout safety:
+ * set QR_ENDPOINT_STAFF_ONLY=true once the web and mobile staff flows are
+ * verified. A flag rather than an edit makes that rollout instant and its
+ * rollback instant too, which matters when attendance is happening live.
  */
 const qrGuard: RequestHandler[] = env.QR_ENDPOINT_STAFF_ONLY ? [isStaff] : [];
 

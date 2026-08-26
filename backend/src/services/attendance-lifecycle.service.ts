@@ -375,7 +375,7 @@ export class AttendanceLifecycleService {
       throw notFound("Schedule not found");
     }
 
-    if (actor.role === "ADMIN" && schedule.instructorId !== actor.id) {
+    if (actor.role === "INSTRUCTOR" && schedule.instructorId !== actor.id) {
       throw notFound("Schedule not found");
     }
 

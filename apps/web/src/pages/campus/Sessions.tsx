@@ -18,7 +18,7 @@ import type { CampusSession } from '../../types/campus'
  * Attendance sessions.
  *
  * One page for two roles, because the endpoint is one endpoint: GET /sessions
- * returns the caller's own sessions for an ADMIN and the whole university's for
+ * returns the caller's own sessions for an INSTRUCTOR and the whole university's for
  * a super admin. The server decides; this page renders what it is given.
  *
  * There is no "open a session" button here on purpose. A session is opened from
@@ -54,7 +54,7 @@ export function Sessions() {
     onError: (caught) => toast.error(getErrorMessage(caught)),
   })
 
-  const isSuperAdmin = user?.role === 'UNIVERSITY_SUPER_ADMIN'
+  const isSuperAdmin = user?.role === 'UNIVERSITY_ADMIN'
 
   const columns: Column<CampusSession>[] = [
     {

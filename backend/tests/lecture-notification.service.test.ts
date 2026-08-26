@@ -71,7 +71,7 @@ describe("lecture reminder generation", () => {
     const { notifications } = await generate({ students: [cohortStudent] });
 
     const reminders = notifications.rows.filter(
-      (row) => row.type === NotificationType.LECTURE_ADMIN_24H
+      (row) => row.type === NotificationType.LECTURE_INSTRUCTOR_24H
     );
 
     expect(reminders).toHaveLength(1);
@@ -88,7 +88,7 @@ describe("lecture reminder generation", () => {
     const { notifications } = await generate({ students: [cohortStudent] });
 
     const reminders = notifications.rows.filter(
-      (row) => row.type === NotificationType.LECTURE_ADMIN_30M
+      (row) => row.type === NotificationType.LECTURE_INSTRUCTOR_30M
     );
 
     expect(reminders).toHaveLength(1);
@@ -238,13 +238,13 @@ describe("lecture reminder generation", () => {
     const byType = (type: NotificationType) =>
       notifications.rows.find((row) => row.type === type)!;
 
-    const admin24h = byType(NotificationType.LECTURE_ADMIN_24H);
+    const admin24h = byType(NotificationType.LECTURE_INSTRUCTOR_24H);
     expect(admin24h.title).toBe("Upcoming lecture");
     expect(admin24h.body).toBe(
       "Electronics lecture is tomorrow at 12:00 PM. Room B-204."
     );
 
-    const admin30m = byType(NotificationType.LECTURE_ADMIN_30M);
+    const admin30m = byType(NotificationType.LECTURE_INSTRUCTOR_30M);
     expect(admin30m.title).toBe("Lecture starting soon");
     expect(admin30m.body).toBe(
       "Electronics lecture starts in 30 minutes. Room B-204."
@@ -293,7 +293,7 @@ describe("delivery", () => {
     );
 
     expect(delivered.map((row) => row.type).sort()).toEqual([
-      NotificationType.LECTURE_ADMIN_30M,
+      NotificationType.LECTURE_INSTRUCTOR_30M,
       NotificationType.LECTURE_STUDENT_10M,
     ]);
     expect(delivered.every((row) => row.sentAt?.getTime() === sentAt.getTime())).toBe(
@@ -341,7 +341,7 @@ describe("development simulation", () => {
     const simulated = await service.simulateForSchedule({
       lectureScheduleId: "lecture-electronics",
       organizationId: ORG_A,
-      types: [NotificationType.LECTURE_ADMIN_24H],
+      types: [NotificationType.LECTURE_INSTRUCTOR_24H],
       now: NOW,
     });
 

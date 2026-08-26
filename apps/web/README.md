@@ -1,32 +1,46 @@
-# React + TypeScript + Vite
+# Leornian web app
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+This is the React + Vite web client for the current Leornian Campus Assistant product.
 
-Currently, two official plugins are available:
+## Current scope
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+Implemented role experiences:
 
-## React Compiler
+- `SYSTEM_OWNER`
+- `UNIVERSITY_ADMIN`
+- `INSTRUCTOR`
+- `STUDENT`
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+The active web product does not include:
 
-## Expanding the Oxlint configuration
+- robot/device console
+- billing/payment pages
 
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
+## Main areas
 
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
+- authentication and registration
+- account/profile pages
+- owner console for organizations and users
+- university admin console for timetable, directory, sessions, exports
+- instructor console for teaching, sessions, materials, notifications
+- student-facing web routes currently present in this app
+
+## Commands
+
+```powershell
+cd apps/web
+npm install
+npm run dev
+npm test -- --run
+npx tsc -b
 ```
 
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+## Backend dependency
+
+The web app expects the backend API to be running and aligned with the latest Prisma schema and migrations.
+
+## Source of truth
+
+For overall product status and remaining work, see:
+
+- [../../docs/PROJECT_STATUS.md](../../docs/PROJECT_STATUS.md)

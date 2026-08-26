@@ -27,7 +27,7 @@ import type { CampusNotification } from '../../types/campus'
  *
  * ── Why staff have one at all ──────────────────────────────────────────────
  *
- * The reminder generator writes LECTURE_ADMIN_24H and LECTURE_ADMIN_30M rows
+ * The reminder generator writes LECTURE_INSTRUCTOR_24H and LECTURE_INSTRUCTOR_30M rows
  * addressed to instructors, not only to students. Those were being generated
  * and delivered with nowhere in the web client to read them, which is the kind
  * of gap that looks like a missing feature and is actually a missing page.
@@ -44,8 +44,8 @@ const TYPE_META: Record<
   string,
   { label: string; tone: 'primary' | 'accent' | 'success' | 'danger' | 'neutral' }
 > = {
-  LECTURE_ADMIN_24H: { label: 'Lecture tomorrow', tone: 'primary' },
-  LECTURE_ADMIN_30M: { label: 'Lecture soon', tone: 'accent' },
+  LECTURE_INSTRUCTOR_24H: { label: 'Lecture tomorrow', tone: 'primary' },
+  LECTURE_INSTRUCTOR_30M: { label: 'Lecture soon', tone: 'accent' },
   LECTURE_STUDENT_10M: { label: 'Student reminder', tone: 'neutral' },
   ACCOUNT_APPROVED: { label: 'Account approved', tone: 'success' },
   ACCOUNT_REJECTED: { label: 'Registration rejected', tone: 'danger' },
@@ -56,7 +56,7 @@ export function Notifications() {
   const toast = useToast()
   const queryClient = useQueryClient()
 
-  const isSuperAdmin = user?.role === 'UNIVERSITY_SUPER_ADMIN'
+  const isSuperAdmin = user?.role === 'UNIVERSITY_ADMIN'
 
   const {
     data: notifications = [],

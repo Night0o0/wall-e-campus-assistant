@@ -10,8 +10,10 @@ import {
   confirmEmailVerification,
   forgotPassword,
   resetPassword,
+  completeSupabaseRegistration,
 } from "../controllers/auth.controller.js";
 import { authenticate } from "../middleware/auth.middleware.js";
+import { authenticateSupabaseIdentity } from "../middleware/identity.middleware.js";
 import { validate } from "../middleware/validate.middleware.js";
 import {
   registerSchema,
@@ -21,6 +23,7 @@ import {
   confirmEmailVerificationSchema,
   forgotPasswordSchema,
   resetPasswordSchema,
+  completeSupabaseRegistrationSchema,
 } from "../types/auth.types.js";
 import {
   changePasswordSchema,
@@ -31,6 +34,12 @@ import { otpLimiter } from "../utils/rate-limit.js";
 const router = Router();
 
 router.post("/register", validate(registerSchema), register);
+router.post(
+  "/register/supabase",
+  authenticateSupabaseIdentity,
+  validate(completeSupabaseRegistrationSchema),
+  completeSupabaseRegistration
+);
 router.post("/login", validate(loginSchema), login);
 router.post("/mobile-login", validate(mobileLoginSchema), mobileLogin);
 

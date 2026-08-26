@@ -14,8 +14,8 @@ import {
  * per-role menu rather than all nine entries.
  *
  * A media query rather than a user-agent test: what matters is how much room
- * the menu has, not what kind of hardware is underneath. A robot screen, a
- * tablet in a lecture hall and a phone are the same problem.
+ * the menu has, not what kind of hardware is underneath. A tablet in a lecture
+ * hall and a phone are the same problem.
  */
 function useIsSmallScreen() {
   const [isSmall, setIsSmall] = useState(
@@ -81,7 +81,7 @@ export function Sidebar({
             <Bot className="h-6 w-6 text-white" />
           </div>
           <div className="flex-1">
-            <h1 className="text-lg font-bold text-slate-900">WALL-E</h1>
+            <h1 className="text-lg font-bold text-slate-900">Leornian</h1>
             <p className="text-xs text-slate-500">{consoleNameFor(user)}</p>
           </div>
           <button

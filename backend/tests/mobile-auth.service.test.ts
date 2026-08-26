@@ -11,9 +11,9 @@ class FakeUsers extends UserRepository {
     const role = email.startsWith("owner")
       ? "SYSTEM_OWNER"
       : email.startsWith("super")
-        ? "UNIVERSITY_SUPER_ADMIN"
+        ? "UNIVERSITY_ADMIN"
         : email.startsWith("admin")
-          ? "ADMIN"
+          ? "INSTRUCTOR"
           : "STUDENT";
 
     return {
@@ -40,8 +40,8 @@ describe("mobile account boundary", () => {
   });
 
   it.each([
-    ["super@campus.edu", "UNIVERSITY_SUPER_ADMIN"],
-    ["admin@campus.edu", "ADMIN"],
+    ["super@campus.edu", "UNIVERSITY_ADMIN"],
+    ["admin@campus.edu", "INSTRUCTOR"],
     ["student@campus.edu", "STUDENT"],
   ])("issues an app token to %s", async (email, role) => {
     const result = await new AuthService(new FakeUsers()).loginForMobile({

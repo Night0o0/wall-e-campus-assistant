@@ -1,5 +1,11 @@
 # Mobile Design Baseline
 
+> Historical note:
+>
+> This baseline includes earlier mobile role assumptions from before the
+> robot/payment scope reduction. Use it as visual reference only, not as the
+> current product definition.
+
 Reference for the design-preservation rule in `plan.txt`. Captured at the start
 of the remediation work, from the tree at commit `ad98995`
 (`feat(mobile): Flutter client for student, staff, and robot roles`).

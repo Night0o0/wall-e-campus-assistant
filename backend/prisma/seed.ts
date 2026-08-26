@@ -1,10 +1,8 @@
 import {
   PrismaClient,
   AttendanceStatus,
-  BillingCycle,
   DayOfWeek,
   SessionCloseReason,
-  SubscriptionStatus,
 } from "@prisma/client";
 import bcrypt from "bcrypt";
 import { partsInZone, zonedTimeToUtc } from "../src/utils/occurrence.util.js";
@@ -14,7 +12,7 @@ const prisma = new PrismaClient();
 
 /** Credentials for the seeded platform owner. Change these before deploying. */
 const OWNER = {
-  email: process.env.SEED_OWNER_EMAIL ?? "owner@wall-e.io",
+  email: process.env.SEED_OWNER_EMAIL ?? "owner@leornian.local",
   password: process.env.SEED_OWNER_PASSWORD ?? "Owner@12345",
   fullName: "Platform Owner",
   universityId: "OWNER001",
@@ -22,16 +20,6 @@ const OWNER = {
 
 /** Every seeded university account shares this password. */
 const DEMO_PASSWORD = "Demo@12345";
-
-/**
- * Credential for the seeded robot/tablet.
- *
- * A fixed value so QA can authenticate a simulated device without reading it
- * out of a provisioning response, exactly as DEMO_PASSWORD exists so nobody has
- * to reset a demo account. Real devices get 32 bytes of entropy from
- * DeviceService.provision, which is the only path that runs in production.
- */
-const DEMO_DEVICE_SECRET = "Robot@12345-Demo-Only";
 
 const MONTHS_OF_HISTORY = 8;
 
@@ -52,61 +40,6 @@ const randomInt = (min: number, max: number) =>
 const startOfMonth = (date: Date, offset = 0) =>
   new Date(date.getFullYear(), date.getMonth() + offset, 1);
 
-const PLANS = [
-  {
-    name: "Free",
-    description: "Evaluation tier for pilots and demos.",
-    monthlyPrice: 0,
-    yearlyPrice: 0,
-    maxUsers: 100,
-    maxRobots: 1,
-    maxCourses: 10,
-    features: ["QR attendance", "1 robot", "Community support"],
-  },
-  {
-    name: "Basic",
-    description: "For a single faculty getting started.",
-    monthlyPrice: 199,
-    yearlyPrice: 1990,
-    maxUsers: 2000,
-    maxRobots: 3,
-    maxCourses: 150,
-    features: ["QR attendance", "3 robots", "Email support", "Basic analytics"],
-  },
-  {
-    name: "Pro",
-    description: "For universities running campus-wide attendance.",
-    monthlyPrice: 499,
-    yearlyPrice: 4990,
-    maxUsers: 15000,
-    maxRobots: 10,
-    maxCourses: 800,
-    features: [
-      "Everything in Basic",
-      "10 robots",
-      "Advanced analytics",
-      "Priority support",
-      "Custom branding",
-    ],
-  },
-  {
-    name: "Enterprise",
-    description: "Unlimited scale with a dedicated success manager.",
-    monthlyPrice: 999,
-    yearlyPrice: 9990,
-    maxUsers: 100000,
-    maxRobots: 50,
-    maxCourses: 5000,
-    features: [
-      "Everything in Pro",
-      "50 robots",
-      "SSO / SAML",
-      "Dedicated manager",
-      "99.9% uptime SLA",
-    ],
-  },
-];
-
 const UNIVERSITIES = [
   {
     name: "New Cairo Technological University",
@@ -115,9 +48,6 @@ const UNIVERSITIES = [
     phone: "+20 2 1111 2222",
     website: "https://nctu.edu.eg",
     address: "New Cairo, Cairo Governorate",
-    plan: "Pro",
-    cycle: BillingCycle.MONTHLY,
-    status: SubscriptionStatus.ACTIVE,
     joinedMonthsAgo: 7,
     admins: 3,
     students: 24,
@@ -129,9 +59,6 @@ const UNIVERSITIES = [
     phone: "+20 2 3567 8901",
     website: "https://cu.edu.eg",
     address: "Giza, Cairo Governorate",
-    plan: "Enterprise",
-    cycle: BillingCycle.YEARLY,
-    status: SubscriptionStatus.ACTIVE,
     joinedMonthsAgo: 7,
     admins: 4,
     students: 30,
@@ -143,9 +70,6 @@ const UNIVERSITIES = [
     phone: "+20 3 9876 5432",
     website: "https://alexu.edu.eg",
     address: "Alexandria",
-    plan: "Pro",
-    cycle: BillingCycle.MONTHLY,
-    status: SubscriptionStatus.ACTIVE,
     joinedMonthsAgo: 6,
     admins: 3,
     students: 18,
@@ -157,9 +81,6 @@ const UNIVERSITIES = [
     phone: "+20 2 5555 1234",
     website: "https://asu.edu.eg",
     address: "Abbasia, Cairo",
-    plan: "Basic",
-    cycle: BillingCycle.MONTHLY,
-    status: SubscriptionStatus.ACTIVE,
     joinedMonthsAgo: 5,
     admins: 2,
     students: 15,
@@ -171,9 +92,6 @@ const UNIVERSITIES = [
     phone: "+20 50 2222 3333",
     website: "https://mans.edu.eg",
     address: "Mansoura, Dakahlia",
-    plan: "Enterprise",
-    cycle: BillingCycle.MONTHLY,
-    status: SubscriptionStatus.ACTIVE,
     joinedMonthsAgo: 4,
     admins: 3,
     students: 20,
@@ -185,9 +103,6 @@ const UNIVERSITIES = [
     phone: "+20 2 4444 9999",
     website: "https://helwan.edu.eg",
     address: "Helwan, Cairo",
-    plan: "Basic",
-    cycle: BillingCycle.MONTHLY,
-    status: SubscriptionStatus.TRIAL,
     joinedMonthsAgo: 0,
     admins: 1,
     students: 8,
@@ -199,9 +114,6 @@ const UNIVERSITIES = [
     phone: "+20 88 2411 111",
     website: "https://aun.edu.eg",
     address: "Assiut",
-    plan: "Basic",
-    cycle: BillingCycle.MONTHLY,
-    status: SubscriptionStatus.CANCELLED,
     joinedMonthsAgo: 5,
     admins: 1,
     students: 6,
@@ -213,9 +125,6 @@ const UNIVERSITIES = [
     phone: "+20 40 3344 556",
     website: "https://tanta.edu.eg",
     address: "Tanta, Gharbia",
-    plan: "Pro",
-    cycle: BillingCycle.MONTHLY,
-    status: SubscriptionStatus.PAST_DUE,
     joinedMonthsAgo: 3,
     admins: 2,
     students: 12,
@@ -290,7 +199,7 @@ const DEMO_COURSES = [
   { code: "MEC205", name: "Robotics Lab", credits: 2 },
 ];
 
-/** Instructors are ADMIN users; the academic title lives on AdminProfile.jobTitle. */
+/** Instructors are INSTRUCTOR users; the academic title lives on AdminProfile.jobTitle. */
 const DEMO_INSTRUCTORS = [
   {
     slug: "adel.mansour",
@@ -493,18 +402,10 @@ async function wipe() {
   await prisma.session.deleteMany();
   await prisma.lectureSchedule.deleteMany();
   await prisma.course.deleteMany();
-  // Before User and Organization: a device points at both.
-  await prisma.robotDevice.deleteMany();
-  await prisma.payment.deleteMany();
-  await prisma.invoice.deleteMany();
   await prisma.studentProfile.deleteMany();
   await prisma.adminProfile.deleteMany();
   await prisma.user.deleteMany();
-  // Break the Organization -> Subscription link before deleting either side.
-  await prisma.organization.updateMany({ data: { subscriptionId: null } });
-  await prisma.subscription.deleteMany();
   await prisma.organization.deleteMany();
-  await prisma.subscriptionPlan.deleteMany();
 }
 
 async function main() {
@@ -514,7 +415,7 @@ async function main() {
   // it, because the demo data is as unwelcome in production as the deletion is.
   assertSeedAllowed();
 
-  console.log("🌱 Seeding WALL-E platform data...\n");
+  console.log("🌱 Seeding Leornian platform data...\n");
 
   if (process.env.SEED_KEEP_EXISTING !== "true") {
     console.log("🧹 Clearing existing data (set SEED_KEEP_EXISTING=true to skip)");
@@ -526,53 +427,16 @@ async function main() {
   const passwordHash = await bcrypt.hash(DEMO_PASSWORD, 10);
   const ownerHash = await bcrypt.hash(OWNER.password, 10);
 
-  /* ------------------------------ Subscription plans ------------------------------ */
-
-  const plans = new Map<string, { id: string; monthlyPrice: number; yearlyPrice: number }>();
-
-  for (const plan of PLANS) {
-    const record = await prisma.subscriptionPlan.upsert({
-      where: { name: plan.name },
-      update: {
-        description: plan.description,
-        monthlyPrice: plan.monthlyPrice,
-        yearlyPrice: plan.yearlyPrice,
-        maxUsers: plan.maxUsers,
-        maxRobots: plan.maxRobots,
-        maxCourses: plan.maxCourses,
-        features: plan.features,
-      },
-      create: {
-        name: plan.name,
-        description: plan.description,
-        monthlyPrice: plan.monthlyPrice,
-        yearlyPrice: plan.yearlyPrice,
-        maxUsers: plan.maxUsers,
-        maxRobots: plan.maxRobots,
-        maxCourses: plan.maxCourses,
-        features: plan.features,
-      },
-    });
-
-    plans.set(plan.name, {
-      id: record.id,
-      monthlyPrice: plan.monthlyPrice,
-      yearlyPrice: plan.yearlyPrice,
-    });
-  }
-
-  console.log(`✅ ${PLANS.length} subscription plans`);
-
   /* ------------------------------- Platform owner -------------------------------- */
 
   const platformOrg = await prisma.organization.upsert({
-    where: { code: "WALLE" },
+    where: { code: "LEORNIAN" },
     update: {},
     create: {
-      name: "WALL-E Platform",
-      code: "WALLE",
-      email: "hello@wall-e.io",
-      website: "https://wall-e.io",
+      name: "Leornian Platform",
+      code: "LEORNIAN",
+      email: "hello@leornian.local",
+      website: "https://leornian.local",
       address: "Cairo, Egypt",
       createdAt: startOfMonth(now, -MONTHS_OF_HISTORY),
     },
@@ -599,11 +463,8 @@ async function main() {
 
   let userCounter = 0;
   let totalUsers = 0;
-  let totalInvoices = 0;
-  let totalPayments = 0;
   let totalCourses = 0;
   let totalSchedules = 0;
-  let totalDevices = 0;
   let totalSessions = 0;
 
   for (const university of UNIVERSITIES) {
@@ -616,34 +477,7 @@ async function main() {
       continue;
     }
 
-    const plan = plans.get(university.plan)!;
     const joinedAt = startOfMonth(now, -university.joinedMonthsAgo);
-    const isYearly = university.cycle === BillingCycle.YEARLY;
-
-    const periodStart = startOfMonth(now);
-    const periodEnd = isYearly
-      ? new Date(periodStart.getFullYear() + 1, periodStart.getMonth(), 1)
-      : startOfMonth(now, 1);
-
-    const subscription = await prisma.subscription.create({
-      data: {
-        planId: plan.id,
-        status: university.status,
-        billingCycle: university.cycle,
-        currentPeriodStart: periodStart,
-        currentPeriodEnd: periodEnd,
-        trialEndsAt:
-          university.status === SubscriptionStatus.TRIAL
-            ? new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000)
-            : null,
-        // Recent enough to land inside the trailing-30-day churn window.
-        cancelledAt:
-          university.status === SubscriptionStatus.CANCELLED
-            ? new Date(now.getTime() - 12 * 86400000)
-            : null,
-        createdAt: joinedAt,
-      },
-    });
 
     const organization = await prisma.organization.create({
       data: {
@@ -653,7 +487,6 @@ async function main() {
         phone: university.phone,
         website: university.website,
         address: university.address,
-        subscriptionId: subscription.id,
         createdAt: joinedAt,
       },
     });
@@ -668,7 +501,7 @@ async function main() {
         fullName: superAdminName,
         email: `${slugify(superAdminName)}@${university.code.toLowerCase()}.edu.eg`,
         passwordHash,
-        role: "UNIVERSITY_SUPER_ADMIN",
+        role: "UNIVERSITY_ADMIN",
         isVerified: true,
         organizationId: organization.id,
         createdAt: joinedAt,
@@ -694,7 +527,7 @@ async function main() {
           fullName,
           email: `${slugify(fullName)}.${index + 2}@${university.code.toLowerCase()}.edu.eg`,
           passwordHash,
-          role: "ADMIN",
+          role: "INSTRUCTOR",
           isVerified: true,
           isActive: random() > 0.1,
           organizationId: organization.id,
@@ -790,33 +623,7 @@ async function main() {
     if (DEMO_SCHEDULE_CODES.includes(university.code)) {
       const domain = university.code.toLowerCase();
 
-      /* --- The lecture-hall robot --- */
-
-      // Bound to B-204. The binding is the point of the seed: this device must
-      // resolve the B-204 session below and must not resolve the C-101 one.
-      // Seeded per demo university so cross-tenant isolation can be shown too —
-      // the NCTU device must never resolve a CU session either.
-      //
-      // It cannot open a session, and there is no flag that would let it: the
-      // approved lifecycle is that a human opens attendance and the device puts
-      // the code on screen.
-      await prisma.robotDevice.create({
-        data: {
-          organizationId: organization.id,
-          name: `${university.code} Lecture Hall Robot`,
-          room: "B-204",
-          // Email-shaped so the native app can use one email/password form for
-          // humans and devices while this remains a capability-limited device.
-          deviceKeyId: `robot@${domain}.edu.eg`,
-          secretHash: await bcrypt.hash(DEMO_DEVICE_SECRET, 10),
-          createdById: superAdmin.id,
-          createdAt: joinedAt,
-        },
-      });
-
-      totalDevices += 1;
-
-      // Instructors: ADMIN users, titled through AdminProfile.jobTitle.
+      // Instructors: INSTRUCTOR users, titled through AdminProfile.jobTitle.
       const instructors = [];
 
       for (const [index, instructor] of DEMO_INSTRUCTORS.entries()) {
@@ -827,7 +634,7 @@ async function main() {
               fullName: instructor.fullName,
               email: `${instructor.slug}@${domain}.edu.eg`,
               passwordHash,
-              role: "ADMIN",
+              role: "INSTRUCTOR",
               isVerified: true,
               organizationId: organization.id,
               createdAt: joinedAt,
@@ -903,14 +710,9 @@ async function main() {
         totalSchedules += 1;
       }
 
-      /* --- Two open sessions, so the room binding can be seen working --- */
+      /* --- Two open sessions, so room-scoped QR context can be seen working --- */
 
-      // One in the robot's room and one in another, both open at once. The
-      // seeded device must return exactly the first from
-      // GET /api/devices/me/sessions/active — if it ever returns both, the
-      // binding has stopped working and this seed is what says so.
-      //
-      // Opened by the lecture's own instructor, and each carries the room of
+      // Opened by each lecture's own instructor, and each carries the room of
       // the lecture behind it, exactly as SessionService stamps it.
       const openSessions: { course: string; section: string; instructor: number }[] = [
         { course: "MEC201", section: "A", instructor: 0 }, // B-204 — visible
@@ -942,7 +744,7 @@ async function main() {
           fullName: "Nour Reminder",
           email: `dev.reminder@${domain}.edu.eg`,
           passwordHash,
-          role: "ADMIN",
+          role: "INSTRUCTOR",
           isVerified: true,
           organizationId: organization.id,
           createdAt: joinedAt,
@@ -1148,100 +950,8 @@ async function main() {
       totalSessions += 1;
     }
 
-    /* --- Billing history: one invoice + payment per elapsed period --- */
-
-    if (university.status !== SubscriptionStatus.TRIAL) {
-      const amount = isYearly ? plan.yearlyPrice : plan.monthlyPrice;
-      const step = isYearly ? 12 : 1;
-
-      // Cancelled accounts stop billing the month they left.
-      const lastMonth =
-        university.status === SubscriptionStatus.CANCELLED
-          ? 1
-          : 0;
-
-      for (
-        let monthsAgo = university.joinedMonthsAgo;
-        monthsAgo >= lastMonth;
-        monthsAgo -= step
-      ) {
-        if (amount === 0) continue;
-
-        const issuedAt = startOfMonth(now, -monthsAgo);
-        const dueDate = new Date(issuedAt.getTime() + 14 * 86400000);
-        const isCurrentMonth = monthsAgo === 0;
-
-        // A past-due account has stopped paying, so its last two invoices are
-        // both outstanding.
-        const isPastDue =
-          university.status === SubscriptionStatus.PAST_DUE && monthsAgo <= 1;
-
-        // The current month is mostly collected already, with one account left
-        // awaiting payment so the invoice list shows every status.
-        const awaitingPayment =
-          isCurrentMonth && university.code === "ASU" && !isPastDue;
-        const unpaid = isPastDue || awaitingPayment;
-
-        // Current-month invoices settle a few days after issue, not on the due
-        // date, which would be in the future.
-        const paidAt = isCurrentMonth
-          ? new Date(issuedAt.getTime() + 3 * 86400000)
-          : dueDate;
-
-        const tax = Math.round(amount * 0.14 * 100) / 100;
-
-        const invoice = await prisma.invoice.create({
-          data: {
-            organizationId: organization.id,
-            invoiceNumber: `INV-${issuedAt.getFullYear()}-${String(
-              totalInvoices + 1
-            ).padStart(4, "0")}`,
-            amount,
-            tax,
-            total: amount + tax,
-            currency: "USD",
-            status: !unpaid
-              ? "PAID"
-              : dueDate < now
-                ? "OVERDUE"
-                : "SENT",
-            dueDate,
-            paidAt: unpaid ? null : paidAt,
-            notes: `${university.plan} plan — ${
-              isYearly ? "annual" : "monthly"
-            } billing`,
-            createdAt: issuedAt,
-          },
-        });
-
-        totalInvoices += 1;
-
-        if (!unpaid) {
-          await prisma.payment.create({
-            data: {
-              organizationId: organization.id,
-              invoiceId: invoice.id,
-              amount: amount + tax,
-              currency: "USD",
-              status: "COMPLETED",
-              paymentMethod: pick(["visa", "mastercard", "bank_transfer"]),
-              transactionId: `txn_${organization.code.toLowerCase()}_${monthsAgo}_${randomInt(
-                10000,
-                99999
-              )}`,
-              description: `Payment for invoice ${invoice.invoiceNumber}`,
-              paidAt,
-              createdAt: paidAt,
-            },
-          });
-
-          totalPayments += 1;
-        }
-      }
-    }
-
     console.log(
-      `✅ ${university.code.padEnd(5)} ${university.name} — ${university.plan}/${university.status} — super admin: ${superAdmin.email}`
+      `✅ ${university.code.padEnd(5)} ${university.name} — super admin: ${superAdmin.email}`
     );
   }
 
@@ -1250,10 +960,7 @@ async function main() {
   console.log(`Users         : ${totalUsers + 1}`);
   console.log(`Courses       : ${totalCourses}`);
   console.log(`Lectures      : ${totalSchedules}`);
-  console.log(`Robot devices : ${totalDevices}`);
   console.log(`Open sessions : ${totalSessions}`);
-  console.log(`Invoices      : ${totalInvoices}`);
-  console.log(`Payments      : ${totalPayments}`);
   console.log("────────────────────────────────────────");
   console.log("\n🔑 Sign in to the dashboard with:");
   console.log(`   Email    : ${OWNER.email}`);
@@ -1271,26 +978,10 @@ async function main() {
     console.log(`     student  (section A) : mechatronics.a@student.${domain}.edu.eg`);
     console.log(`     student  (section B) : mechatronics.b@student.${domain}.edu.eg`);
     console.log(`     student  (level 3)   : mechatronics.l3@student.${domain}.edu.eg`);
-    console.log(`     instructor (ADMIN)   : adel.mansour@${domain}.edu.eg`);
-    console.log(`     instructor (ADMIN)   : hana.zaki@${domain}.edu.eg`);
+    console.log(`     instructor (INSTRUCTOR)   : adel.mansour@${domain}.edu.eg`);
+    console.log(`     instructor (INSTRUCTOR)   : hana.zaki@${domain}.edu.eg`);
     console.log(`     instructor (reminder): dev.reminder@${domain}.edu.eg`);
   }
-
-  console.log("\n🤖 Robot/tablet demo devices (room B-204, QR display only):");
-
-  for (const code of DEMO_SCHEDULE_CODES) {
-    console.log(`   ${code}: email/device ID = robot@${code.toLowerCase()}.edu.eg`);
-  }
-
-  console.log(`   password/device secret : ${DEMO_DEVICE_SECRET}`);
-  console.log("   POST /api/devices/auth  { deviceKeyId, deviceSecret }");
-  console.log("   → then GET /api/devices/me/sessions/active with the token.");
-  console.log(
-    "   Two sessions are open per university: MEC201/A in B-204 and MEC203/A"
-  );
-  console.log(
-    "   in C-101. A B-204 robot must see the first and only the first."
-  );
 
   console.log("\n📋 Attendance lifecycle coverage (per demo university):");
   console.log("   GET /api/schedules/<MEC201 section A id>/attendance-log");
@@ -1300,10 +991,9 @@ async function main() {
   console.log("   MANUAL           : the sessions three weeks and this week");
   console.log("   NOT_RECORDED     : two weeks ago — no session was ever opened");
   console.log("   PENDING          : MEC202/A, open now with its lecture already over");
-  console.log("                      Deliberately NOT served to the robot and NOT scannable:");
+  console.log("                      Deliberately not scannable:");
   console.log("                      the window is enforced on read and on write, not by the");
-  console.log("                      worker. It shows up as expiredCount on the device");
-  console.log("                      endpoint until the sweep closes it as AUTO_STALE.");
+  console.log("                      the worker closes it as AUTO_STALE.");
   console.log("   The two open sessions above stay scannable for two hours from seeding —");
   console.log("   the length of their lecture. Re-run the seed to refresh the demo.");
 

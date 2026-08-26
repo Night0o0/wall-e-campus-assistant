@@ -1,5 +1,11 @@
 # QR cutover — closing the student QR hole
 
+> Archived note:
+>
+> This document belongs to an earlier robot/device-oriented project shape.
+> The active product scope no longer includes robot/device features, so do not
+> use this file as the execution plan for the current finish work.
+
 **Status: NOT DONE. `QR_ENDPOINT_STAFF_ONLY` is still `false`.**
 
 This is the one remaining security decision in the attendance path, and it needs

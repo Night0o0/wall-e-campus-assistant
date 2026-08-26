@@ -13,13 +13,12 @@ void main() {
     expect(find.text('Enter your email and password.'), findsOneWidget);
   });
 
-  testWidgets('routes all four supported account types from authenticated role',
+  testWidgets('routes supported human account types from authenticated role',
       (tester) async {
     final cases = {
       'super@campus.edu': 'Active students',
       'admin@campus.edu': 'Classes today',
       'student@campus.edu': 'My Timetable',
-      'robot@campus.edu': 'Attendance display',
     };
 
     for (final item in cases.entries) {
@@ -34,7 +33,7 @@ void main() {
   testWidgets('shows the backend web-only policy for system owner',
       (tester) async {
     await tester.pumpWidget(WallEApp(api: FakeCampusApi()));
-    await signIn(tester, 'owner@wall-e.io');
+    await signIn(tester, 'owner@leornian.local');
     expect(
       find.text('System owner accounts are available on the web console only'),
       findsOneWidget,

@@ -73,7 +73,7 @@ export const renderReminder = (
   // Teaching staff are told about "the lecture" they are giving; a student is
   // told about the subject they are going to.
   const subject =
-    context.audience === "ADMIN"
+    context.audience === "INSTRUCTOR"
       ? `${context.courseName} lecture`
       : context.courseName;
 

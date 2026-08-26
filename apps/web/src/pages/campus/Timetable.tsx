@@ -307,7 +307,7 @@ function LectureFormModal({
 
   const { data: staff } = useQuery({
     queryKey: ['campus', 'users', 'staff'],
-    queryFn: () => campusAdminApi.users({ role: 'ADMIN', limit: 100 }),
+    queryFn: () => campusAdminApi.users({ role: 'INSTRUCTOR', limit: 100 }),
     enabled: open,
   })
 

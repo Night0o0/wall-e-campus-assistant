@@ -10,8 +10,8 @@ import { attendedCount } from "../src/repositories/session.repository.js";
  * scanned (PRESENT or LATE), or the roll was called and they were not there
  * (ABSENT). An unfiltered `_count` over the relation therefore stopped meaning
  * "attendance" the moment the absence sweep was introduced and started meaning
- * "cohort size" — a lecture three people came to would have reported 24 on the
- * robot's screen, in the admin analytics and in the attendance log.
+ * "cohort size" — a lecture three people came to would have reported 24 in
+ * session lists, admin analytics and the attendance log.
  *
  * Nothing had failed yet only because no ABSENT row had ever been written. The
  * bug was armed by the lifecycle work, not caused by it.
@@ -53,13 +53,13 @@ describe("what an attendanceCount counts", () => {
   it("filters ABSENT out of every place the session repository counts attendance", () => {
     const source = repositorySource("session");
 
-    // Four projections carried the unfiltered count: findByOrganization,
-    // findActiveByOrganization (the robot's screen), findByCreator and
-    // findByScheduleBetween (the attendance log). All four now go through the
+    // Three projections carried the unfiltered count: findByOrganization,
+    // findByCreator and findByScheduleBetween (the attendance log). All three
+    // now go through the
     // one exported constant, so there is a single definition to change.
     const uses = source.match(/_count:\s*attendedCount/g) ?? [];
 
-    expect(uses).toHaveLength(4);
+    expect(uses).toHaveLength(3);
   });
 
   it("filters ABSENT out of the admin analytics, counts and unique students alike", () => {

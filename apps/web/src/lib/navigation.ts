@@ -1,24 +1,18 @@
 import {
   Bell,
-  Bot,
   Building2,
   CalendarDays,
-  CreditCard,
   FileText,
   FolderOpen,
   GraduationCap,
   LayoutDashboard,
-  Layers,
   Library,
   MonitorPlay,
-  Radio,
   Settings,
-  TrendingUp,
   UserCheck,
   Users,
   type LucideIcon,
 } from 'lucide-react'
-import { billingEnabled } from './features'
 import type { AuthUser } from '../types/api'
 
 /**
@@ -53,8 +47,6 @@ export interface NavItem {
   end?: boolean
   /** Appears in the reduced navigation shown on small screens. */
   mobile?: boolean
-  /** Hidden entirely when the billing feature flag is off. */
-  billing?: boolean
 }
 
 /**
@@ -63,13 +55,8 @@ export interface NavItem {
  */
 const SYSTEM_OWNER_NAV: NavItem[] = [
   { name: 'Dashboard', href: '/', icon: LayoutDashboard, end: true, mobile: true },
-  { name: 'Revenue', href: '/revenue', icon: TrendingUp, billing: true },
   { name: 'Organizations', href: '/organizations', icon: Building2, mobile: true },
   { name: 'Users', href: '/users', icon: Users, mobile: true },
-  { name: 'Subscriptions', href: '/subscriptions', icon: CreditCard, billing: true },
-  { name: 'Plans', href: '/plans', icon: Layers, billing: true },
-  { name: 'Invoices', href: '/invoices', icon: FileText, billing: true },
-  { name: 'Robots', href: '/robots', icon: Bot, mobile: true },
   { name: 'Settings', href: '/settings', icon: Settings },
 ]
 
@@ -98,8 +85,8 @@ const ADMIN_NAV: NavItem[] = [
  * The university administrator. Nine pages on a desktop, four on a phone.
  *
  * The phone set is what an administrator opens away from their desk: is
- * everything running, who is waiting for approval, and is that robot in B-204
- * still alive. Timetable CRUD, course CRUD and exports are desk work and are
+ * everything running and who is waiting for approval. Timetable CRUD, course
+ * CRUD and exports are desk work and are
  * deliberately absent from the small-screen menu.
  */
 const SUPER_ADMIN_NAV: NavItem[] = [
@@ -113,25 +100,31 @@ const SUPER_ADMIN_NAV: NavItem[] = [
   // bottleneck for the whole university at the start of term.
   { name: 'Pending Students', href: '/pending-students', icon: UserCheck, mobile: true },
   { name: 'Course Material', href: '/materials', icon: FolderOpen },
-  { name: 'Robot Devices', href: '/devices', icon: Radio, mobile: true },
   { name: 'Exports', href: '/exports', icon: FileText },
   { name: 'Notifications', href: '/notifications', icon: Bell },
   { name: 'Account', href: '/account', icon: Settings },
 ]
 
+const STUDENT_NAV: NavItem[] = [
+  { name: 'Dashboard', href: '/', icon: LayoutDashboard, end: true, mobile: true },
+  { name: 'Assignments', href: '/assignments', icon: FileText, mobile: true },
+  { name: 'Account', href: '/account', icon: Settings, mobile: true },
+]
+
 const NAV_BY_ROLE: Record<string, NavItem[]> = {
   SYSTEM_OWNER: SYSTEM_OWNER_NAV,
-  ADMIN: ADMIN_NAV,
-  UNIVERSITY_SUPER_ADMIN: SUPER_ADMIN_NAV,
+  INSTRUCTOR: ADMIN_NAV,
+  UNIVERSITY_ADMIN: SUPER_ADMIN_NAV,
+  DEPARTMENT_ADMIN: SUPER_ADMIN_NAV.filter(
+    (item) => item.href !== '/exports'
+  ),
+  STUDENT: STUDENT_NAV,
 }
 
-/** What this user's menu contains, with billing-only entries already dropped. */
+/** What this user's menu contains. */
 export function navigationFor(user: AuthUser | null): NavItem[] {
   if (!user) return []
-
-  return (NAV_BY_ROLE[user.role] ?? []).filter(
-    (item) => billingEnabled || !item.billing
-  )
+  return NAV_BY_ROLE[user.role] ?? []
 }
 
 /** The reduced small-screen menu. Never empty while the full menu is not. */
@@ -144,15 +137,19 @@ export function mobileNavigationFor(user: AuthUser | null): NavItem[] {
   return mobile.length > 0 ? mobile : all
 }
 
-/** What this console calls itself, under the WALL-E wordmark. */
+/** What this console calls itself, under the Leornian wordmark. */
 export function consoleNameFor(user: AuthUser | null): string {
   switch (user?.role) {
     case 'SYSTEM_OWNER':
       return 'Platform Console'
-    case 'UNIVERSITY_SUPER_ADMIN':
+    case 'UNIVERSITY_ADMIN':
       return 'University Admin'
-    case 'ADMIN':
+    case 'DEPARTMENT_ADMIN':
+      return 'Department Admin'
+    case 'INSTRUCTOR':
       return 'Teaching Console'
+    case 'STUDENT':
+      return 'Student Portal'
     default:
       return 'Campus Assistant'
   }
@@ -161,15 +158,14 @@ export function consoleNameFor(user: AuthUser | null): string {
 /**
  * Where a role lands after signing in.
  *
- * STUDENT is absent on purpose. There is no student web client — students use
- * the Flutter app — so a student who signs in here is shown an explanation
- * rather than being redirected somewhere that would 403 on every request.
+ * Every human role has an explicit landing route.
  */
 export function homeRouteFor(role: string): string {
   switch (role) {
-    case 'ADMIN':
+    case 'INSTRUCTOR':
       return '/teaching'
-    case 'UNIVERSITY_SUPER_ADMIN':
+    case 'UNIVERSITY_ADMIN':
+    case 'DEPARTMENT_ADMIN':
     case 'SYSTEM_OWNER':
       return '/'
     default:

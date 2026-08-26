@@ -73,7 +73,7 @@ const driveUrlField = z
  *
  * The explicit form exists for a super admin, who administers the whole
  * university and may legitimately publish for a cohort they do not teach. It is
- * rejected for a plain ADMIN inside the service — see CourseMaterialService.
+ * rejected for a plain INSTRUCTOR inside the service — see CourseMaterialService.
  */
 const explicitCohort = z.object({
   faculty: z.string().trim().min(2).max(100),
@@ -140,7 +140,7 @@ export const materialQuerySchema = z.object({
   /**
    * List only links published by this person.
    *
-   * Not settable by an ADMIN through the query string - the service overrides
+   * Not settable by an INSTRUCTOR through the query string - the service overrides
    * it from the authenticated actor. Present here so a super admin can narrow
    * to one publisher deliberately.
    */

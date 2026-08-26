@@ -119,7 +119,7 @@ export class MaterialService {
    *
    * WHO you see is decided here, from the token, not from the query string.
    *
-   *   ADMIN    only links they published. The page calls this "the links you
+   *   INSTRUCTOR    only links they published. The page calls this "the links you
    *            publish" and it now is. Before, the service passed the query
    *            straight through with no addedById filter, so an instructor saw
    *            every link in the university and got Edit and Withdraw buttons
@@ -127,15 +127,15 @@ export class MaterialService {
    *            (D-6).
    *
    *   SUPER    the whole university, which IS their job. They may narrow to one
-   *   ADMIN    publisher by passing addedById deliberately.
+   *   INSTRUCTOR    publisher by passing addedById deliberately.
    *
-   * The override is applied LAST and unconditionally for an ADMIN, so a
+   * The override is applied LAST and unconditionally for an INSTRUCTOR, so a
    * hand-crafted ?addedById= cannot widen the scope - the same construction the
    * tenant clause uses.
    */
   async list(query: MaterialQuery, actor: MaterialActor) {
     const scoped =
-      actor.role === "ADMIN" ? { ...query, addedById: actor.id } : query;
+      actor.role === "INSTRUCTOR" ? { ...query, addedById: actor.id } : query;
 
     return this.materials.findManyInOrganization(actor.organizationId, scoped);
   }
@@ -148,10 +148,10 @@ export class MaterialService {
    *
    *   * `scheduleId` — the ordinary path. The address is copied off one of the
    *     instructor's own lectures, which simultaneously proves they teach the
-   *     cohort. This is the only path open to a plain ADMIN.
+   *     cohort. This is the only path open to a plain INSTRUCTOR.
    *
    *   * `cohort` — an explicit address, for a super admin publishing on behalf
-   *     of the university. Refused for an ADMIN, because it is exactly the
+   *     of the university. Refused for an INSTRUCTOR, because it is exactly the
    *     parameter through which an instructor could address a year they have
    *     nothing to do with.
    */
@@ -212,7 +212,7 @@ export class MaterialService {
       );
     }
 
-    if (actor.role === "ADMIN" && schedule.instructorId !== actor.id) {
+    if (actor.role === "INSTRUCTOR" && schedule.instructorId !== actor.id) {
       // Same wording as a missing schedule would produce, so this cannot be
       // used to discover which lectures exist.
       throw notFound("Schedule not found");
@@ -231,7 +231,7 @@ export class MaterialService {
     actor: MaterialActor,
     cohort: NonNullable<CreateMaterialInput["cohort"]>
   ) {
-    if (actor.role === "ADMIN") {
+    if (actor.role === "INSTRUCTOR") {
       throw forbidden(
         "Publish against one of your own lectures — an instructor cannot address a cohort directly"
       );
@@ -249,7 +249,7 @@ export class MaterialService {
   /**
    * A link the caller may change.
    *
-   * An ADMIN owns what they published and nothing else — one instructor must
+   * An INSTRUCTOR owns what they published and nothing else — one instructor must
    * not be able to re-point another's folder. A super admin administers the
    * university's material as a whole.
    */
@@ -263,7 +263,7 @@ export class MaterialService {
       throw notFound("Material not found");
     }
 
-    if (actor.role === "ADMIN" && material.addedById !== actor.id) {
+    if (actor.role === "INSTRUCTOR" && material.addedById !== actor.id) {
       throw forbidden("You can only change material you published");
     }
 

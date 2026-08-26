@@ -1,5 +1,15 @@
 # WALL-E Campus Assistant
 
+> Historical note:
+>
+> This document captures the original concept/specification phase.
+> It is not the source of truth for the current implemented product shape.
+> For the current system, use:
+>
+> - `README.md`
+> - `docs/PROJECT_STATUS.md`
+> - `docs/Architecture.md`
+
 ## 1. Project Overview
 
 WALL-E Campus Assistant is a smart robot designed to assist students and faculty members inside the university campus.

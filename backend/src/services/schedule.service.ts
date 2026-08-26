@@ -151,10 +151,10 @@ export class ScheduleService {
   async getSchedule(id: string, actor: ScheduleActor) {
     const schedule = await this.loadInOrg(id, actor.organizationId);
 
-    // An ADMIN reads only their own lectures, and a student only lectures
+    // An INSTRUCTOR reads only their own lectures, and a student only lectures
     // addressed to their cohort. Both get a 404 rather than a 403, so the
     // endpoint cannot be used to enumerate somebody else's timetable.
-    if (actor.role === "ADMIN" && schedule.instructorId !== actor.id) {
+    if (actor.role === "INSTRUCTOR" && schedule.instructorId !== actor.id) {
       throw notFound("Schedule not found");
     }
 
@@ -192,7 +192,7 @@ export class ScheduleService {
     };
   }
 
-  /** The authenticated ADMIN's own teaching timetable. */
+  /** The authenticated INSTRUCTOR's own teaching timetable. */
   async getInstructorTimetable(actor: ScheduleActor) {
     const schedules = await scheduleRepo.findTimetable({
       organizationId: actor.organizationId,
@@ -233,7 +233,7 @@ export class ScheduleService {
       };
     }
 
-    if (actor.role === "ADMIN") {
+    if (actor.role === "INSTRUCTOR") {
       // Forced last: an instructorId in the query string cannot override it.
       return {
         ...base,
@@ -333,10 +333,10 @@ export class ScheduleService {
       throw badRequest("Instructor not found in this organization");
     }
 
-    // There is no professor role in this system: teaching staff are ADMIN
+    // There is no professor role in this system: teaching staff are INSTRUCTOR
     // users, and their title lives on AdminProfile.jobTitle.
-    if (instructor.role !== "ADMIN") {
-      throw badRequest("The assigned instructor must be a user with the ADMIN role");
+    if (instructor.role !== "INSTRUCTOR") {
+      throw badRequest("The assigned instructor must be a user with the INSTRUCTOR role");
     }
 
     if (!instructor.isActive) {

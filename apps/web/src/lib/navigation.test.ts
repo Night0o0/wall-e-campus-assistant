@@ -11,6 +11,7 @@ const account = (role: UserRole): AuthUser => ({
   fullName: 'Test User',
   email: 'test@example.edu',
   role,
+  accountStatus: 'ACTIVE',
   isVerified: true,
   isActive: true,
   organizationId: 'org-1',
@@ -19,15 +20,16 @@ const account = (role: UserRole): AuthUser => ({
 describe('role navigation', () => {
   it.each([
     ['SYSTEM_OWNER', '/'],
-    ['UNIVERSITY_SUPER_ADMIN', '/'],
-    ['ADMIN', '/teaching'],
+    ['UNIVERSITY_ADMIN', '/'],
+    ['DEPARTMENT_ADMIN', '/'],
+    ['INSTRUCTOR', '/teaching'],
     ['STUDENT', '/'],
   ] as const)('sends %s to %s after login', (role, path) => {
     expect(homeRouteFor(role)).toBe(path)
   })
 
   it('gives teaching staff only teaching-console links', () => {
-    const paths = navigationFor(account('ADMIN')).map((item) => item.href)
+    const paths = navigationFor(account('INSTRUCTOR')).map((item) => item.href)
 
     expect(paths).toContain('/teaching')
     expect(paths).toContain('/account')
@@ -35,7 +37,8 @@ describe('role navigation', () => {
     expect(paths).not.toContain('/organizations')
   })
 
-  it('does not give students a web-console menu', () => {
-    expect(navigationFor(account('STUDENT'))).toEqual([])
+  it('gives students only their portal links', () => {
+    const paths = navigationFor(account('STUDENT')).map((item) => item.href)
+    expect(paths).toEqual(['/', '/assignments', '/account'])
   })
 })

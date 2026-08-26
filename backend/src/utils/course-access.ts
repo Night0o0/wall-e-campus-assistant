@@ -3,7 +3,7 @@
  *
  * This exists because the same question was being answered in two places with
  * two different answers. StudentExportService worked out that a
- * UNIVERSITY_SUPER_ADMIN administers their whole university and wrote the role
+ * UNIVERSITY_ADMIN administers their whole university and wrote the role
  * branch; CourseService was written earlier, compared `createdById` to the
  * caller with no role branch at all, and so refused a super admin the edit and
  * delete that PAGES_AND_GAPS.txt promises them ("Create / edit / delete any
@@ -24,7 +24,7 @@
  */
 
 /** Roles that administer a whole university's catalogue. */
-const CATALOGUE_ADMINISTRATORS = new Set(["UNIVERSITY_SUPER_ADMIN", "SYSTEM_OWNER"]);
+const CATALOGUE_ADMINISTRATORS = new Set(["UNIVERSITY_ADMIN", "SYSTEM_OWNER"]);
 
 /** The caller, reduced to what an authorization decision actually needs. */
 export interface CourseActor {
@@ -50,9 +50,9 @@ export interface CourseForAccess {
  * Assumes the course has already been confirmed to be in the actor's
  * organization.
  *
- *   - UNIVERSITY_SUPER_ADMIN and SYSTEM_OWNER: any course. This is the
+ *   - UNIVERSITY_ADMIN and SYSTEM_OWNER: any course. This is the
  *     documented rule and the defect this module was written to fix.
- *   - ADMIN: only a course they created. Teaching a course is deliberately NOT
+ *   - INSTRUCTOR: only a course they created. Teaching a course is deliberately NOT
  *     enough to delete it — an instructor assigned to one lecture of a shared
  *     subject should not be able to remove the subject from the catalogue.
  *     Note this is narrower than canExportCourse on purpose.
@@ -73,8 +73,8 @@ export const canManageCourse = (
  * Assumes the course has already been confirmed to be in the actor's
  * organization.
  *
- *   - UNIVERSITY_SUPER_ADMIN and SYSTEM_OWNER: any course.
- *   - ADMIN: a course they created, OR one they instruct an active lecture of.
+ *   - UNIVERSITY_ADMIN and SYSTEM_OWNER: any course.
+ *   - INSTRUCTOR: a course they created, OR one they instruct an active lecture of.
  *
  * Wider than canManageCourse because reading your own students' names is not
  * the same act as deleting the subject they are enrolled in.

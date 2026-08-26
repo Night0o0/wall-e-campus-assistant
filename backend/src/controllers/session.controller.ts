@@ -24,7 +24,7 @@ export const createSession = asyncHandler(
 
 /**
  * The whole actor, not just the id: who is asking decides how wide the list is.
- * An ADMIN gets the sessions they opened, a super admin gets their university —
+ * An INSTRUCTOR gets the sessions they opened, a super admin gets their university —
  * the same rule `getSession` below applies to one session. See
  * utils/session-access.ts.
  */
@@ -46,7 +46,7 @@ export const getMySessions = asyncHandler(
 );
 
 // The whole actor, not just the tenant: who is asking decides which sessions
-// they may see, and an ADMIN sees the ones they opened. See utils/session-access.ts.
+// they may see, and an INSTRUCTOR sees the ones they opened. See utils/session-access.ts.
 export const getSession = asyncHandler(async (req: Request, res: Response) => {
   const session = await sessionService.getSession(
     req.params.id as string,

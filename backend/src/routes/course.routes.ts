@@ -19,14 +19,14 @@ const router = Router();
 router.use(authenticate);
 
 // Create a new course (Admin only)
-router.post("/", requireRole('ADMIN', 'UNIVERSITY_SUPER_ADMIN', 'SYSTEM_OWNER'), validate(createCourseSchema), createCourse);
+router.post("/", requireRole('INSTRUCTOR', 'UNIVERSITY_ADMIN', 'SYSTEM_OWNER'), validate(createCourseSchema), createCourse);
 
 // Get all courses in the organization (All authenticated users), optionally
 // narrowed by department, semester, academic level or a free-text search.
 router.get("/", validateQuery(courseQuerySchema), getOrgCourses);
 
 // Get courses created by the current user (Admin only)
-router.get("/my", requireRole('ADMIN', 'UNIVERSITY_SUPER_ADMIN', 'SYSTEM_OWNER'), getMyCourses);
+router.get("/my", requireRole('INSTRUCTOR', 'UNIVERSITY_ADMIN', 'SYSTEM_OWNER'), getMyCourses);
 
 // Get a single course by ID
 router.get("/:id", getCourse);
@@ -36,19 +36,19 @@ router.get("/:id/sessions", getCourseWithSessions);
 
 // Export the course's student roster as .xlsx. Staff only — a student cannot
 // download their classmates' details. Which courses a given member of staff may
-// export is decided inside StudentExportService, not here: an ADMIN gets only
+// export is decided inside StudentExportService, not here: an INSTRUCTOR gets only
 // the courses they are assigned to, and every role is confined to its own
 // organization.
 router.get(
     "/:id/students/export",
-    requireRole('ADMIN', 'UNIVERSITY_SUPER_ADMIN', 'SYSTEM_OWNER'),
+    requireRole('INSTRUCTOR', 'UNIVERSITY_ADMIN', 'SYSTEM_OWNER'),
     exportCourseStudents
 );
 
 // Update a course (Admin who created it)
-router.patch("/:id", requireRole('ADMIN', 'UNIVERSITY_SUPER_ADMIN', 'SYSTEM_OWNER'), validate(updateCourseSchema), updateCourse);
+router.patch("/:id", requireRole('INSTRUCTOR', 'UNIVERSITY_ADMIN', 'SYSTEM_OWNER'), validate(updateCourseSchema), updateCourse);
 
 // Delete a course (Admin who created it)
-router.delete("/:id", requireRole('ADMIN', 'UNIVERSITY_SUPER_ADMIN', 'SYSTEM_OWNER'), deleteCourse);
+router.delete("/:id", requireRole('INSTRUCTOR', 'UNIVERSITY_ADMIN', 'SYSTEM_OWNER'), deleteCourse);
 
 export default router;

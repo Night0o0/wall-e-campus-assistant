@@ -191,6 +191,52 @@ export class AuthService {
       passwordHash,
       role: "STUDENT",
       organizationId: organization.id,
+      accountStatus: "PENDING",
+    });
+  }
+
+  /**
+   * Finish student registration after Supabase has verified the identity.
+   * Role and email are never accepted from the form: the public flow can only
+   * create a pending STUDENT and the email comes from the signed access token.
+   */
+  async completeSupabaseRegistration(
+    identity: { authUserId: string; email: string },
+    data: {
+      universityId: string;
+      fullName: string;
+      organizationCode: string;
+    }
+  ) {
+    const existingIdentity = await this.userRepository.findByAuthUserId(
+      identity.authUserId
+    );
+    if (existingIdentity) return existingIdentity;
+
+    const organization = await this.userRepository.findOrganizationByCode(
+      data.organizationCode
+    );
+
+    if (!organization) throw notFound("Organization not found");
+
+    const [byEmail, byUniversityId] = await Promise.all([
+      this.userRepository.findByEmail(identity.email),
+      this.userRepository.findByUniversityId(data.universityId),
+    ]);
+
+    if (byEmail) throw conflict("Email already registered");
+    if (byUniversityId) throw conflict("University ID already registered");
+
+    return this.userRepository.create({
+      authUserId: identity.authUserId,
+      universityId: data.universityId,
+      fullName: data.fullName,
+      email: identity.email,
+      passwordHash: undefined,
+      role: "STUDENT",
+      organizationId: organization.id,
+      accountStatus: "PENDING",
+      isVerified: false,
     });
   }
 
@@ -267,6 +313,10 @@ export class AuthService {
       throw badRequest("This account cannot be recovered by email");
     }
 
+    if (!user.passwordHash) {
+      throw badRequest("This account password is managed by the identity provider");
+    }
+
     const isSamePassword = await bcrypt.compare(newPassword, user.passwordHash);
 
     if (isSamePassword) {
@@ -281,7 +331,7 @@ export class AuthService {
   async login(data: { email: string; password: string }) {
     const user = await this.userRepository.findByEmail(data.email);
 
-    if (!user) {
+    if (!user || !user.passwordHash) {
       throw unauthorized("Invalid email or password");
     }
 
@@ -312,9 +362,11 @@ export class AuthService {
         fullName: user.fullName,
         email: user.email,
         role: user.role,
+        accountStatus: user.accountStatus,
         isVerified: user.isVerified,
         isActive: user.isActive,
         organizationId: user.organizationId,
+        departmentId: user.departmentId,
       },
     };
   }
@@ -351,9 +403,11 @@ export class AuthService {
       fullName: user.fullName,
       email: user.email,
       role: user.role,
+      accountStatus: user.accountStatus,
       isVerified: user.isVerified,
       isActive: user.isActive,
       organizationId: user.organizationId,
+      departmentId: user.departmentId,
       organization: user.organization,
       createdAt: user.createdAt,
     };
@@ -368,6 +422,10 @@ export class AuthService {
 
     if (!user) {
       throw notFound("User not found");
+    }
+
+    if (!user.passwordHash) {
+      throw badRequest("This account password is managed by the identity provider");
     }
 
     const isPasswordValid = await bcrypt.compare(
@@ -410,9 +468,11 @@ export class AuthService {
       fullName: user.fullName,
       email: user.email,
       role: user.role,
+      accountStatus: user.accountStatus,
       isVerified: user.isVerified,
       isActive: user.isActive,
       organizationId: user.organizationId,
+      departmentId: user.departmentId,
     };
   }
 }

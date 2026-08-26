@@ -3,13 +3,16 @@ import { paginationSchema } from "../utils/pagination.js";
 
 const roleEnum = z.enum([
   "SYSTEM_OWNER",
-  "UNIVERSITY_SUPER_ADMIN",
-  "ADMIN",
+  "UNIVERSITY_ADMIN",
+  "DEPARTMENT_ADMIN",
+  "INSTRUCTOR",
   "STUDENT",
 ]);
 
 const carriesAdminProfile = (role: z.infer<typeof roleEnum>) =>
-  role === "ADMIN" || role === "UNIVERSITY_SUPER_ADMIN";
+  role === "INSTRUCTOR" ||
+  role === "DEPARTMENT_ADMIN" ||
+  role === "UNIVERSITY_ADMIN";
 
 export const createUserSchema = z
   .object({
@@ -17,14 +20,17 @@ export const createUserSchema = z
     fullName: z.string().min(3, "Full name must be at least 3 characters").max(120),
     email: z.string().email(),
     password: z.string().min(8, "Password must be at least 8 characters"),
-    role: roleEnum.default("ADMIN"),
+    role: roleEnum.default("INSTRUCTOR"),
     organizationId: z.string().uuid("A valid organization is required"),
+    departmentId: z.string().uuid("A valid department is required").optional(),
     isVerified: z.boolean().default(false),
     jobTitle: z.string().trim().min(2).max(100).optional(),
     office: z.string().trim().max(100).optional(),
   })
   .superRefine((data, ctx) => {
     const isCampusStaff = carriesAdminProfile(data.role);
+    const isDepartmentScoped =
+      data.role === "INSTRUCTOR" || data.role === "DEPARTMENT_ADMIN";
 
     if (isCampusStaff && !data.jobTitle) {
       ctx.addIssue({
@@ -41,6 +47,14 @@ export const createUserSchema = z
         message: "jobTitle and office only apply to university staff",
       });
     }
+
+    if (isDepartmentScoped && !data.departmentId) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["departmentId"],
+        message: "departmentId is required for department staff",
+      });
+    }
   });
 
 export const updateUserSchema = z
@@ -50,6 +64,7 @@ export const updateUserSchema = z
     isVerified: z.boolean().optional(),
     isActive: z.boolean().optional(),
     organizationId: z.string().uuid().optional(),
+    departmentId: z.string().uuid().nullable().optional(),
   })
   .strict("Role and university ID cannot be changed after account creation")
   .refine((data) => Object.keys(data).length > 0, {

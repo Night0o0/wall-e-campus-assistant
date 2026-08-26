@@ -8,6 +8,7 @@ const auth = vi.hoisted(() => ({
     id: string
     email: string
     role: string
+    accountStatus: 'ACTIVE' | 'PENDING'
   },
   isLoading: false,
   logout: vi.fn(),
@@ -39,9 +40,9 @@ function renderGate(roles: string[]) {
 
 describe('role route guard', () => {
   it('renders a page for an admitted role', () => {
-    auth.user = { id: 'admin-1', email: 'admin@example.edu', role: 'ADMIN' }
+    auth.user = { id: 'admin-1', email: 'admin@example.edu', role: 'INSTRUCTOR', accountStatus: 'ACTIVE' }
 
-    renderGate(['ADMIN'])
+    renderGate(['INSTRUCTOR'])
 
     expect(screen.getByText('Protected page')).toBeTruthy()
   })
@@ -50,28 +51,43 @@ describe('role route guard', () => {
     auth.user = {
       id: 'super-1',
       email: 'super@example.edu',
-      role: 'UNIVERSITY_SUPER_ADMIN',
+      role: 'UNIVERSITY_ADMIN',
+      accountStatus: 'ACTIVE',
     }
 
-    renderGate(['ADMIN'])
+    renderGate(['INSTRUCTOR'])
 
     expect(screen.getByText('You cannot open this page')).toBeTruthy()
   })
 
-  it('sends students to the mobile-app notice', () => {
+  it('keeps pending students outside academic routes', () => {
     auth.user = {
       id: 'student-1',
       email: 'student@example.edu',
       role: 'STUDENT',
+      accountStatus: 'PENDING',
     }
 
-    renderGate(['ADMIN'])
+    renderGate(['INSTRUCTOR'])
 
-    expect(screen.getByText('Use the mobile app')).toBeTruthy()
+    expect(screen.getByText('Waiting for university approval')).toBeTruthy()
+  })
+
+  it('admits an approved student to student routes', () => {
+    auth.user = {
+      id: 'student-1',
+      email: 'student@example.edu',
+      role: 'STUDENT',
+      accountStatus: 'ACTIVE',
+    }
+
+    renderGate(['STUDENT'])
+
+    expect(screen.getByText('Protected page')).toBeTruthy()
   })
 
   it('redirects an anonymous visitor to login', () => {
-    renderGate(['ADMIN'])
+    renderGate(['INSTRUCTOR'])
 
     expect(screen.getByText('Login screen')).toBeTruthy()
   })

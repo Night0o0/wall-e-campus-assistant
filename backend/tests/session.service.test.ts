@@ -23,19 +23,19 @@ import { FakeScheduleRepository, makeSchedule } from "./helpers/schedule-fakes.j
 
 const INSTRUCTOR = {
   id: "instructor-1",
-  role: "ADMIN",
+  role: "INSTRUCTOR",
   organizationId: ORG_A,
 };
 
 const OTHER_INSTRUCTOR = {
   id: "instructor-2",
-  role: "ADMIN",
+  role: "INSTRUCTOR",
   organizationId: ORG_A,
 };
 
 const SUPER_ADMIN = {
   id: "admin-1",
-  role: "UNIVERSITY_SUPER_ADMIN",
+  role: "UNIVERSITY_ADMIN",
   organizationId: ORG_A,
 };
 
@@ -513,20 +513,6 @@ describe("who may see one session", () => {
     }
   });
 
-  it("keeps the device path on its own entry point, with no role in play", async () => {
-    // A robot has no UserRole, so the instructor rule has nothing to say about
-    // it. It is scoped by the organization on its own row and nothing else —
-    // which is why it reaches a session it did not open.
-    const service = serviceOver(openNow());
-
-    await expect(
-      service.getQrTokenForDevice({ organizationId: ORG_A, room: null }, "session-1")
-    ).resolves.toMatchObject({ expiresIn: 30 });
-
-    await expect(
-      service.getQrTokenForDevice({ organizationId: ORG_B, room: null }, "session-1")
-    ).rejects.toMatchObject({ statusCode: 404 });
-  });
 });
 
 /* ------------- M1: the QR endpoint uses the one scannable rule ------------- */
@@ -544,14 +530,6 @@ describe("issuing a QR code for a session whose lecture has ended", () => {
       statusCode: 409,
       message: "This lecture has ended — attendance is no longer being taken",
     });
-  });
-
-  it("refuses on the device path too, from the same definition", async () => {
-    const service = serviceOver(ended());
-
-    await expect(
-      service.getQrTokenForDevice({ organizationId: ORG_A, room: null }, "session-1")
-    ).rejects.toMatchObject({ statusCode: 409 });
   });
 
   it("still refuses a closed session, as it always did", async () => {
@@ -630,64 +608,6 @@ describe("listing sessions: the list agrees with the single-session rule", () =>
 
       expect(listed.data.map((row) => row.id).sort()).toEqual(admitted.sort());
     }
-  });
-});
-
-/* ------------- The room binding is enforced when MINTING, not just listing --- */
-
-describe("getQrTokenForDevice: the room binding is an authorization check", () => {
-  /**
-   * The bug this locks down.
-   *
-   * The binding used to be enforced only by the SQL behind the device's session
-   * list. This method checked the organization and nothing else, so a device
-   * bound to B-204 could not discover a session in C-101 yet could mint a valid
-   * code for it given the id — which is in the payload of every code that
-   * device has ever displayed, readable without any secret.
-   */
-  const inRoom = (room: string | null) => openNow({ room });
-
-  it("mints for a device bound to the session's room", async () => {
-    const service = serviceOver(inRoom("B-204"));
-
-    await expect(
-      service.getQrTokenForDevice({ organizationId: ORG_A, room: "B-204" }, "session-1")
-    ).resolves.toMatchObject({ expiresIn: 30 });
-  });
-
-  it("matches the room case-insensitively", async () => {
-    const service = serviceOver(inRoom("B-204"));
-
-    await expect(
-      service.getQrTokenForDevice({ organizationId: ORG_A, room: "b-204" }, "session-1")
-    ).resolves.toMatchObject({ expiresIn: 30 });
-  });
-
-  it("REFUSES a device bound to another room, even with the session id", async () => {
-    const service = serviceOver(inRoom("C-101"));
-
-    // 404 rather than 403: a 403 would confirm the id is real, which is exactly
-    // what a caller who may not act on it must not learn.
-    await expect(
-      service.getQrTokenForDevice({ organizationId: ORG_A, room: "B-204" }, "session-1")
-    ).rejects.toMatchObject({ statusCode: 404 });
-  });
-
-  it("still lets an unbound device serve any room in its university", async () => {
-    const service = serviceOver(inRoom("C-101"));
-
-    await expect(
-      service.getQrTokenForDevice({ organizationId: ORG_A, room: null }, "session-1")
-    ).resolves.toMatchObject({ expiresIn: 30 });
-  });
-
-  it("checks the tenant before the room, and no room match substitutes for it", async () => {
-    // Same room name, different university — two campuses may both have B-204.
-    const service = serviceOver(openNow({ organizationId: ORG_B, room: "B-204" }));
-
-    await expect(
-      service.getQrTokenForDevice({ organizationId: ORG_A, room: "B-204" }, "session-1")
-    ).rejects.toMatchObject({ statusCode: 404 });
   });
 });
 

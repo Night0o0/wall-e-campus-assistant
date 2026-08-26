@@ -36,8 +36,8 @@ import type { User } from '../types/api'
 const ROLE_OPTIONS = [
   { value: '', label: 'All roles' },
   { value: 'SYSTEM_OWNER', label: 'System Owner' },
-  { value: 'UNIVERSITY_SUPER_ADMIN', label: 'Super Admin' },
-  { value: 'ADMIN', label: 'Admin' },
+  { value: 'UNIVERSITY_ADMIN', label: 'Super Admin' },
+  { value: 'INSTRUCTOR', label: 'Admin' },
   { value: 'STUDENT', label: 'Student' },
 ]
 

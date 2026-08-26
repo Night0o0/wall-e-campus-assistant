@@ -15,7 +15,7 @@ vi.mock('../context/AuthContext', () => ({
 
 describe('multi-role login', () => {
   it('admits teaching staff and sends them to their teaching page', async () => {
-    login.mockResolvedValueOnce({ role: 'ADMIN' })
+    login.mockResolvedValueOnce({ role: 'INSTRUCTOR' })
 
     render(
       <MemoryRouter initialEntries={['/login']}>

@@ -155,7 +155,7 @@ describe("NOT_RECORDED vs PENDING vs ABSENT are structurally distinct", () => {
 
     const log = await service.occurrenceStates(
       "schedule-1",
-      { id: "instructor-1", role: "ADMIN", organizationId: ORG_A },
+      { id: "instructor-1", role: "INSTRUCTOR", organizationId: ORG_A },
       { weeks: 2, now: NOW }
     );
 
@@ -527,7 +527,7 @@ describe("the absence sweep", () => {
 describe("the attendance log distinguishes all four states", () => {
   const instructor = {
     id: "instructor-1",
-    role: "ADMIN",
+    role: "INSTRUCTOR",
     organizationId: ORG_A,
   };
 
@@ -592,7 +592,7 @@ describe("the attendance log distinguishes all four states", () => {
     await expect(
       service.occurrenceStates(
         "schedule-1",
-        { id: "instructor-2", role: "ADMIN", organizationId: ORG_A },
+        { id: "instructor-2", role: "INSTRUCTOR", organizationId: ORG_A },
         { now: NOW }
       )
     ).rejects.toMatchObject({ statusCode: 404 });

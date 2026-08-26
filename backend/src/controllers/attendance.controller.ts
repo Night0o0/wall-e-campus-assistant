@@ -27,7 +27,7 @@ export const scanAttendance = asyncHandler(
   }
 );
 
-// The whole actor, not just the tenant: an ADMIN is an instructor and reads the
+// The whole actor, not just the tenant: an INSTRUCTOR is an instructor and reads the
 // rosters of the sessions they opened. See utils/session-access.ts.
 export const getSessionAttendance = asyncHandler(
   async (req: Request, res: Response) => {

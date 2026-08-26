@@ -25,7 +25,7 @@ export class UserService {
     ]);
 
     const admins =
-      (byRole.ADMIN ?? 0) + (byRole.UNIVERSITY_SUPER_ADMIN ?? 0);
+      (byRole.INSTRUCTOR ?? 0) + (byRole.UNIVERSITY_ADMIN ?? 0);
 
     return {
       total: active + inactive,

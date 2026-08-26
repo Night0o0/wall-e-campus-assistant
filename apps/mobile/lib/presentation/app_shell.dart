@@ -29,7 +29,9 @@ class _AppShellState extends State<AppShell> {
         _logout,
       );
 
-  void _logout() {
+  Future<void> _logout() async {
+    await widget.api.logout();
+    if (!mounted) return;
     Navigator.of(context).pushAndRemoveUntil(
       MaterialPageRoute<void>(builder: (_) => LoginPage(api: widget.api)),
       (_) => false,
@@ -45,6 +47,14 @@ class _AppShellState extends State<AppShell> {
 
   @override
   Widget build(BuildContext context) {
+    if (widget.session.role == AccountRole.student &&
+        !widget.session.isVerified) {
+      return _PendingApproval(
+        name: widget.session.name,
+        onLogout: _logout,
+      );
+    }
+
     if (widget.session.role == AccountRole.student) {
       return StudentShell(
         api: widget.api,
@@ -83,6 +93,87 @@ class _AppShellState extends State<AppShell> {
                       destinations: _destinations,
                       selectedIndex: _index,
                       onSelect: (index) => setState(() => _index = index),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _PendingApproval extends StatelessWidget {
+  const _PendingApproval({required this.name, required this.onLogout});
+
+  final String name;
+  final VoidCallback onLogout;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: DecoratedBox(
+        decoration: const BoxDecoration(gradient: AppColors.backgroundGradient),
+        child: SafeArea(
+          child: Center(
+            child: Padding(
+              padding: const EdgeInsets.all(28),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 430),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const LeornianLogo(size: 72),
+                    const SizedBox(height: 28),
+                    Text(
+                      'Thanks, ${name.trim().isEmpty ? 'student' : name.split(' ').first}',
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        color: AppColors.ink,
+                        fontSize: 26,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    const Text(
+                      'Your identity is confirmed. Academic features unlock after authorized university staff verify your student record.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: AppColors.muted,
+                        fontSize: 15,
+                        height: 1.5,
+                      ),
+                    ),
+                    const SizedBox(height: 28),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      decoration: BoxDecoration(
+                        color: AppColors.orange.withOpacity(.1),
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(color: AppColors.orange.withOpacity(.25)),
+                      ),
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.schedule_rounded, color: AppColors.orange),
+                          SizedBox(width: 10),
+                          Text(
+                            'Pending university approval',
+                            style: TextStyle(
+                              color: AppColors.ink,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 30),
+                    OutlinedButton.icon(
+                      onPressed: onLogout,
+                      icon: const Icon(Icons.logout_rounded),
+                      label: const Text('Back to sign in'),
                     ),
                   ],
                 ),

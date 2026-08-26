@@ -26,9 +26,9 @@ List<AppDestination> destinationsFor(AccountRole role) => switch (role) {
           AppDestination('Profile', Icons.person_rounded,
               ProfilePage(role: AccountRole.student)),
         ],
-      AccountRole.admin => const [
+      AccountRole.instructor => const [
           AppDestination('Overview', Icons.grid_view_rounded,
-              DashboardPage(role: AccountRole.admin)),
+              DashboardPage(role: AccountRole.instructor)),
           AppDestination('My Teaching', Icons.calendar_month_rounded,
               TimetablePage(teaching: true)),
           AppDestination('Sessions', Icons.play_circle_rounded, SessionsPage()),
@@ -39,13 +39,13 @@ List<AppDestination> destinationsFor(AccountRole role) => switch (role) {
               PeoplePage(pendingOnly: true)),
           AppDestination('Inbox', Icons.notifications_rounded, InboxPage()),
           AppDestination('Account', Icons.person_rounded,
-              ProfilePage(role: AccountRole.admin)),
+              ProfilePage(role: AccountRole.instructor)),
         ],
-      AccountRole.superAdmin => const [
+      AccountRole.universityAdmin => const [
           AppDestination(
             'Dashboard',
             Icons.grid_view_rounded,
-            DashboardPage(role: AccountRole.superAdmin),
+            DashboardPage(role: AccountRole.universityAdmin),
           ),
           AppDestination(
               'Timetable', Icons.calendar_month_rounded, TimetablePage()),
@@ -58,19 +58,24 @@ List<AppDestination> destinationsFor(AccountRole role) => switch (role) {
               PeoplePage(pendingOnly: true)),
           AppDestination('Materials', Icons.folder_copy_rounded,
               MaterialsPage(manage: true)),
-          AppDestination(
-              'Robot Devices', Icons.smart_toy_rounded, DevicesPage()),
           AppDestination('Exports', Icons.download_rounded, ExportsPage()),
           AppDestination('Inbox', Icons.notifications_rounded, InboxPage()),
           AppDestination(
             'Account',
             Icons.person_rounded,
-            ProfilePage(role: AccountRole.superAdmin),
+            ProfilePage(role: AccountRole.universityAdmin),
           ),
         ],
-      AccountRole.robot => const [
-          AppDestination('QR Display', Icons.qr_code_2_rounded, RobotQrPage()),
-          AppDestination('Campus Map', Icons.map_rounded, CampusMapPage()),
+      AccountRole.departmentAdmin => const [
+          AppDestination('Dashboard', Icons.grid_view_rounded,
+              DashboardPage(role: AccountRole.departmentAdmin)),
+          AppDestination(
+              'Timetable', Icons.calendar_month_rounded, TimetablePage()),
+          AppDestination('Courses', Icons.menu_book_rounded,
+              CoursesPage(manageAll: true)),
+          AppDestination('Students', Icons.groups_rounded, PeoplePage()),
+          AppDestination('Account', Icons.person_rounded,
+              ProfilePage(role: AccountRole.departmentAdmin)),
         ],
     };
 
@@ -81,11 +86,18 @@ class DashboardPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final superAdmin = role == AccountRole.superAdmin;
+    final superAdmin = role == AccountRole.universityAdmin;
+    final departmentAdmin = role == AccountRole.departmentAdmin;
     return PageCanvas(
-      title: superAdmin ? 'Good morning, Dr. Salma' : 'Good morning, Dr. Omar',
+      title: superAdmin
+          ? 'Good morning, Dr. Salma'
+          : departmentAdmin
+              ? 'Good morning, Dr. Mona'
+              : 'Good morning, Dr. Omar',
       subtitle: superAdmin
           ? 'Here is what is happening across your university today.'
+          : departmentAdmin
+              ? 'Your department, students, staff, and courses at a glance.'
           : 'Your teaching day, sessions, and student approvals at a glance.',
       actions: const [
         EmptyAction(label: 'Create session', icon: Icons.add_rounded)
@@ -787,7 +799,7 @@ class ProfilePage extends StatelessWidget {
       title: student ? 'My profile' : 'Account settings',
       subtitle: student
           ? 'Keep your personal and academic information up to date.'
-          : 'Manage your WALL-E account information and security.',
+          : 'Manage your Leornian account information and security.',
       actions: const [
         EmptyAction(label: 'Save changes', icon: Icons.save_rounded)
       ],
@@ -1130,69 +1142,6 @@ class PeoplePage extends StatelessWidget {
   }
 }
 
-class DevicesPage extends StatelessWidget {
-  const DevicesPage({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return const PageCanvas(
-      title: 'Robot devices',
-      subtitle: 'Provision, monitor, and manage WALL-E campus displays.',
-      actions: [EmptyAction(label: 'Provision robot', icon: Icons.add_rounded)],
-      children: [
-        ResponsiveMetricGrid(
-          children: [
-            MetricCard(
-                label: 'Online',
-                value: '8',
-                icon: Icons.smart_toy_rounded,
-                accent: AppColors.success),
-            MetricCard(
-                label: 'Offline',
-                value: '2',
-                icon: Icons.portable_wifi_off_rounded,
-                accent: AppColors.danger),
-            MetricCard(
-                label: 'Active displays',
-                value: '5',
-                icon: Icons.qr_code_2_rounded),
-          ],
-        ),
-        SectionCard(
-          title: 'Campus robots',
-          child: Column(
-            children: [
-              AppListTile(
-                title: 'WALL-E • Hall A',
-                subtitle: 'Main building • Last seen just now',
-                icon: Icons.smart_toy_rounded,
-                iconColor: AppColors.success,
-                trailing: StatusPill('Online'),
-              ),
-              Divider(),
-              AppListTile(
-                title: 'WALL-E • Engineering B',
-                subtitle: 'Second floor • Last seen 2 min ago',
-                icon: Icons.smart_toy_rounded,
-                iconColor: AppColors.success,
-                trailing: StatusPill('Online'),
-              ),
-              Divider(),
-              AppListTile(
-                title: 'WALL-E • Library',
-                subtitle: 'Ground floor • Last seen yesterday',
-                icon: Icons.smart_toy_rounded,
-                iconColor: AppColors.danger,
-                trailing: StatusPill('Offline', color: AppColors.danger),
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-}
-
 class ExportsPage extends StatelessWidget {
   const ExportsPage({super.key});
 
@@ -1238,74 +1187,6 @@ class ExportsPage extends StatelessWidget {
                   subtitle: 'Excel • 14 August at 13:18',
                   icon: Icons.description_rounded),
             ],
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class RobotQrPage extends StatelessWidget {
-  const RobotQrPage({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return PageCanvas(
-      title: 'Attendance display',
-      subtitle: 'WALL-E • Hall A is connected and ready.',
-      actions: const [StatusPill('Device online')],
-      children: [
-        SectionCard(
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              final wide = constraints.maxWidth >= 700;
-              final code = Container(
-                width: 300,
-                height: 300,
-                padding: const EdgeInsets.all(26),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(28),
-                  border: Border.all(color: AppColors.line),
-                  boxShadow: const [
-                    BoxShadow(color: Color(0x12102A43), blurRadius: 24)
-                  ],
-                ),
-                child: const Icon(Icons.qr_code_2_rounded,
-                    size: 246, color: AppColors.navy),
-              );
-              final details = Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const StatusPill('Live session'),
-                  const SizedBox(height: 16),
-                  Text('Control Systems',
-                      style: Theme.of(context).textTheme.headlineLarge),
-                  const SizedBox(height: 7),
-                  Text('MCT 314 • Section A',
-                      style: Theme.of(context).textTheme.bodyLarge),
-                  const SizedBox(height: 22),
-                  const AppListTile(
-                      title: 'Lab C-12',
-                      subtitle: '11:30 – 13:00',
-                      icon: Icons.location_on_rounded),
-                  const Divider(),
-                  const AppListTile(
-                      title: '42 students scanned',
-                      subtitle: 'Code refreshes in 18 seconds',
-                      icon: Icons.groups_rounded),
-                ],
-              );
-              return wide
-                  ? Row(children: [
-                      code,
-                      const SizedBox(width: 34),
-                      Expanded(child: details)
-                    ])
-                  : Column(
-                      children: [code, const SizedBox(height: 28), details]);
-            },
           ),
         ),
       ],

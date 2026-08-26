@@ -14,12 +14,9 @@ import { getErrorMessage } from '../../lib/api'
  * a lecture hall, and a sidebar full of admin links is both noise and a small
  * privacy leak in a room of two hundred people. It is its own full-bleed route.
  *
- * The robot console renders the same code from the same session — the
- * difference is which principal asks for it. This page uses the staff token
- * against /api/sessions/:id/qr; a robot uses its device token against
- * /api/devices/me/sessions/:id/qr. When QR_ENDPOINT_STAFF_ONLY is finally
- * turned on, this page keeps working and students lose the ability to mint
- * their own codes, which is the entire purpose of the cutover.
+ * This page uses the staff token against /api/sessions/:id/qr. When
+ * QR_ENDPOINT_STAFF_ONLY is turned on, staff keep projecting codes and students
+ * lose the ability to mint their own codes, which is the purpose of the guard.
  */
 export function LiveQr() {
   const { id = '' } = useParams()

@@ -22,13 +22,13 @@ const ORG_B = "org-b";
 
 const SUPER_ADMIN = {
   id: "super-admin",
-  role: "UNIVERSITY_SUPER_ADMIN",
+  role: "UNIVERSITY_ADMIN",
   organizationId: ORG_A,
 };
 
 const FOREIGN_SUPER_ADMIN = {
   id: "cu-super-admin",
-  role: "UNIVERSITY_SUPER_ADMIN",
+  role: "UNIVERSITY_ADMIN",
   organizationId: ORG_B,
 };
 
@@ -60,7 +60,7 @@ const USERS: UserFixture[] = [
     fullName: "Adel Mansour",
     universityId: "NCTU-ADM-DR1",
     email: "adel@nctu.edu.eg",
-    role: "ADMIN",
+    role: "INSTRUCTOR",
     isActive: true,
   },
   {

@@ -2,16 +2,16 @@
  * The one thing standing between `npm run db:seed` and a production database.
  *
  * The seed script is destructive by design: `wipe()` empties every table it owns
- * — attendance, sessions, schedules, courses, devices, users, organizations —
+ * — attendance, sessions, schedules, courses, users, organizations —
  * so that re-seeding is repeatable. That is correct for a demo dataset and
  * catastrophic anywhere else, and until now the only thing gating it was
  * SEED_KEEP_EXISTING, which is a convenience flag rather than a safety one:
  * it defaults to "wipe", so forgetting it is the destructive outcome.
  *
  * This refusal is deliberately NOT expressed in terms of SEED_KEEP_EXISTING.
- * Even with the wipe skipped, the seed writes demo universities, demo students
- * and a robot credential whose secret is a constant committed to this
- * repository — none of which may exist in a production database.
+ * Even with the wipe skipped, the seed writes demo universities and demo
+ * accounts whose passwords are committed to this repository — none of which
+ * may exist in a production database.
  *
  * TWO INDEPENDENT CHECKS, because NODE_ENV alone measures the wrong thing.
  *
@@ -47,7 +47,7 @@ export class SeedRefusedError extends Error {
 export const SEED_REFUSAL_MESSAGE =
   "Refusing to seed: NODE_ENV=production. This script deletes every " +
   "organization, user, session and attendance record it owns, and creates demo " +
-  "accounts whose passwords and device secret are committed to this repository. " +
+  "accounts whose passwords are committed to this repository. " +
   "There is no override flag — run it against a development or test database.";
 
 /**
@@ -85,8 +85,8 @@ export const databaseHostOf = (databaseUrl: string): string | null => {
 export const remoteHostRefusalMessage = (host: string): string =>
   `Refusing to seed: DATABASE_URL points at "${host}", which is not a local ` +
   "database. This script deletes every organization, user, session and " +
-  "attendance record it owns, and creates demo accounts whose passwords and " +
-  "device secret are committed to this repository. NODE_ENV describes the " +
+  "attendance record it owns, and creates demo accounts whose passwords are " +
+  "committed to this repository. NODE_ENV describes the " +
   "process, not the database, so it cannot tell you this is safe. If that host " +
   `really is a scratch database, set SEED_ALLOW_REMOTE_HOST="${host}" — naming ` +
   "it is the point, so the permission stops applying if the target changes.";

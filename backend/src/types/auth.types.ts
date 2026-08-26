@@ -21,6 +21,16 @@ export const registerSchema = z.object({
 
 export type RegisterInput = z.infer<typeof registerSchema>;
 
+export const completeSupabaseRegistrationSchema = z.object({
+  universityId: z.string().trim().min(4).max(50),
+  fullName: z.string().trim().min(3).max(120),
+  organizationCode: z.string().trim().min(2).max(50),
+});
+
+export type CompleteSupabaseRegistrationInput = z.infer<
+  typeof completeSupabaseRegistrationSchema
+>;
+
 export const loginSchema = z.object({
   email: z.string().email(),
   password: z.string().min(1, "Password is required")

@@ -34,14 +34,14 @@ router.use(authenticate);
  */
 router.get("/my", requireRole("STUDENT"), requireApproved, getMyMaterials);
 
-const isStaff = requireRole("ADMIN", "UNIVERSITY_SUPER_ADMIN", "SYSTEM_OWNER");
+const isStaff = requireRole("INSTRUCTOR", "UNIVERSITY_ADMIN", "SYSTEM_OWNER");
 
 router.get("/", isStaff, validateQuery(materialQuerySchema), getMaterials);
 
 /**
  * Publishing.
  *
- * Open to a plain ADMIN, because keeping a course's folder current is the
+ * Open to a plain INSTRUCTOR, because keeping a course's folder current is the
  * instructor's own work — the whole point of the feature is that nobody has to
  * go through the university to update a link. Which cohort they may address is
  * the constrained part, and it is constrained inside MaterialService: an

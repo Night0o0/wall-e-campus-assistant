@@ -18,10 +18,11 @@ import {
 
 const ORG_A = "org-a";
 const ORG_B = "org-b";
+const DEPT_A = "22222222-2222-4222-8222-222222222222";
 
 const SUPER_ADMIN = {
   id: "a-super",
-  role: "UNIVERSITY_SUPER_ADMIN",
+  role: "UNIVERSITY_ADMIN",
   organizationId: ORG_A,
 };
 
@@ -33,10 +34,10 @@ interface Row {
 }
 
 const EXISTING: Row[] = [
-  { id: "a-staff", organizationId: ORG_A, role: "ADMIN", email: "adel@nctu.edu.eg" },
+  { id: "a-staff", organizationId: ORG_A, role: "INSTRUCTOR", email: "adel@nctu.edu.eg" },
   { id: "a-student", organizationId: ORG_A, role: "STUDENT", email: "b1@nctu.edu.eg" },
-  { id: "a-peer", organizationId: ORG_A, role: "UNIVERSITY_SUPER_ADMIN", email: "peer@nctu.edu.eg" },
-  { id: "b-staff", organizationId: ORG_B, role: "ADMIN", email: "staff@cu.edu.eg" },
+  { id: "a-peer", organizationId: ORG_A, role: "UNIVERSITY_ADMIN", email: "peer@nctu.edu.eg" },
+  { id: "b-staff", organizationId: ORG_B, role: "INSTRUCTOR", email: "staff@cu.edu.eg" },
 ];
 
 const build = () => {
@@ -73,6 +74,10 @@ const build = () => {
       passwords.push({ id, hash: passwordHash });
       return { id } as never;
     }
+
+    override async findAuthUserIdInOrganization() {
+      return null as never;
+    }
   }
 
   return {
@@ -104,12 +109,12 @@ describe("which roles a university may create", () => {
         fullName: "Escalation Attempt",
         email: "x2@nctu.edu.eg",
         password: "password123",
-        role: "UNIVERSITY_SUPER_ADMIN",
+        role: "UNIVERSITY_ADMIN",
       })
     ).toThrow();
   });
 
-  it("requires a job title for an ADMIN and rejects one for a STUDENT", () => {
+  it("requires a job title for an INSTRUCTOR and rejects one for a STUDENT", () => {
     const base = {
       universityId: "NCTU-X3",
       fullName: "Adel Mansour",
@@ -118,7 +123,7 @@ describe("which roles a university may create", () => {
     };
 
     // AdminProfile.jobTitle is non-nullable, and it is where "Dr." lives.
-    expect(() => createCampusUserSchema.parse({ ...base, role: "ADMIN" })).toThrow();
+    expect(() => createCampusUserSchema.parse({ ...base, role: "INSTRUCTOR" })).toThrow();
 
     expect(() =>
       createCampusUserSchema.parse({
@@ -129,8 +134,13 @@ describe("which roles a university may create", () => {
     ).toThrow();
 
     expect(
-      createCampusUserSchema.parse({ ...base, role: "ADMIN", jobTitle: "Dr." })
-    ).toMatchObject({ role: "ADMIN", jobTitle: "Dr." });
+      createCampusUserSchema.parse({
+        ...base,
+        role: "INSTRUCTOR",
+        departmentId: DEPT_A,
+        jobTitle: "Dr.",
+      })
+    ).toMatchObject({ role: "INSTRUCTOR", jobTitle: "Dr." });
   });
 
   it("does not accept a role on an edit", () => {
@@ -138,7 +148,7 @@ describe("which roles a university may create", () => {
     // would be the shortest path from "edit a student" to "mint a super admin".
     const parsed = updateCampusUserSchema.parse({
       fullName: "Adel Mansour",
-      role: "UNIVERSITY_SUPER_ADMIN",
+      role: "UNIVERSITY_ADMIN",
     } as Record<string, unknown>);
 
     expect(parsed).not.toHaveProperty("role");
@@ -155,7 +165,8 @@ describe("creating a campus account", () => {
         fullName: "Nour Hassan",
         email: "nour@nctu.edu.eg",
         password: "password123",
-        role: "ADMIN",
+        role: "INSTRUCTOR",
+        departmentId: DEPT_A,
         jobTitle: "Dr.",
         // Not declared by the schema, so it never survives validation.
         organizationId: ORG_B,

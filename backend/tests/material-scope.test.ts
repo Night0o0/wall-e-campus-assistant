@@ -7,7 +7,7 @@ import { materialQuerySchema } from "../src/types/material.types.js";
  * Who sees which links, and whether a withdrawn one can be seen at all.
  *
  *   D-6  MaterialService.list passed the query straight to
- *        findManyInOrganization with no addedById filter, so an ADMIN saw every
+ *        findManyInOrganization with no addedById filter, so an INSTRUCTOR saw every
  *        link in the university on a page whose subtitle said "the links you
  *        publish" - and got Edit and Withdraw buttons on colleagues' rows that
  *        loadEditable then refused with 403.
@@ -19,10 +19,10 @@ import { materialQuerySchema } from "../src/types/material.types.js";
  */
 
 const ORG = "org-a";
-const INSTRUCTOR = { id: "instructor-1", role: "ADMIN", organizationId: ORG };
+const INSTRUCTOR = { id: "instructor-1", role: "INSTRUCTOR", organizationId: ORG };
 const SUPER_ADMIN = {
   id: "super-1",
-  role: "UNIVERSITY_SUPER_ADMIN",
+  role: "UNIVERSITY_ADMIN",
   organizationId: ORG,
 };
 
@@ -70,7 +70,7 @@ describe("an instructor sees only the links they published (D-6)", () => {
 describe("a super admin sees the whole university (D-6)", () => {
   it("applies no publisher filter by default", async () => {
     // Seeing every link IS the super admin's job; the subtitle is right for
-    // them and was only wrong for an ADMIN.
+    // them and was only wrong for an INSTRUCTOR.
     const { service, queries } = build();
     await service.list(parse({}), SUPER_ADMIN);
 

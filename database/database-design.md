@@ -1,121 +1,51 @@
-User
-----------------
-id
-full_name
-email
-password_hash
-role
-created_at
-updated_at
+# Current database design summary
 
+This is a simplified current-state summary, not a historical full ERD.
 
-Student
-----------------
-id
-user_id
-student_code
-department
-level
-section
+## Core domains
 
+### Identity and tenancy
 
-Admin
-----------------
-id
-user_id
-job_title
-face_enabled
+- `Organization`
+- `User`
+- `StudentProfile`
+- `AdminProfile`
+- `Department`
 
+### Academic structure
 
-Robot
-----------------
-id
-name
-building
-status
-tablet_serial
-esp32_serial
+- `AcademicTerm`
+- `Cohort`
+- `Course`
+- `CourseOffering`
+- `TeachingAssignment`
+- `Enrollment`
+- `LectureSchedule`
 
+### Attendance and learning
 
-Course
-----------------
-id
-course_code
-course_name
-semester
+- `Session`
+- `Attendance`
+- `CourseMaterial`
+- `Assignment`
+- `AssignmentCohort`
+- `AssignmentAttachment`
+- `AssignmentGrade`
+- `GradeItem`
+- `StudentGrade`
 
+### Support tables
 
-Session
-----------------
-id
-course_id
-robot_id
-created_by
-qr_token
-status
-start_time
-end_time
+- `Notification`
+- `DeviceToken`
+- `AuditLog`
+- `FileAsset`
+- `EmailChallenge`
 
+## Important current rule
 
-Attendance
-----------------
-id
-student_id
-session_id
-scan_time
-status
+Legacy billing and robot tables are not part of the active target schema.
 
+If they still exist in a database, they should be removed by the current cleanup migration:
 
-RobotEvent
-----------------
-id
-robot_id
-event_type
-payload
-status
-created_at
-
-
-NavigationRequest
-----------------
-id
-user_id
-destination
-start_time
-
-
-FaceProfile
-----------------
-id
-admin_id
-encoding
-created_at
-
-User
- │
- ├──────────────┐
- │              │
- ▼              ▼
-Student      Admin
- │              │
- │              ▼
- │         FaceProfile
- │
- ▼
-Attendance
- ▲
- │
-Session
- ▲
- │
-Course
-
-Session
- │
- ▼
-Robot
-
-Robot
- │
- ▼
-RobotEvent
+- `20260826183000_remove_billing_and_robot_data`

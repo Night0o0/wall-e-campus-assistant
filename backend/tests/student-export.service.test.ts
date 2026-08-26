@@ -22,22 +22,22 @@ import {
 
 const COURSE_ID = "course-mec201";
 
-const INSTRUCTOR = { id: "instructor-1", role: "ADMIN", organizationId: ORG_A };
-const OTHER_ADMIN = { id: "instructor-2", role: "ADMIN", organizationId: ORG_A };
-const CREATOR = { id: "course-creator", role: "ADMIN", organizationId: ORG_A };
+const INSTRUCTOR = { id: "instructor-1", role: "INSTRUCTOR", organizationId: ORG_A };
+const OTHER_ADMIN = { id: "instructor-2", role: "INSTRUCTOR", organizationId: ORG_A };
+const CREATOR = { id: "course-creator", role: "INSTRUCTOR", organizationId: ORG_A };
 const SUPER_ADMIN = {
   id: "super-admin",
-  role: "UNIVERSITY_SUPER_ADMIN",
+  role: "UNIVERSITY_ADMIN",
   organizationId: ORG_A,
 };
 const FOREIGN_SUPER_ADMIN = {
   id: "cu-super-admin",
-  role: "UNIVERSITY_SUPER_ADMIN",
+  role: "UNIVERSITY_ADMIN",
   organizationId: ORG_B,
 };
 const FOREIGN_ADMIN = {
   id: "cu-instructor",
-  role: "ADMIN",
+  role: "INSTRUCTOR",
   organizationId: ORG_B,
 };
 const SYSTEM_OWNER = {
@@ -134,14 +134,14 @@ describe("course roster export — authorization", () => {
     service = build();
   });
 
-  it("lets an ADMIN export a course they are assigned to", async () => {
+  it("lets an INSTRUCTOR export a course they are assigned to", async () => {
     const result = await service.exportCourseStudents(COURSE_ID, INSTRUCTOR);
 
     expect(result.studentCount).toBeGreaterThan(0);
     expect(result.buffer.length).toBeGreaterThan(0);
   });
 
-  it("refuses an ADMIN a course they are not assigned to", async () => {
+  it("refuses an INSTRUCTOR a course they are not assigned to", async () => {
     // Same university, real course — they simply do not teach it and did not
     // create it, so the honest answer is 403 rather than a pretend 404.
     await expect(
@@ -160,7 +160,7 @@ describe("course roster export — authorization", () => {
     expect(result.studentCount).toBeGreaterThan(0);
   });
 
-  it("lets a UNIVERSITY_SUPER_ADMIN export any course in their organization", async () => {
+  it("lets a UNIVERSITY_ADMIN export any course in their organization", async () => {
     // Not the instructor, not the creator — the whole of their own
     // university's timetable is theirs.
     const result = await service.exportCourseStudents(COURSE_ID, SUPER_ADMIN);

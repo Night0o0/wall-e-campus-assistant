@@ -15,10 +15,3 @@ export const getOverview = asyncHandler(async (req: Request, res: Response) => {
   const overview = await metricsService.overview(parseMonths(req.query.months));
   res.status(200).json(serialize(overview));
 });
-
-export const getRevenueMetrics = asyncHandler(
-  async (req: Request, res: Response) => {
-    const revenue = await metricsService.revenue(parseMonths(req.query.months));
-    res.status(200).json(serialize(revenue));
-  }
-);

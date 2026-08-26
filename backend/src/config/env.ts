@@ -16,90 +16,28 @@ const envSchema = z.object({
 
   JWT_EXPIRES_IN: z.string().default("7d"),
 
+  /**
+   * `dual` accepts both the legacy locally-signed token and a verified
+   * Supabase access token while accounts are linked. Production cutover ends
+   * on `supabase`; `legacy` is retained only for local rollback.
+   */
+  AUTH_PROVIDER: z.enum(["legacy", "dual", "supabase"]).default("legacy"),
+  SUPABASE_URL: z.string().url().optional(),
+  SUPABASE_PUBLISHABLE_KEY: z.string().min(1).optional(),
+  SUPABASE_SERVICE_ROLE_KEY: z.string().min(1).optional(),
+  SUPABASE_JWT_AUDIENCE: z.string().min(1).default("authenticated"),
+
   DATABASE_URL: z.string().min(1, "DATABASE_URL is required"),
-
-  /* ------------------------- Robot / tablet devices ------------------------ */
-
-  /**
-   * Signing key for robot/tablet access tokens. Deliberately NOT the same key
-   * as JWT_SECRET: a device token must be unusable as a user token and vice
-   * versa, and separate key material makes that true by construction rather
-   * than by a claim check that somebody could forget to write.
-   *
-   * Optional so that adding this feature does not stop an existing deployment
-   * from booting. When it is absent the key is derived from JWT_SECRET (see
-   * `deviceJwtSecret` below), which is still independent key material — but set
-   * it explicitly in production so the two can be rotated separately.
-   */
-  DEVICE_JWT_SECRET: z
-    .string()
-    .min(32, "DEVICE_JWT_SECRET must be at least 32 characters")
-    .optional(),
-
-  /**
-   * How long a device access token stays valid. Short by design: it is a
-   * performance optimisation, not a security boundary — the device row is
-   * re-read on every request, so revocation takes effect immediately whatever
-   * this is set to.
-   */
-  DEVICE_TOKEN_TTL_MINUTES: z.coerce.number().int().min(1).max(1440).default(15),
-
-  /**
-   * How a room-bound device treats a session with no room recorded.
-   *
-   * A device bound to B-204 never sees a session in C-101 — that much is
-   * unconditional. The question this answers is narrower: what to do with a
-   * session whose room is null, which is every session opened before the
-   * Session ↔ LectureSchedule link existed, plus any opened ad hoc without one.
-   *
-   * Such a session is not in another room; it is in no known room, so a binding
-   * has nothing to exclude it by. Ships false — they stay visible — because
-   * hiding them would take attendance offline for every session already in the
-   * database.
-   *
-   * ── The exact condition for setting this to true ──────────────────────────
-   *
-   * All three must hold, and the first is the one that matters:
-   *
-   *   1. `unlocatedCount` is 0 on GET /api/devices/me/sessions/active for every
-   *      provisioned device, observed across a full teaching week rather than
-   *      once. That is the direct measurement of "no open session lacks a
-   *      room", and it is reported by the endpoint precisely so this decision
-   *      does not have to be made from a SQL query somebody writes by hand.
-   *
-   *   2. Every session-opening path in use sends `lectureScheduleId` (or an
-   *      explicit `room`). If any client still posts a bare title, sessions with
-   *      no room will keep appearing, and flipping this hides them the moment
-   *      they are opened — during the lecture they were opened for.
-   *
-   *   3. Every device that must serve a room has `room` set. A device left
-   *      unbound is unaffected by this flag and will keep serving the whole
-   *      university, which may not be what its operator assumes.
-   *
-   * Until all three hold, `false` is the correct value and `room = null` is a
-   * migration state being worked through — not a permanently acceptable one.
-   *
-   * No effect on a device with no room binding: an unbound device serves every
-   * open session in its university either way.
-   */
-  DEVICE_ROOM_FILTER_STRICT: z
-    .enum(["true", "false"])
-    .default("false")
-    .transform((value) => value === "true"),
 
   /**
    * Restricts GET /api/sessions/:id/qr to staff.
    *
-   * Ships OFF so the existing robot keeps working while it is migrated onto the
-   * device-auth path. Turn it ON once the robot has been provisioned and
-   * verified against /api/devices/me/sessions/:id/qr — at which point students
-   * lose the ability to mint their own attendance QR tokens, which is the whole
-   * point. Kept as a flag rather than a code change so the cutover is instant
-   * and reversible without a redeploy.
+   * Students scan codes but must not mint them. Staff display the code through
+   * the instructor QR screen.
    */
   QR_ENDPOINT_STAFF_ONLY: z
     .enum(["true", "false"])
-    .default("false")
+    .default("true")
     .transform((value) => value === "true"),
 
   /**
@@ -109,8 +47,8 @@ const envSchema = z.object({
    * LectureSchedule is scannable only by the students that lecture is addressed
    * to. An ad-hoc session has no lecture and therefore no cohort, so there is
    * nothing to compare a student against — the check is undefined rather than
-   * passed, which is the same shape of problem DEVICE_ROOM_FILTER_STRICT exists
-   * for and it is answered the same way.
+   * passed, so it needs an explicit rollout flag rather than an accidental
+   * default.
    *
    * Ships true — ad-hoc sessions stay scannable — because a makeup class and a
    * one-off seminar are approved Phase 2 behaviour, and flipping this by
@@ -182,9 +120,8 @@ const envSchema = z.object({
    * counted per principal rather than per IP.
    *
    * Per-IP counting is wrong for this product: an entire campus shares one NAT
-   * address, so a 200-student lecture scanning at once — or ten robots polling
-   * for a QR code — exhausts a shared bucket and attendance stops. See
-   * utils/rate-limit.ts.
+   * address, so a 200-student lecture scanning at once can exhaust a shared
+   * bucket and attendance stops. See utils/rate-limit.ts.
    */
   RATE_LIMIT_AUTHENTICATED: z.coerce.number().int().min(1).default(1000),
 
@@ -196,13 +133,6 @@ const envSchema = z.object({
 
   // Comma-separated list of origins allowed to call the API.
   CORS_ORIGINS: z.string().default("http://localhost:3000"),
-
-  // Billing is off by default so a campus can pilot attendance without any
-  // plan, invoice or payment surface. Set to "true" to bring it back.
-  BILLING_ENABLED: z
-    .enum(["true", "false"])
-    .default("false")
-    .transform((value) => value === "true"),
 
   /* ----------------------------- Notifications ----------------------------- */
 
@@ -262,7 +192,7 @@ const envSchema = z.object({
   MAIL_PROVIDER: z.enum(["log", "smtp"]).default("log"),
 
   /** RFC 5322 From header. A display name is allowed: `Wall-E <no-reply@…>`. */
-  MAIL_FROM: z.string().min(3).default("Wall-E Campus <no-reply@wall-e.local>"),
+  MAIL_FROM: z.string().min(3).default("Leornian <no-reply@leornian.local>"),
 
   SMTP_HOST: z.string().min(1).optional(),
   SMTP_PORT: z.coerce.number().int().min(1).max(65535).default(587),
@@ -353,37 +283,24 @@ if (!parsed.success) {
 
 const isProduction = parsed.data.NODE_ENV === "production";
 
-/**
- * The device signing key, explicit or derived.
- *
- * The derivation is a one-way hash of the user key under a fixed label, so the
- * result is independent key material: a token signed with it cannot verify
- * against JWT_SECRET, and a user token cannot verify against it. That is the
- * property the two-principal model actually depends on. Setting
- * DEVICE_JWT_SECRET explicitly is still better, because it lets the two keys be
- * rotated on their own schedules.
- */
-const deviceJwtSecret =
-  parsed.data.DEVICE_JWT_SECRET ??
-  createHash("sha256")
-    .update(`wall-e:device-token:${parsed.data.JWT_SECRET}`)
-    .digest("hex");
-
-if (isProduction && !parsed.data.DEVICE_JWT_SECRET) {
-  console.warn(
-    "⚠️  DEVICE_JWT_SECRET is not set — deriving it from JWT_SECRET. " +
-      "Set it explicitly so device and user keys can be rotated separately."
+if (
+  parsed.data.AUTH_PROVIDER !== "legacy" &&
+  (!parsed.data.SUPABASE_URL || !parsed.data.SUPABASE_PUBLISHABLE_KEY)
+) {
+  console.error(
+    "\n❌ AUTH_PROVIDER requires SUPABASE_URL and SUPABASE_PUBLISHABLE_KEY.\n"
   );
+  process.exit(1);
 }
 
 /**
  * Signing key for registration tickets, derived the same way and for the same
- * reason as the device key: a ticket that proves "this address was verified"
+ * Signing key for registration tickets. A ticket that proves "this address was verified"
  * must not be usable as a session token, and separate key material makes that
  * structural rather than a claim check somebody could forget.
  */
 const ticketJwtSecret = createHash("sha256")
-  .update(`wall-e:registration-ticket:${parsed.data.JWT_SECRET}`)
+  .update(`leornian:registration-ticket:${parsed.data.JWT_SECRET}`)
   .digest("hex");
 
 /**
@@ -427,12 +344,6 @@ export const env = {
    * convenience for developers, not a switch a production deploy may flip.
    */
   devToolsEnabled: !isProduction && parsed.data.NOTIFICATION_DEV_TOOLS,
-
-  /**
-   * Signing key for robot/tablet access tokens. Always populated — explicitly
-   * configured, or derived from JWT_SECRET. Never equal to JWT_SECRET.
-   */
-  deviceJwtSecret,
 
   /** Signing key for registration tickets. Never equal to JWT_SECRET. */
   ticketJwtSecret,

@@ -312,16 +312,16 @@ describe("the existing scan guarantees still hold", () => {
  * here is the one in utils/session-access.ts, shared with SessionService.
  */
 describe("who may read a session's attendance", () => {
-  const OWNER = { id: "instructor-1", role: "ADMIN", organizationId: ORG_A };
-  const COLLEAGUE = { id: "instructor-2", role: "ADMIN", organizationId: ORG_A };
+  const OWNER = { id: "instructor-1", role: "INSTRUCTOR", organizationId: ORG_A };
+  const COLLEAGUE = { id: "instructor-2", role: "INSTRUCTOR", organizationId: ORG_A };
   const SUPER_ADMIN = {
     id: "admin-1",
-    role: "UNIVERSITY_SUPER_ADMIN",
+    role: "UNIVERSITY_ADMIN",
     organizationId: ORG_A,
   };
   const FOREIGN_ADMIN = {
     id: "admin-2",
-    role: "UNIVERSITY_SUPER_ADMIN",
+    role: "UNIVERSITY_ADMIN",
     organizationId: ORG_B,
   };
 

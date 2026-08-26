@@ -58,7 +58,7 @@ const STUDENT = {
 
 const SUPER_ADMIN = {
   id: "super-admin",
-  role: "UNIVERSITY_SUPER_ADMIN",
+  role: "UNIVERSITY_ADMIN",
   organizationId: "org-a",
 };
 

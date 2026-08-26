@@ -2,17 +2,24 @@ import { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
 import { env } from "../config/env.js";
 import prisma from "../lib/prisma.js";
+import type { AccountStatus, UserRole } from "@prisma/client";
 import { AppError, forbidden, unauthorized } from "../utils/AppError.js";
+import {
+  looksLikeSupabaseToken,
+  verifySupabaseAccessToken,
+} from "../lib/supabase-auth.js";
 
 export interface AuthenticatedUser {
   id: string;
   universityId: string;
   fullName: string;
   email: string;
-  role: string;
+  role: UserRole;
+  accountStatus: AccountStatus;
   isVerified: boolean;
   isActive: boolean;
   organizationId: string;
+  departmentId: string | null;
 }
 
 declare global {
@@ -37,27 +44,47 @@ export const authenticate = async (
 
   const token = authHeader.slice("Bearer ".length).trim();
 
-  let decoded: { id: string };
-
   try {
-    decoded = jwt.verify(token, env.JWT_SECRET) as { id: string };
-  } catch {
-    next(unauthorized("Invalid or expired token"));
-    return;
-  }
+    let userWhere: { id: string } | { authUserId: string };
+    const supabaseToken = looksLikeSupabaseToken(token);
 
-  try {
+    if (supabaseToken) {
+      if (env.AUTH_PROVIDER === "legacy") {
+        next(unauthorized("This deployment does not accept Supabase sessions"));
+        return;
+      }
+
+      userWhere = { authUserId: await verifySupabaseAccessToken(token) };
+    } else {
+      if (env.AUTH_PROVIDER === "supabase") {
+        next(unauthorized("Legacy sessions are no longer accepted"));
+        return;
+      }
+
+      let decoded: { id: string };
+      try {
+        decoded = jwt.verify(token, env.JWT_SECRET) as { id: string };
+      } catch {
+        next(unauthorized("Invalid or expired token"));
+        return;
+      }
+
+      userWhere = { id: decoded.id };
+    }
+
     const user = await prisma.user.findUnique({
-      where: { id: decoded.id },
+      where: userWhere,
       select: {
         id: true,
         universityId: true,
         fullName: true,
         email: true,
         role: true,
+        accountStatus: true,
         isVerified: true,
         isActive: true,
         organizationId: true,
+        departmentId: true,
       },
     });
 
@@ -68,8 +95,13 @@ export const authenticate = async (
 
     // A deactivated account must stop working immediately, even while its
     // token is still within its validity window.
-    if (!user.isActive) {
+    if (!user.isActive || user.accountStatus === "DISABLED") {
       next(unauthorized("This account has been deactivated"));
+      return;
+    }
+
+    if (user.accountStatus === "REJECTED") {
+      next(unauthorized("This account registration was rejected"));
       return;
     }
 
@@ -80,7 +112,7 @@ export const authenticate = async (
   }
 };
 
-export const requireRole = (...roles: string[]) => {
+export const requireRole = (...roles: UserRole[]) => {
   return (req: Request, _res: Response, next: NextFunction) => {
     if (!req.user) {
       next(unauthorized());
@@ -133,7 +165,10 @@ export const requireApproved = (
     return;
   }
 
-  if (req.user.role === "STUDENT" && !req.user.isVerified) {
+  if (
+    req.user.role === "STUDENT" &&
+    (req.user.accountStatus !== "ACTIVE" || !req.user.isVerified)
+  ) {
     next(
       new AppError(
         "Your account is waiting for approval from your university",
