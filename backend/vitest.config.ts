@@ -4,6 +4,10 @@ export default defineConfig({
   test: {
     environment: "node",
     include: ["tests/**/*.test.ts"],
+
+    // Backstop against the suite reaching a real service. See the file header:
+    // this exists because unit tests once created live Supabase identities.
+    setupFiles: ["tests/setup/no-network.ts"],
     // The suite is deliberately database-free: the repositories are replaced by
     // in-memory doubles that subclass the real ones, so a method the doubles
     // forget to override fails loudly instead of quietly hitting Postgres.
