@@ -18,7 +18,9 @@
     "db:reset": "prisma migrate reset",
     "db:studio": "prisma studio",
     "verify:seed": "tsx scripts/verify-seed-scratch.ts",
-    "verify:seed:rollback": "tsx scripts/verify-seed-rollback.ts"
+    "verify:seed:rollback": "tsx scripts/verify-seed-rollback.ts",
+    "verify:auth": "tsx scripts/verify-supabase-auth.ts",
+    "verify:web-session": "tsx scripts/verify-web-session.ts"
   },
   "keywords": [],
   "author": "",

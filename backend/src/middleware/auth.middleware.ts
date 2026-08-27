@@ -8,6 +8,7 @@ import {
   looksLikeSupabaseToken,
   verifySupabaseAccessToken,
 } from "../lib/supabase-auth.js";
+import { assertClientAllowed } from "../utils/client-platform.js";
 
 export interface AuthenticatedUser {
   id: string;
@@ -104,6 +105,11 @@ export const authenticate = async (
       next(unauthorized("This account registration was rejected"));
       return;
     }
+
+    // The platform owner is web-only. This sits here rather than on a login
+    // route because mobile authenticates against Supabase directly and never
+    // calls one — see src/utils/client-platform.ts.
+    assertClientAllowed(user.role, req.headers);
 
     req.user = user;
     next();
