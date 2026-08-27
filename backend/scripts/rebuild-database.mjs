@@ -21,7 +21,7 @@
  * blessed permanently and silently, and every later migration would build on
  * a schema nobody has actually confirmed.
  *
- * Replaying all 12 migrations against an empty schema produces a database that
+ * Replaying all 13 migrations against an empty schema produces a database that
  * is correct by construction. That is only true while the database is empty,
  * which is why this script verifies that itself rather than trusting the note
  * above to still be accurate when someone runs it.
@@ -203,7 +203,7 @@ try {
   console.log("\nNext, and this is the step that actually builds the schema:\n");
   console.log("    npx prisma migrate deploy");
   console.log("    npx prisma generate");
-  console.log("    npx prisma migrate status   # expect: 12 applied, 0 pending\n");
+  console.log("    npx prisma migrate status   # expect: 13 applied, 0 pending\n");
 } catch (error) {
   fail("Rebuild failed: " + error.message);
 } finally {

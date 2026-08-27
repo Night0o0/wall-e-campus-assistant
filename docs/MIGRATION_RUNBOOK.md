@@ -113,7 +113,7 @@ later `ALTER` inside the same migration ran. Any such gap gets blessed
 permanently and silently, and migrations 11 and 12 then build on a schema
 nobody has confirmed.
 
-Replaying all 12 migrations against an empty schema is correct by construction.
+Replaying all 13 migrations against an empty schema is correct by construction.
 That is only true while the database is empty, so the script re-verifies it
 rather than trusting this note.
 
@@ -157,7 +157,7 @@ npx prisma migrate deploy
 npx prisma generate
 
 # 3. Confirm.
-npx prisma migrate status        # expect: 12 applied, 0 pending
+npx prisma migrate status        # expect: 13 applied, 0 pending
 npx prisma validate --schema prisma/schema.prisma
 npm run typecheck
 npm test -- --run

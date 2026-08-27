@@ -68,7 +68,7 @@ Actions
    - auth.users contains zero identities.
    - No important views, functions, triggers or policies exist in public.
    - Supabase-managed schemas will not be touched.
-2. Replay all 12 migrations against a scratch database first, as a pre-flight
+2. Replay all 13 migrations against a scratch database first, as a pre-flight
    check, before touching the target. See "Migration replay pre-flight" below.
 3. Run the guarded database-rebuild command against the exact approved Supabase hostname.
 4. Recreate only the public schema, restoring ownership to the postgres role.
@@ -101,8 +101,8 @@ schema AND a partial ledger.
 
 Therefore, before the real rebuild:
 
-- Replay all 12 migrations from empty against a scratch/disposable database and
-  confirm 12 applied, 0 pending.
+- Replay all 13 migrations from empty against a scratch/disposable database and
+  confirm 13 applied, 0 pending.
 - Only then run the rebuild against the approved host.
 
 Recovery, if the real replay fails part-way: re-run
@@ -120,7 +120,7 @@ left exactly as they are. This has a direct consequence for Phase 2: see
 Verification
 
 Expected results:
-- All 12 migrations are recorded as applied.
+- All 13 migrations are recorded as applied.
 - Zero migrations are pending.
 - _prisma_migrations exists.
 - Prisma schema validation passes.
