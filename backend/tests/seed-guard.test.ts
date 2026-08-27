@@ -5,14 +5,16 @@ import {
   UNPARSEABLE_URL_REFUSAL_MESSAGE,
   assertSeedAllowed,
   databaseHostOf,
+  databaseTargetOf,
+  remoteHostRefusalMessage,
 } from "../src/utils/seed-guard.js";
 
 /**
- * The seed script empties every table it owns and then writes demo accounts
- * whose passwords, and a robot credential whose secret, are committed to this
- * repository. Until this guard existed the only thing standing in front of that
- * was SEED_KEEP_EXISTING — a convenience flag that defaults to the destructive
- * outcome, so forgetting it is what causes the damage.
+ * The seed writes demo universities and demo accounts whose password is a
+ * literal committed to this repository — into Supabase Auth as well as into the
+ * database — and upserts over anything sharing their keys. It no longer deletes
+ * whole tables, but it is still disqualifying anywhere real: the identities it
+ * creates outlive a database rebuild, and the password is public.
  *
  * These tests are deliberately about the *absence* of an escape hatch as much
  * as the presence of the check.
@@ -25,18 +27,38 @@ describe("refusing to seed a production database", () => {
     );
   });
 
-  it("says why, and names what the script would have destroyed", () => {
+  it("says why, and names what the script would have written", () => {
     // The message is the whole user interface of this failure: whoever sees it
-    // is one keystroke from a production wipe and needs to know it.
+    // is one keystroke from putting public credentials into a real system and
+    // needs to know it.
     expect(() => assertSeedAllowed({ NODE_ENV: "production" })).toThrow(
       SEED_REFUSAL_MESSAGE
     );
   });
 
-  it("refuses regardless of SEED_KEEP_EXISTING", () => {
-    // Skipping the wipe is not enough to make seeding safe: the demo
-    // organizations, demo students and the committed device secret are as
-    // unwelcome in a production database as the deletion is.
+  it("describes what the seed actually does, not the wipe it used to do", () => {
+    // The seed stopped deleting anything when it became idempotent. A refusal
+    // that still threatened a wipe would be teaching the reader something
+    // false about the tool they are being protected from, and would make the
+    // real reasons - a committed password, and Supabase identities that
+    // outlive the database - easier to dismiss.
+    expect(SEED_REFUSAL_MESSAGE).not.toMatch(/delet/i);
+    expect(SEED_REFUSAL_MESSAGE).toMatch(/committed to this repository/);
+    expect(SEED_REFUSAL_MESSAGE).toMatch(/Supabase/);
+
+    const remote = remoteHostRefusalMessage("proj@pooler.example.com");
+    expect(remote).not.toMatch(/delet/i);
+    expect(remote).toMatch(/committed to this repository/);
+
+    expect(UNPARSEABLE_URL_REFUSAL_MESSAGE).not.toMatch(/wipe/i);
+  });
+
+  it("refuses however the seed is configured", () => {
+    // Being non-destructive is not the same as being safe. Demo organizations,
+    // demo students and a password anyone can read out of this repository are
+    // as unwelcome in a production database as any deletion would be, and
+    // SEED_KEEP_EXISTING - which the old wipe honoured - no longer exists at
+    // all, so nothing about the seed configuration can make this allowable.
     for (const keep of ["true", "false", undefined]) {
       expect(() =>
         assertSeedAllowed({ NODE_ENV: "production", SEED_KEEP_EXISTING: keep })
@@ -215,5 +237,82 @@ describe("reading the host out of a connection string", () => {
 
   it("returns null rather than throwing on nonsense", () => {
     expect(databaseHostOf("not a url")).toBeNull();
+  });
+});
+
+/**
+ * On Supabase the hostname does not identify the database. Every project in a
+ * region answers on the same pooler hostname, and the project ref lives in the
+ * username as `postgres.<ref>`. A host-only comparison would let permission
+ * granted for one project authorise a seed against a different one — the exact
+ * "permission outlives the target" failure the naming rule exists to prevent.
+ */
+describe("naming a Supabase project, not just its pooler hostname", () => {
+  const POOLER = "aws-0-eu-west-1.pooler.supabase.com";
+  const projectUrl = (ref: string) =>
+    `postgresql://postgres.${ref}:secret@${POOLER}:6543/postgres`;
+
+  it("qualifies the target with the project ref when the username carries one", () => {
+    expect(databaseTargetOf(projectUrl("bhzbhmgorilskpgnlzif"))).toBe(
+      `bhzbhmgorilskpgnlzif@${POOLER}`
+    );
+  });
+
+  it("falls back to the bare host on a direct connection", () => {
+    // A direct connection's username is a role name, not a project address, and
+    // there the host really does name one database.
+    expect(databaseTargetOf("postgresql://postgres:p@db.example.com:5432/x")).toBe(
+      "db.example.com"
+    );
+  });
+
+  it("lowercases the ref so case cannot defeat the comparison", () => {
+    expect(databaseTargetOf(projectUrl("MiXeDcAsE"))).toBe(`mixedcase@${POOLER}`);
+  });
+
+  it("returns null rather than throwing on nonsense", () => {
+    expect(databaseTargetOf("not a url")).toBeNull();
+  });
+
+  it("refuses when only the shared pooler hostname is named", () => {
+    // This is the dangerous case: the name looks specific, and authorises every
+    // project in the region.
+    expect(() =>
+      assertSeedAllowed({
+        NODE_ENV: "development",
+        DATABASE_URL: projectUrl("bhzbhmgorilskpgnlzif"),
+        SEED_ALLOW_REMOTE_HOST: POOLER,
+      })
+    ).toThrow(SeedRefusedError);
+  });
+
+  it("allows only the exact project that was named", () => {
+    expect(() =>
+      assertSeedAllowed({
+        NODE_ENV: "development",
+        DATABASE_URL: projectUrl("bhzbhmgorilskpgnlzif"),
+        SEED_ALLOW_REMOTE_HOST: `bhzbhmgorilskpgnlzif@${POOLER}`,
+      })
+    ).not.toThrow();
+  });
+
+  it("does not let permission for one project authorise its neighbour", () => {
+    // Same region, same hostname, different database.
+    expect(() =>
+      assertSeedAllowed({
+        NODE_ENV: "development",
+        DATABASE_URL: projectUrl("someoneelsesproject"),
+        SEED_ALLOW_REMOTE_HOST: `bhzbhmgorilskpgnlzif@${POOLER}`,
+      })
+    ).toThrow(SeedRefusedError);
+  });
+
+  it("names the project-qualified target in the refusal, so the fix is copyable", () => {
+    expect(() =>
+      assertSeedAllowed({
+        NODE_ENV: "development",
+        DATABASE_URL: projectUrl("bhzbhmgorilskpgnlzif"),
+      })
+    ).toThrow(new RegExp(`bhzbhmgorilskpgnlzif@${POOLER.replace(/\./g, "\.")}`));
   });
 });

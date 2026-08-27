@@ -1,17 +1,27 @@
 /**
  * The one thing standing between `npm run db:seed` and a production database.
  *
- * The seed script is destructive by design: `wipe()` empties every table it owns
- * — attendance, sessions, schedules, courses, users, organizations —
- * so that re-seeding is repeatable. That is correct for a demo dataset and
- * catastrophic anywhere else, and until now the only thing gating it was
- * SEED_KEEP_EXISTING, which is a convenience flag rather than a safety one:
- * it defaults to "wipe", so forgetting it is the destructive outcome.
+ * WHAT IS BEING GUARDED, AS OF PHASE 2
  *
- * This refusal is deliberately NOT expressed in terms of SEED_KEEP_EXISTING.
- * Even with the wipe skipped, the seed writes demo universities and demo
- * accounts whose passwords are committed to this repository — none of which
- * may exist in a production database.
+ * The seed no longer deletes anything. It used to open with `wipe()`, emptying
+ * every table it owned so re-seeding was repeatable; that was removed once the
+ * seed became idempotent, because upserts give repeatability without the
+ * destruction. Earlier revisions of these messages described that wipe, and
+ * were left behind by the change.
+ *
+ * The remaining danger is not deletion but CONTENT, and it is still
+ * disqualifying:
+ *
+ *   - It writes demo universities, demo staff and demo students whose password
+ *     is a literal committed to this repository, so anyone who can read the
+ *     repository can sign in as any of them.
+ *   - Each of those accounts is created in Supabase Auth as well, using the
+ *     service-role key. Identities outlive the application rows — dropping the
+ *     `public` schema does not remove them — so a mistake here is not undone by
+ *     rebuilding the database.
+ *   - Every write is an upsert keyed on an email address, organization code or
+ *     derived id. Against a real deployment that does not delete rows; it
+ *     OVERWRITES any record sharing those keys, which is its own kind of loss.
  *
  * TWO INDEPENDENT CHECKS, because NODE_ENV alone measures the wrong thing.
  *
@@ -23,8 +33,8 @@
  * The second check exists because the first one missed the case that actually
  * occurs. A developer's machine runs NODE_ENV=development while DATABASE_URL
  * points at a hosted database; the guard sees "development", allows the run,
- * and `wipe()` empties a live instance. NODE_ENV describes the process, not the
- * database, and the thing being protected is the database.
+ * and demo accounts land in a live instance. NODE_ENV describes the process,
+ * not the database, and the thing being protected is the database.
  *
  * The opt-in must NAME THE HOST rather than being a boolean. A truthy flag is
  * the thing that gets set once and then silently authorises whatever database
@@ -32,8 +42,7 @@
  * the host stops applying the moment the target changes. It is a way to say
  * "yes, that specific database is a scratch database", not "stop asking me".
  *
- * Lives in `src/utils` rather than inside seed.ts so it can be tested. The seed
- * script itself is not covered by either tsconfig.
+ * Lives in `src/utils` rather than inside the seed so it can be tested.
  */
 
 /** Thrown rather than `process.exit`, so the failure is testable and catchable. */
@@ -45,9 +54,12 @@ export class SeedRefusedError extends Error {
 }
 
 export const SEED_REFUSAL_MESSAGE =
-  "Refusing to seed: NODE_ENV=production. This script deletes every " +
-  "organization, user, session and attendance record it owns, and creates demo " +
-  "accounts whose passwords are committed to this repository. " +
+  "Refusing to seed: NODE_ENV=production. This script creates demo " +
+  "universities and demo accounts whose password is a literal committed to " +
+  "this repository, in Supabase Auth as well as in this database, and " +
+  "overwrites any existing record that shares their email addresses, " +
+  "organization codes or derived ids. Supabase identities survive a database " +
+  "rebuild, so this is not undone by re-running migrations. " +
   "There is no override flag — run it against a development or test database.";
 
 /**
@@ -82,19 +94,52 @@ export const databaseHostOf = (databaseUrl: string): string | null => {
   }
 };
 
-export const remoteHostRefusalMessage = (host: string): string =>
-  `Refusing to seed: DATABASE_URL points at "${host}", which is not a local ` +
-  "database. This script deletes every organization, user, session and " +
-  "attendance record it owns, and creates demo accounts whose passwords are " +
-  "committed to this repository. NODE_ENV describes the " +
-  "process, not the database, so it cannot tell you this is safe. If that host " +
-  `really is a scratch database, set SEED_ALLOW_REMOTE_HOST="${host}" — naming ` +
-  "it is the point, so the permission stops applying if the target changes.";
+/**
+ * The database a connection string actually names, which on Supabase is NOT
+ * the host.
+ *
+ * `aws-0-eu-west-1.pooler.supabase.com` is a shared regional pooler: every
+ * project in eu-west-1 resolves to it, and the project is identified by the
+ * username, `postgres.<project-ref>`. Comparing hosts alone would let
+ * permission granted for one project authorise a seed against a different one
+ * in the same region — the "permission outlives the target" failure this guard
+ * exists to prevent.
+ *
+ * Falls back to the bare host when the username carries no project ref, which
+ * is every direct connection, so existing local and non-Supabase URLs are
+ * unaffected. This mirrors `targetOf` in scripts/rebuild-database.mjs; the two
+ * guards deliberately behave the same way.
+ */
+export const databaseTargetOf = (databaseUrl: string): string | null => {
+  const host = databaseHostOf(databaseUrl);
+  if (host === null) return null;
+
+  try {
+    const username = decodeURIComponent(new URL(databaseUrl).username);
+    const ref = username.toLowerCase().split(".")[1];
+    return ref ? `${ref}@${host}` : host;
+  } catch {
+    return host;
+  }
+};
+
+export const remoteHostRefusalMessage = (target: string): string =>
+  `Refusing to seed: DATABASE_URL points at "${target}", which is not a local ` +
+  "database. This script creates demo universities and demo accounts whose " +
+  "password is a literal committed to this repository, in Supabase Auth as " +
+  "well as in this database, and overwrites any existing record that shares " +
+  "their keys. NODE_ENV describes the process, not the database, so it cannot " +
+  "tell you this is safe. If that really is a scratch database, set " +
+  `SEED_ALLOW_REMOTE_HOST="${target}" — naming it is the point, so the ` +
+  "permission stops applying if the target changes. Note the name is the " +
+  "project-qualified target, not just the hostname: one Supabase pooler " +
+  "hostname is shared by every project in its region.";
 
 export const UNPARSEABLE_URL_REFUSAL_MESSAGE =
   "Refusing to seed: DATABASE_URL is set but its host could not be determined, " +
-  "so this script cannot tell whether it is about to wipe a local database or a " +
-  "live one. Fix the connection string rather than bypassing this check.";
+  "so this script cannot tell whether it is about to write demo accounts into " +
+  "a scratch database or a live one. Fix the connection string rather than " +
+  "bypassing this check.";
 
 /**
  * Throws unless it is safe to run the seed.
@@ -129,12 +174,16 @@ export const assertSeedAllowed = (
     return;
   }
 
-  // Exact match, case-insensitive on the host only. Deliberately not a truthy
-  // check: "true" must not authorise anything.
+  // Compared against the TARGET, not the host: on a shared Supabase pooler the
+  // host names a region, not a database. See databaseTargetOf.
+  const target = databaseTargetOf(databaseUrl) ?? host;
+
+  // Exact match, case-insensitive. Deliberately not a truthy check: "true"
+  // must not authorise anything.
   const allowed = environment.SEED_ALLOW_REMOTE_HOST?.trim().toLowerCase();
-  if (allowed === host) {
+  if (allowed === target) {
     return;
   }
 
-  throw new SeedRefusedError(remoteHostRefusalMessage(host));
+  throw new SeedRefusedError(remoteHostRefusalMessage(target));
 };

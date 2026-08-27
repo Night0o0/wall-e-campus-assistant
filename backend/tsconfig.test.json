@@ -8,5 +8,10 @@
     "rootDir": "."
   },
 
-  "include": ["src", "tests", "vitest.config.ts"]
+  // `prisma` is here because seed.ts was previously in no tsconfig at all: it
+  // is not part of the build (it never ships) and was not part of the test
+  // project either, so it could drift out of step with schema.prisma and
+  // nothing would say so until someone ran it. It writes to every table the
+  // application owns, which is far too much to leave unchecked.
+  "include": ["src", "tests", "vitest.config.ts", "prisma", "scripts"]
 }

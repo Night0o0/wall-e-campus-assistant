@@ -16,7 +16,9 @@
     "db:deploy": "prisma migrate deploy",
     "db:seed": "prisma db seed",
     "db:reset": "prisma migrate reset",
-    "db:studio": "prisma studio"
+    "db:studio": "prisma studio",
+    "verify:seed": "tsx scripts/verify-seed-scratch.ts",
+    "verify:seed:rollback": "tsx scripts/verify-seed-rollback.ts"
   },
   "keywords": [],
   "author": "",
