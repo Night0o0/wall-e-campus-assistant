@@ -16,6 +16,10 @@ import {
   unauthorized,
   badRequest,
 } from "../utils/AppError.js";
+import {
+  studentRegistrationDetailsSchema,
+  type CompleteSupabaseRegistrationInput,
+} from "../types/auth.types.js";
 
 const SALT_ROUNDS = 10;
 
@@ -201,43 +205,83 @@ export class AuthService {
    * create a pending STUDENT and the email comes from the signed access token.
    */
   async completeSupabaseRegistration(
-    identity: { authUserId: string; email: string },
-    data: {
-      universityId: string;
-      fullName: string;
-      organizationCode: string;
-    }
+    identity: {
+      authUserId: string;
+      email: string;
+      registration?: unknown;
+    },
+    data: CompleteSupabaseRegistrationInput
   ) {
     const existingIdentity = await this.userRepository.findByAuthUserId(
       identity.authUserId
     );
-    if (existingIdentity) return existingIdentity;
+    if (existingIdentity) {
+      return { user: existingIdentity, created: false };
+    }
+
+    const metadata =
+      identity.registration &&
+      typeof identity.registration === "object" &&
+      !Array.isArray(identity.registration)
+        ? identity.registration
+        : {};
+    const parsed = studentRegistrationDetailsSchema.safeParse({
+      ...metadata,
+      ...data,
+    });
+
+    if (!parsed.success) {
+      throw new AppError(
+        "Registration details are missing or invalid. Start registration again.",
+        400,
+        parsed.error.flatten().fieldErrors,
+        "REGISTRATION_DETAILS_REQUIRED"
+      );
+    }
+
+    const registration = {
+      ...parsed.data,
+      organizationCode: parsed.data.organizationCode.toUpperCase(),
+    };
 
     const organization = await this.userRepository.findOrganizationByCode(
-      data.organizationCode
+      registration.organizationCode
     );
 
     if (!organization) throw notFound("Organization not found");
 
     const [byEmail, byUniversityId] = await Promise.all([
       this.userRepository.findByEmail(identity.email),
-      this.userRepository.findByUniversityId(data.universityId),
+      this.userRepository.findByUniversityId(registration.universityId),
     ]);
 
     if (byEmail) throw conflict("Email already registered");
     if (byUniversityId) throw conflict("University ID already registered");
 
-    return this.userRepository.create({
-      authUserId: identity.authUserId,
-      universityId: data.universityId,
-      fullName: data.fullName,
-      email: identity.email,
-      passwordHash: undefined,
-      role: "STUDENT",
-      organizationId: organization.id,
-      accountStatus: "PENDING",
-      isVerified: false,
-    });
+    try {
+      const user = await this.userRepository.create({
+        authUserId: identity.authUserId,
+        universityId: registration.universityId,
+        fullName: registration.fullName,
+        email: identity.email,
+        passwordHash: undefined,
+        role: "STUDENT",
+        organizationId: organization.id,
+        accountStatus: "PENDING",
+        isVerified: false,
+      });
+      return { user, created: true };
+    } catch (error) {
+      // Two confirmation callbacks can race. The unique authUserId constraint
+      // chooses one winner; the loser returns the same account rather than a
+      // spurious conflict. A genuine email/university-ID collision still
+      // rethrows because it produces no row for this identity.
+      const winner = await this.userRepository.findByAuthUserId(
+        identity.authUserId
+      );
+      if (winner) return { user: winner, created: false };
+      throw error;
+    }
   }
 
   /* ---------------------------- Password recovery -------------------------- */
@@ -452,6 +496,27 @@ export class AuthService {
     userId: string,
     data: { fullName?: string; email?: string }
   ) {
+    const current = await this.userRepository.findById(userId);
+
+    if (!current) {
+      throw notFound("User not found");
+    }
+
+    // In Supabase mode the sign-in address belongs to the identity provider.
+    // Accepting a request-body email here would let the application projection
+    // drift away from Auth before the new address has been confirmed. The web
+    // and mobile clients update Supabase instead; authenticate() copies a
+    // changed address into User only after it appears in a verified token.
+    if (
+      env.AUTH_PROVIDER === "supabase" &&
+      data.email !== undefined &&
+      data.email !== current.email
+    ) {
+      throw badRequest(
+        "Change your sign-in email through the identity provider"
+      );
+    }
+
     if (data.email) {
       const existing = await this.userRepository.findByEmail(data.email);
 

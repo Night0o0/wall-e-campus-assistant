@@ -77,6 +77,14 @@ abstract class CampusGateway {
 
   Future<void> requestPasswordReset(String email);
 
+  Future<void> changePassword({
+    required String email,
+    required String currentPassword,
+    required String newPassword,
+  });
+
+  Future<void> finishPasswordRecovery(String newPassword);
+
   Future<void> logout();
 }
 
@@ -126,7 +134,6 @@ class CampusApi implements CampusGateway {
         throw const ApiException('Sign in did not create a session.');
       }
 
-
       await _completePendingRegistration(accessToken);
 
       final provisional = AuthSession(
@@ -145,7 +152,8 @@ class CampusApi implements CampusGateway {
       final user = _map(profileResponse['user']);
       final role = AccountRoleDetails.fromApi(user['role']?.toString());
       if (role == null) {
-        throw const ApiException('This account type cannot use the mobile app.');
+        throw const ApiException(
+            'This account type cannot use the mobile app.');
       }
 
       return AuthSession(
@@ -213,6 +221,10 @@ class CampusApi implements CampusGateway {
     final response = await Supabase.instance.client.auth.signUp(
       email: normalizedEmail,
       password: password,
+      emailRedirectTo: 'io.leornian.campus://register/complete',
+      data: {
+        'registration': jsonDecode(registration) as Map<String, dynamic>,
+      },
     );
     final accessToken = response.session?.accessToken;
     if (accessToken != null) await _completePendingRegistration(accessToken);
@@ -224,7 +236,19 @@ class CampusApi implements CampusGateway {
 
   Future<void> _completePendingRegistration(String accessToken) async {
     final raw = await _secureStorage.read(key: _registrationStorageKey);
-    if (raw == null) return;
+    Map<String, dynamic>? registration;
+    if (raw != null) {
+      registration = jsonDecode(raw) as Map<String, dynamic>;
+    } else {
+      final metadata = Supabase.instance.client.auth.currentUser?.userMetadata;
+      final candidate = metadata?['registration'];
+      if (candidate is Map) {
+        registration = candidate.map(
+          (key, value) => MapEntry(key.toString(), value),
+        );
+      }
+    }
+    if (registration == null) return;
 
     final provisional = AuthSession(
       token: accessToken,
@@ -238,7 +262,7 @@ class CampusApi implements CampusGateway {
       'POST',
       '/auth/register/supabase',
       session: provisional,
-      body: jsonDecode(raw) as Map<String, dynamic>,
+      body: registration,
     );
     await _secureStorage.delete(key: _registrationStorageKey);
   }
@@ -275,6 +299,7 @@ class CampusApi implements CampusGateway {
     if (supabaseConfigured) {
       await Supabase.instance.client.auth.resetPasswordForEmail(
         email.trim().toLowerCase(),
+        redirectTo: 'io.leornian.campus://reset-password',
       );
       return;
     }
@@ -283,6 +308,42 @@ class CampusApi implements CampusGateway {
       '/auth/forgot-password',
       body: {'email': email.trim().toLowerCase()},
     );
+  }
+
+  @override
+  Future<void> changePassword({
+    required String email,
+    required String currentPassword,
+    required String newPassword,
+  }) async {
+    if (!supabaseConfigured) {
+      throw const ApiException(
+        'Password changes require Supabase authentication.',
+      );
+    }
+
+    await Supabase.instance.client.auth.signInWithPassword(
+      email: email.trim().toLowerCase(),
+      password: currentPassword,
+    );
+    await Supabase.instance.client.auth.updateUser(
+      UserAttributes(password: newPassword),
+    );
+  }
+
+  @override
+  Future<void> finishPasswordRecovery(String newPassword) async {
+    if (!supabaseConfigured ||
+        Supabase.instance.client.auth.currentSession == null) {
+      throw const ApiException(
+        'This password-reset link is invalid or has expired.',
+      );
+    }
+
+    await Supabase.instance.client.auth.updateUser(
+      UserAttributes(password: newPassword),
+    );
+    await Supabase.instance.client.auth.signOut();
   }
 
   @override
@@ -307,6 +368,7 @@ class CampusApi implements CampusGateway {
           );
       request.headers.contentType = ContentType.json;
       request.headers.set(HttpHeaders.acceptHeader, 'application/json');
+      request.headers.set('X-Client-Platform', 'mobile');
       if (session != null) {
         request.headers
             .set(HttpHeaders.authorizationHeader, 'Bearer ${session.token}');

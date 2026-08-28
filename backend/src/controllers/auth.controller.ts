@@ -22,13 +22,17 @@ export const register = asyncHandler(async (req: Request, res: Response) => {
 
 export const completeSupabaseRegistration = asyncHandler(
   async (req: Request, res: Response) => {
-    const user = await authService.completeSupabaseRegistration(
+    const result = await authService.completeSupabaseRegistration(
       req.identity!,
       req.body
     );
+    const user = result.user;
 
-    res.status(201).json({
-      message: "Registration submitted for university approval",
+    res.status(result.created ? 201 : 200).json({
+      message: result.created
+        ? "Registration submitted for university approval"
+        : "Registration was already completed",
+      created: result.created,
       user: {
         id: user.id,
         universityId: user.universityId,

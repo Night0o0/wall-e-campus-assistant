@@ -1,9 +1,20 @@
 LEORNIAN CAMPUS ASSISTANT - COMPLETE PROJECT EXECUTION PLAN
-Date: August 27, 2026
+Date: August 28, 2026
+
+EXECUTION STATUS (AUGUST 28, 2026)
+
+- Phase 0 complete: protected Git checkpoints exist and secret/test isolation is enforced.
+- Phase 1 complete: all 13 migrations replayed and the Supabase public schema matches Prisma; retired robot and billing data is absent.
+- Phase 2 complete: the Supabase-aware seed is idempotent and created 12 linked development identities/application users twice without duplicates.
+- Phase 3 complete: direct Supabase JWT verification and seeded-role authentication are implemented and verified; legacy code remains only as the requested fallback pending later removal.
+- Phase 4 implementation complete: public registration is token-derived, forced to STUDENT/PENDING, idempotent, and recoverable after cross-device confirmation through non-authoritative user metadata plus completion-on-login/restoration.
+- Phase 5 core account lifecycle is implemented together with Phase 4: web/mobile recovery entry points, reset callbacks/deep links, signed-in password changes, Supabase Admin password reset for linked campus users, trusted-token email projection, and status enforcement.
+- Phase 4 automated checks: backend typecheck and 443/443 backend tests pass; web 25/25 tests, production build, and lint complete (four existing Fast Refresh warnings); rendered Playwright checks pass for login, registration, forgot-password, and reset-callback pages.
+- Outstanding before declaring the product finished: live rendered login/restoration/logout needs approval to transmit a seeded password in the browser; the committed mobile dependency lock targets a newer Flutter/Dart toolchain than the installed Flutter 3.24.5, so the complete committed-lock Flutter suite must be rerun on the matching SDK. Authorization and later product phases below remain open.
 
 CURRENT POSITION
 
-The project is not yet fully finished. The backend is relatively mature and tested, the web is mostly connected, but the database migration and live runtime flows remain unverified. The mobile app has several real API-connected features, but also contains static/demo screens and stale robot test assets.
+The project is not yet fully finished. Database alignment, seeding, direct Supabase authentication, registration, and the core account lifecycle are complete. Authorization hardening, full live client verification, remaining connected mobile work, deployment, observability, and release checks remain.
 
 RECOMMENDED FINAL ARCHITECTURE
 

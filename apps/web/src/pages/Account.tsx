@@ -7,13 +7,14 @@ import { Input } from '../components/ui/Field'
 import { Badge } from '../components/ui/Badge'
 import { useToast } from '../components/ui/Toast'
 import { useAuth } from '../context/AuthContext'
-import { authApi } from '../api/endpoints'
 import { getErrorMessage } from '../lib/api'
 import { formatDate } from '../lib/utils'
+import { changeOwnPassword, updateOwnAccount } from '../lib/accountAuth'
 
 const ROLE_LABELS: Record<string, string> = {
   SYSTEM_OWNER: 'System Owner',
   UNIVERSITY_ADMIN: 'University Administrator',
+  DEPARTMENT_ADMIN: 'Department Administrator',
   INSTRUCTOR: 'Teaching Staff',
   STUDENT: 'Student',
 }
@@ -46,17 +47,26 @@ export function Account() {
   }, [user])
 
   const updateProfile = useMutation({
-    mutationFn: () => authApi.updateProfile(profile),
-    onSuccess: (updated) => {
+    mutationFn: () => updateOwnAccount({
+      currentEmail: user!.email,
+      fullName: profile.fullName,
+      email: profile.email,
+    }),
+    onSuccess: ({ user: updated, emailConfirmationPending }) => {
       setUser({ ...user!, ...updated })
-      toast.success('Profile updated')
+      toast.success(emailConfirmationPending
+        ? 'Profile updated. Confirm the new sign-in email to finish changing it.'
+        : 'Profile updated')
     },
     onError: (error) => toast.error(getErrorMessage(error)),
   })
 
   const changePassword = useMutation({
-    mutationFn: () =>
-      authApi.changePassword(passwords.currentPassword, passwords.newPassword),
+    mutationFn: () => changeOwnPassword({
+      email: user!.email,
+      currentPassword: passwords.currentPassword,
+      newPassword: passwords.newPassword,
+    }),
     onSuccess: () => {
       setPasswords({ currentPassword: '', newPassword: '', confirmPassword: '' })
       toast.success('Password changed')
@@ -77,7 +87,9 @@ export function Account() {
   }
 
   const isStaff =
-    user?.role === 'INSTRUCTOR' || user?.role === 'UNIVERSITY_ADMIN'
+    user?.role === 'INSTRUCTOR' ||
+    user?.role === 'DEPARTMENT_ADMIN' ||
+    user?.role === 'UNIVERSITY_ADMIN'
 
   return (
     <Page title="Account" subtitle="Your name, sign-in email and password.">
@@ -201,14 +213,13 @@ export function Account() {
                 <LifeBuoy className="mt-0.5 h-5 w-5 shrink-0 text-slate-400" />
                 <div className="text-sm text-slate-600">
                   <p>
-                    Staff passwords are not reset by email. Contact your
-                    university administrator, who can set a new one for you from
-                    Students &amp; Staff.
+                    Use the Forgot password link on the sign-in page. A university
+                    administrator can also set a temporary password for an
+                    authorized campus account.
                   </p>
                   <p className="mt-2">
-                    A staff account approves registrations and publishes material
-                    to whole cohorts, so recovering one is a decision a person
-                    makes — not something a mailbox can authorise on its own.
+                    Password recovery is handled by Supabase Auth; account status
+                    and access remain controlled by the campus backend.
                   </p>
                 </div>
               </div>

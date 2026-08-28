@@ -12,6 +12,7 @@ import { authApi } from '../api/endpoints'
 import { tokenStorage, UNAUTHORIZED_EVENT } from '../lib/api'
 import type { AuthUser } from '../types/api'
 import { supabase, supabaseConfigured } from '../lib/supabase'
+import { completeRegistrationForSession } from '../lib/registration'
 
 interface AuthContextValue {
   user: AuthUser | null
@@ -42,7 +43,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const restore = async () => {
       if (supabaseConfigured) {
         const { data } = await supabase!.auth.getSession()
-        if (data.session) tokenStorage.set(data.session.access_token)
+        if (data.session) {
+          // Idempotent for linked users; repairs a registration confirmed in a
+          // different browser before the profile lookup below.
+          await completeRegistrationForSession(data.session)
+        }
       }
 
       if (!tokenStorage.get()) return null
@@ -98,6 +103,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!data.session) throw new Error('Sign in did not create a session')
 
       tokenStorage.set(data.session.access_token)
+      await completeRegistrationForSession(data.session)
       const profile = await authApi.profile()
       setUser(profile)
       return profile

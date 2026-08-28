@@ -1,14 +1,14 @@
 import type { NextFunction, Request, Response } from "express";
-import { decodeJwt } from "jose";
 import {
   looksLikeSupabaseToken,
-  verifySupabaseAccessToken,
+  verifySupabaseIdentity,
 } from "../lib/supabase-auth.js";
 import { unauthorized } from "../utils/AppError.js";
 
 export interface VerifiedIdentity {
   authUserId: string;
   email: string;
+  registration?: unknown;
 }
 
 declare global {
@@ -40,16 +40,22 @@ export const authenticateSupabaseIdentity = async (
   }
 
   try {
-    const authUserId = await verifySupabaseAccessToken(token);
-    const payload = decodeJwt(token);
-    const email = typeof payload.email === "string" ? payload.email : null;
+    const identity = await verifySupabaseIdentity(token);
 
-    if (!email) {
+    if (!identity.email) {
       next(unauthorized("The authenticated identity has no email address"));
       return;
     }
 
-    req.identity = { authUserId, email: email.trim().toLowerCase() };
+    req.identity = {
+      authUserId: identity.authUserId,
+      email: identity.email,
+      // Supabase user_metadata is controlled by the user. It carries only the
+      // three non-authoritative form fields needed to resume registration on a
+      // second device. AuthService validates them and still forces role,
+      // account status, email and tenant lookup server-side.
+      registration: identity.userMetadata.registration,
+    };
     next();
   } catch (error) {
     next(error);

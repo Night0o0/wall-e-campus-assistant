@@ -3,6 +3,7 @@
 Flutter client for four campus account types:
 
 - `UNIVERSITY_ADMIN`
+- `DEPARTMENT_ADMIN`
 - `INSTRUCTOR`
 - `STUDENT`
 
@@ -38,7 +39,7 @@ Replace `192.168.1.10` with the computer's actual address. The development
 Android manifest permits local HTTP. A production build should use HTTPS and
 remove `android:usesCleartextTraffic="true"`.
 
-## Demo accounts
+## Development accounts
 
 Run the non-destructive credential setup against a development database:
 
@@ -48,13 +49,9 @@ npm run db:seed
 ```
 
 It prepares a development showcase with timetable and attendance history,
-course materials, inbox notices, pending students, and staff data.
-
-| App account | Email | Password |
-|---|---|---|
-| University admin | `ahmed.hassan@nctu.edu.eg` | `Demo@12345` |
-| Instructor | `adel.mansour@nctu.edu.eg` | `Demo@12345` |
-| Student | `mechatronics.a@student.nctu.edu.eg` | `Demo@12345` |
+course materials, inbox notices, pending students, and staff data. Account
+addresses are defined by the seed fixtures; the shared development password is
+provided at runtime and must not be committed to documentation or source.
 
 ## Connected flows
 
@@ -65,6 +62,9 @@ course materials, inbox notices, pending students, and staff data.
 - Student timetable, materials and attendance summary
 - Camera QR scanning to record attendance
 - Student password-reset request
+- Supabase password-reset deep link and new-password screen
+- Signed-in password change with current-password reauthentication
+- Cross-device registration completion on the next confirmed sign-in
 
 Run checks with:
 
@@ -72,3 +72,6 @@ Run checks with:
 flutter analyze
 flutter test
 ```
+
+Use the Flutter/Dart version that resolves the committed `pubspec.lock`. Flutter
+3.24.5 is too old for its current native-assets dependencies.

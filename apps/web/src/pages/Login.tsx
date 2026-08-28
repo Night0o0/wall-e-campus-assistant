@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react'
-import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom'
+import { Link, Navigate, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { GraduationCap, Eye, EyeOff, AlertCircle } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { getErrorMessage } from '../lib/api'
@@ -11,6 +11,7 @@ export function Login() {
   const { user, isLoading: isRestoringSession, login } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
+  const [searchParams] = useSearchParams()
 
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -92,6 +93,13 @@ export function Login() {
           </p>
 
           <form onSubmit={handleSubmit} className="mt-8 space-y-4">
+            {(searchParams.get('registered') === '1' || searchParams.get('password-reset') === '1') && (
+              <div className="rounded-lg bg-success-50 p-3 text-sm text-success-700">
+                {searchParams.get('registered') === '1'
+                  ? 'Registration completed. Sign in to finish your profile and view approval status.'
+                  : 'Password updated. Sign in with your new password.'}
+              </div>
+            )}
             {error && (
               <div
                 role="alert"
@@ -149,6 +157,11 @@ export function Login() {
             Student without an account?{' '}
             <Link className="font-semibold text-primary-600" to="/register">
               Register
+            </Link>
+          </p>
+          <p className="mt-2 text-center text-sm">
+            <Link className="font-semibold text-primary-600" to="/forgot-password">
+              Forgot your password?
             </Link>
           </p>
         </div>

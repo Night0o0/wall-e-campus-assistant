@@ -21,14 +21,25 @@ export const registerSchema = z.object({
 
 export type RegisterInput = z.infer<typeof registerSchema>;
 
-export const completeSupabaseRegistrationSchema = z.object({
+export const studentRegistrationDetailsSchema = z.object({
   universityId: z.string().trim().min(4).max(50),
   fullName: z.string().trim().min(3).max(120),
   organizationCode: z.string().trim().min(2).max(50),
 });
 
+// Every field is optional at the transport because a confirmation callback may
+// happen on another device. AuthService merges this body with the verified
+// identity's non-authoritative user_metadata, then validates the complete set
+// with studentRegistrationDetailsSchema before creating anything.
+export const completeSupabaseRegistrationSchema =
+  studentRegistrationDetailsSchema.partial().strict();
+
 export type CompleteSupabaseRegistrationInput = z.infer<
   typeof completeSupabaseRegistrationSchema
+>;
+
+export type StudentRegistrationDetails = z.infer<
+  typeof studentRegistrationDetailsSchema
 >;
 
 export const loginSchema = z.object({

@@ -6,7 +6,8 @@ import type { AccountStatus, UserRole } from "@prisma/client";
 import { AppError, forbidden, unauthorized } from "../utils/AppError.js";
 import {
   looksLikeSupabaseToken,
-  verifySupabaseAccessToken,
+  verifySupabaseIdentity,
+  type SupabaseIdentityClaims,
 } from "../lib/supabase-auth.js";
 import { assertClientAllowed } from "../utils/client-platform.js";
 
@@ -47,6 +48,7 @@ export const authenticate = async (
 
   try {
     let userWhere: { id: string } | { authUserId: string };
+    let verifiedIdentity: SupabaseIdentityClaims | null = null;
     const supabaseToken = looksLikeSupabaseToken(token);
 
     if (supabaseToken) {
@@ -55,7 +57,8 @@ export const authenticate = async (
         return;
       }
 
-      userWhere = { authUserId: await verifySupabaseAccessToken(token) };
+      verifiedIdentity = await verifySupabaseIdentity(token);
+      userWhere = { authUserId: verifiedIdentity.authUserId };
     } else {
       if (env.AUTH_PROVIDER === "supabase") {
         next(unauthorized("Legacy sessions are no longer accepted"));
@@ -73,7 +76,7 @@ export const authenticate = async (
       userWhere = { id: decoded.id };
     }
 
-    const user = await prisma.user.findUnique({
+    let user = await prisma.user.findUnique({
       where: userWhere,
       select: {
         id: true,
@@ -94,15 +97,49 @@ export const authenticate = async (
       return;
     }
 
-    // A deactivated account must stop working immediately, even while its
-    // token is still within its validity window.
-    if (!user.isActive || user.accountStatus === "DISABLED") {
-      next(unauthorized("This account has been deactivated"));
-      return;
+    // A confirmed Supabase email change appears in the next verified access
+    // token. Synchronize the application projection only from that trusted
+    // claim, never from a profile request body. A globally unique conflict is
+    // refused rather than overwriting another account.
+    if (verifiedIdentity?.email && verifiedIdentity.email !== user.email) {
+      const clash = await prisma.user.findUnique({
+        where: { email: verifiedIdentity.email },
+        select: { id: true },
+      });
+      if (clash && clash.id !== user.id) {
+        next(unauthorized("The confirmed email is already linked to another account"));
+        return;
+      }
+
+      user = await prisma.user.update({
+        where: { id: user.id },
+        data: { email: verifiedIdentity.email },
+        select: {
+          id: true,
+          universityId: true,
+          fullName: true,
+          email: true,
+          role: true,
+          accountStatus: true,
+          isVerified: true,
+          isActive: true,
+          organizationId: true,
+          departmentId: true,
+        },
+      });
     }
 
     if (user.accountStatus === "REJECTED") {
       next(unauthorized("This account registration was rejected"));
+      return;
+    }
+
+    // A deactivated account must stop working immediately, even while its
+    // token is still within its validity window. Rejection is checked first so
+    // a rejected registration gets its specific terminal state even though the
+    // same decision also sets isActive=false.
+    if (!user.isActive || user.accountStatus === "DISABLED") {
+      next(unauthorized("This account has been deactivated"));
       return;
     }
 

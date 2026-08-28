@@ -10,6 +10,9 @@ import 'package:wall_e_mobile/data/campus_api.dart';
 import 'package:wall_e_mobile/models/account_role.dart';
 
 class FakeCampusApi implements CampusGateway {
+  String? changedPassword;
+  String? recoveredPassword;
+
   @override
   Future<void> logout() async {}
 
@@ -290,6 +293,20 @@ class FakeCampusApi implements CampusGateway {
 
   @override
   Future<void> requestPasswordReset(String email) async {}
+
+  @override
+  Future<void> changePassword({
+    required String email,
+    required String currentPassword,
+    required String newPassword,
+  }) async {
+    changedPassword = newPassword;
+  }
+
+  @override
+  Future<void> finishPasswordRecovery(String newPassword) async {
+    recoveredPassword = newPassword;
+  }
 }
 
 Future<void> signIn(WidgetTester tester, String email) async {

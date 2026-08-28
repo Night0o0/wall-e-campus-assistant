@@ -341,12 +341,33 @@ export class AdminService {
     actor: AdminActor
   ) {
     const existing = await this.requireInOrganization(userId, actor);
+    let synchronizedIdentity:
+      | { authUserId: string; previousEmail: string }
+      | undefined;
 
     if (input.email && input.email !== existing.email) {
       const clash = await this.users.findByEmail(input.email);
 
       if (clash && clash.id !== userId) {
         throw conflict("Email already in use");
+      }
+
+      if (env.AUTH_PROVIDER === "supabase") {
+        const identity = await this.users.findAuthUserIdInOrganization(
+          userId,
+          actor.organizationId
+        );
+        if (identity?.authUserId) {
+          const { error } = await getSupabaseAdmin().auth.admin.updateUserById(
+            identity.authUserId,
+            { email: input.email, email_confirm: true }
+          );
+          if (error) throw badRequest("Unable to update the login identity");
+          synchronizedIdentity = {
+            authUserId: identity.authUserId,
+            previousEmail: existing.email,
+          };
+        }
       }
     }
 
@@ -364,7 +385,20 @@ export class AdminService {
       return this.getUser(userId, actor);
     }
 
-    await this.users.update(userId, userFields);
+    try {
+      await this.users.update(userId, userFields);
+    } catch (error) {
+      // Supabase and Postgres cannot share a transaction. Restore the identity
+      // if the application projection fails so the two sign-in addresses do
+      // not remain split after a partial write.
+      if (synchronizedIdentity) {
+        await getSupabaseAdmin().auth.admin.updateUserById(
+          synchronizedIdentity.authUserId,
+          { email: synchronizedIdentity.previousEmail, email_confirm: true }
+        );
+      }
+      throw error;
+    }
 
     return this.getUser(userId, actor);
   }

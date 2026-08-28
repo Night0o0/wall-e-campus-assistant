@@ -1,30 +1,16 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { AlertCircle, CheckCircle2, GraduationCap } from 'lucide-react'
-import { api, getErrorMessage, tokenStorage } from '../lib/api'
+import { getErrorMessage, tokenStorage } from '../lib/api'
 import { supabase, supabaseConfigured } from '../lib/supabase'
 import { Button } from '../components/ui/Button'
 import { Input } from '../components/ui/Field'
-
-const PENDING_KEY = 'leornian.pendingRegistration'
-
-interface PendingRegistration {
-  universityId: string
-  fullName: string
-  organizationCode: string
-}
-
-async function completeRegistration(
-  registration: PendingRegistration,
-  accessToken: string
-) {
-  tokenStorage.set(accessToken)
-  return api.post(
-    '/auth/register/supabase',
-    registration,
-    { headers: { Authorization: `Bearer ${accessToken}` } }
-  )
-}
+import {
+  completeRegistrationForSession,
+  PENDING_REGISTRATION_KEY,
+  registrationFromMetadata,
+  type PendingRegistration,
+} from '../lib/registration'
 
 export function Register() {
   const [form, setForm] = useState({
@@ -63,20 +49,24 @@ export function Register() {
     }
 
     try {
-      localStorage.setItem(PENDING_KEY, JSON.stringify(registration))
+      localStorage.setItem(PENDING_REGISTRATION_KEY, JSON.stringify(registration))
       const { data, error: signUpError } = await supabase!.auth.signUp({
         email: form.email.trim().toLowerCase(),
         password: form.password,
         options: {
           emailRedirectTo: `${window.location.origin}/register/complete`,
+          // These values are supplied by the student and grant no authority.
+          // Keeping them with the identity lets a confirmation opened on a
+          // second device finish without the first browser's localStorage.
+          data: { registration },
         },
       })
 
       if (signUpError) throw signUpError
 
       if (data.session) {
-        await completeRegistration(registration, data.session.access_token)
-        localStorage.removeItem(PENDING_KEY)
+        await completeRegistrationForSession(data.session, registration)
+        localStorage.removeItem(PENDING_REGISTRATION_KEY)
       }
 
       setSent(true)
@@ -143,12 +133,20 @@ export function CompleteRegistration() {
   useEffect(() => {
     void (async () => {
       try {
-        const raw = localStorage.getItem(PENDING_KEY)
+        const raw = localStorage.getItem(PENDING_REGISTRATION_KEY)
         const { data } = await supabase!.auth.getSession()
-        if (!raw || !data.session) throw new Error('Registration details or session are missing.')
-        await completeRegistration(JSON.parse(raw) as PendingRegistration, data.session.access_token)
-        localStorage.removeItem(PENDING_KEY)
-        navigate('/', { replace: true })
+        if (!data.session) throw new Error('The confirmation session is missing or expired.')
+        const local = raw ? registrationFromMetadata(JSON.parse(raw)) : null
+        const metadata = registrationFromMetadata(
+          data.session.user.user_metadata?.registration
+        )
+        const registration = local ?? metadata
+        if (!registration) throw new Error('Registration details are missing. Start registration again.')
+        await completeRegistrationForSession(data.session, registration)
+        localStorage.removeItem(PENDING_REGISTRATION_KEY)
+        await supabase!.auth.signOut()
+        tokenStorage.clear()
+        navigate('/login?registered=1', { replace: true })
       } catch (caught) {
         setMessage(getErrorMessage(caught, 'Registration could not be completed.'))
       }

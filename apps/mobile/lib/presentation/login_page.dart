@@ -235,7 +235,7 @@ class _LoginPageState extends State<LoginPage> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text(
-              'If this is an active student account, a reset code is on its way.',
+              'If the address can recover an account, a secure reset link is on its way.',
             ),
           ),
         );

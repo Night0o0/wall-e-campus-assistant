@@ -7,9 +7,9 @@ import { Input } from '../components/ui/Field'
 import { Badge } from '../components/ui/Badge'
 import { useToast } from '../components/ui/Toast'
 import { useAuth } from '../context/AuthContext'
-import { authApi } from '../api/endpoints'
 import { getErrorMessage } from '../lib/api'
 import { formatDate } from '../lib/utils'
+import { changeOwnPassword, updateOwnAccount } from '../lib/accountAuth'
 
 export function Settings() {
   const { user, setUser } = useAuth()
@@ -30,17 +30,26 @@ export function Settings() {
   }, [user])
 
   const updateProfile = useMutation({
-    mutationFn: () => authApi.updateProfile(profile),
-    onSuccess: (updated) => {
+    mutationFn: () => updateOwnAccount({
+      currentEmail: user!.email,
+      fullName: profile.fullName,
+      email: profile.email,
+    }),
+    onSuccess: ({ user: updated, emailConfirmationPending }) => {
       setUser({ ...user!, ...updated })
-      toast.success('Profile updated')
+      toast.success(emailConfirmationPending
+        ? 'Profile updated. Confirm the new sign-in email to finish changing it.'
+        : 'Profile updated')
     },
     onError: (error) => toast.error(getErrorMessage(error)),
   })
 
   const changePassword = useMutation({
-    mutationFn: () =>
-      authApi.changePassword(passwords.currentPassword, passwords.newPassword),
+    mutationFn: () => changeOwnPassword({
+      email: user!.email,
+      currentPassword: passwords.currentPassword,
+      newPassword: passwords.newPassword,
+    }),
     onSuccess: () => {
       setPasswords({ currentPassword: '', newPassword: '', confirmPassword: '' })
       toast.success('Password changed')
@@ -191,8 +200,8 @@ export function Settings() {
             <div className="mt-4 flex items-start gap-3 rounded-lg bg-slate-50 p-4">
               <Server className="mt-0.5 h-5 w-5 shrink-0 text-slate-400" />
               <p className="text-sm text-slate-600">
-                Platform-wide settings such as tax rates, billing currency and
-                email notifications aren't implemented yet.
+                Platform email, authentication and operational settings are
+                configured by the deployment environment.
               </p>
             </div>
           </Card>

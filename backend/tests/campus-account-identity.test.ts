@@ -16,9 +16,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const createUser = vi.fn();
 const deleteUser = vi.fn();
+const updateUserById = vi.fn();
 
 vi.mock("../src/lib/supabase-auth.js", () => ({
-  getSupabaseAdmin: () => ({ auth: { admin: { createUser, deleteUser } } }),
+  getSupabaseAdmin: () => ({
+    auth: { admin: { createUser, deleteUser, updateUserById } },
+  }),
   looksLikeSupabaseToken: () => false,
   verifySupabaseAccessToken: async () => "unused",
 }));
@@ -67,8 +70,10 @@ beforeEach(() => {
   (env as { AUTH_PROVIDER: string }).AUTH_PROVIDER = "supabase";
   createUser.mockReset();
   deleteUser.mockReset();
+  updateUserById.mockReset();
   createUser.mockResolvedValue({ data: { user: { id: "supabase-uid-1" } }, error: null });
   deleteUser.mockResolvedValue({ error: null });
+  updateUserById.mockResolvedValue({ data: { user: {} }, error: null });
 });
 
 afterEach(() => {
@@ -138,5 +143,96 @@ describe("the legacy branch is still reachable", () => {
     expect(created[0]!.authUserId).toBeUndefined();
     expect(typeof created[0]!.passwordHash).toBe("string");
     expect(created[0]!.passwordHash).not.toBe(INPUT.password);
+  });
+});
+
+describe("administrator-managed Supabase credentials", () => {
+  class ManagedUsers extends UserRepository {
+    override async findInOrganization() {
+      return {
+        id: "student-1",
+        role: "STUDENT",
+        email: "old@nctu.edu.eg",
+        organizationId: "org-a",
+      } as never;
+    }
+
+    override async findAuthUserIdInOrganization() {
+      return { authUserId: "supabase-student-1" };
+    }
+
+    override async findByEmail() {
+      return null as never;
+    }
+
+    override async update() {
+      return { id: "student-1" } as never;
+    }
+
+    override async findByIdSafe() {
+      return { id: "student-1" } as never;
+    }
+  }
+
+  it("resets a linked password with the Supabase Admin API", async () => {
+    const service = new AdminService(
+      new AdminRepository(),
+      new ManagedUsers()
+    );
+
+    await service.resetPassword(
+      "student-1",
+      "new-password-123",
+      { ...ACTOR, departmentId: null } as never
+    );
+
+    expect(updateUserById).toHaveBeenCalledWith("supabase-student-1", {
+      password: "new-password-123",
+    });
+  });
+
+  it("updates a linked administrator-managed email in Supabase first", async () => {
+    const users = new ManagedUsers();
+    // getUser() after the write uses the same tenant-safe repository method.
+    const service = new AdminService(new AdminRepository(), users);
+
+    await service.updateUser(
+      "student-1",
+      { email: "new@nctu.edu.eg" },
+      { ...ACTOR, departmentId: null } as never
+    );
+
+    expect(updateUserById).toHaveBeenCalledWith("supabase-student-1", {
+      email: "new@nctu.edu.eg",
+      email_confirm: true,
+    });
+  });
+
+  it("restores the Supabase email when the database projection fails", async () => {
+    class FailingUsers extends ManagedUsers {
+      override async update(): Promise<never> {
+        throw new Error("database write failed");
+      }
+    }
+    const service = new AdminService(new AdminRepository(), new FailingUsers());
+
+    await expect(
+      service.updateUser(
+        "student-1",
+        { email: "new@nctu.edu.eg" },
+        { ...ACTOR, departmentId: null } as never
+      )
+    ).rejects.toThrow("database write failed");
+
+    expect(updateUserById.mock.calls).toEqual([
+      ["supabase-student-1", {
+        email: "new@nctu.edu.eg",
+        email_confirm: true,
+      }],
+      ["supabase-student-1", {
+        email: "old@nctu.edu.eg",
+        email_confirm: true,
+      }],
+    ]);
   });
 });

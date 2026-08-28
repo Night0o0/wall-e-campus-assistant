@@ -4,6 +4,7 @@ import { DashboardLayout } from './components/layout/DashboardLayout'
 import { ProtectedRoute } from './components/auth/ProtectedRoute'
 import { Login } from './pages/Login'
 import { CompleteRegistration, Register } from './pages/Register'
+import { ForgotPassword, ResetPassword } from './pages/PasswordRecovery'
 import { Account } from './pages/Account'
 import { StudentDashboard } from './pages/student/StudentDashboard'
 import { StudentAssignments } from './pages/student/Assignments'
@@ -75,6 +76,8 @@ function App() {
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
         <Route path="/register/complete" element={<CompleteRegistration />} />
+        <Route path="/forgot-password" element={<ForgotPassword />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
 
         {/* Full-bleed, deliberately outside DashboardLayout: this goes on a
             projector in front of a room, where a sidebar of admin links is both

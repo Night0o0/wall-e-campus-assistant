@@ -19,6 +19,8 @@ The active web product does not include:
 ## Main areas
 
 - authentication and registration
+- cross-device registration completion
+- password recovery, reset callback and signed-in password changes
 - account/profile pages
 - owner console for organizations and users
 - university admin console for timetable, directory, sessions, exports

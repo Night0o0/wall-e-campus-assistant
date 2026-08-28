@@ -33,7 +33,11 @@ vi.mock("jose", async () => {
 
 // Static imports: vitest hoists vi.mock above them, so these still get the mock.
 import { env } from "../src/config/env.js";
-import { looksLikeSupabaseToken, verifySupabaseAccessToken } from "../src/lib/supabase-auth.js";
+import {
+  looksLikeSupabaseToken,
+  verifySupabaseAccessToken,
+  verifySupabaseIdentity,
+} from "../src/lib/supabase-auth.js";
 
 const ISSUER = `${env.SUPABASE_URL!.replace(/\/$/, "")}/auth/v1`;
 const AUDIENCE = env.SUPABASE_JWT_AUDIENCE;
@@ -45,6 +49,8 @@ interface TokenOverrides {
   subject?: string | null;
   expiresIn?: number;
   issuedAt?: number;
+  email?: string;
+  userMetadata?: Record<string, unknown>;
 }
 
 const makeToken = async (overrides: TokenOverrides = {}) => {
@@ -55,9 +61,15 @@ const makeToken = async (overrides: TokenOverrides = {}) => {
     subject = SUBJECT,
     expiresIn = 3600,
     issuedAt = now,
+    email = "someone@leornian.dev",
+    userMetadata,
   } = overrides;
 
-  let builder = new SignJWT({ email: "someone@leornian.dev", role: "authenticated" })
+  let builder = new SignJWT({
+    email,
+    role: "authenticated",
+    ...(userMetadata ? { user_metadata: userMetadata } : {}),
+  })
     .setProtectedHeader({ alg: "ES256" })
     .setIssuer(issuer)
     .setAudience(audience)
@@ -79,6 +91,24 @@ beforeAll(async () => {
 describe("a token that is correct in every respect", () => {
   it("is accepted, and yields the subject the backend looks the user up by", async () => {
     await expect(verifySupabaseAccessToken(await makeToken())).resolves.toBe(SUBJECT);
+  });
+
+  it("returns only identity claims taken from the verified token", async () => {
+    const registration = {
+      universityId: "STU-1001",
+      fullName: "Cross Device Student",
+      organizationCode: "NCTU",
+    };
+    const token = await makeToken({
+      email: "verified@example.edu",
+      userMetadata: { registration, role: "SYSTEM_OWNER" },
+    });
+
+    await expect(verifySupabaseIdentity(token)).resolves.toEqual({
+      authUserId: SUBJECT,
+      email: "verified@example.edu",
+      userMetadata: { registration, role: "SYSTEM_OWNER" },
+    });
   });
 });
 

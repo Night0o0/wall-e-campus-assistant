@@ -1357,6 +1357,10 @@ class ConnectedProfile extends StatelessWidget {
                 subtitle: 'Organization',
                 icon: Icons.account_balance_rounded),
           ])),
+          FilledButton.icon(
+              onPressed: () => _showChangePassword(context, api, session),
+              icon: const Icon(Icons.lock_outline_rounded),
+              label: const Text('Change password')),
           if (onLogout != null)
             FilledButton.icon(
                 onPressed: onLogout,
@@ -1412,11 +1416,135 @@ class ConnectedStudentProfile extends StatelessWidget {
                           : AppColors.orange)),
             ])),
             FilledButton.icon(
+                onPressed: () => _showChangePassword(context, api, session),
+                icon: const Icon(Icons.lock_outline_rounded),
+                label: const Text('Change password')),
+            FilledButton.icon(
                 onPressed: onLogout,
                 icon: const Icon(Icons.logout_rounded),
                 label: const Text('Sign out')),
           ];
         },
+      );
+}
+
+Future<void> _showChangePassword(
+  BuildContext context,
+  CampusGateway api,
+  AuthSession session,
+) =>
+    showDialog<void>(
+      context: context,
+      builder: (_) => _ChangePasswordDialog(api: api, session: session),
+    );
+
+class _ChangePasswordDialog extends StatefulWidget {
+  const _ChangePasswordDialog({required this.api, required this.session});
+
+  final CampusGateway api;
+  final AuthSession session;
+
+  @override
+  State<_ChangePasswordDialog> createState() => _ChangePasswordDialogState();
+}
+
+class _ChangePasswordDialogState extends State<_ChangePasswordDialog> {
+  final current = TextEditingController();
+  final next = TextEditingController();
+  final confirm = TextEditingController();
+  bool submitting = false;
+  String? error;
+
+  @override
+  void dispose() {
+    current.dispose();
+    next.dispose();
+    confirm.dispose();
+    super.dispose();
+  }
+
+  Future<void> submit() async {
+    if (next.text.length < 8) {
+      setState(() => error = 'Use at least eight characters.');
+      return;
+    }
+    if (next.text != confirm.text) {
+      setState(() => error = 'Passwords do not match.');
+      return;
+    }
+
+    setState(() {
+      submitting = true;
+      error = null;
+    });
+    try {
+      await widget.api.changePassword(
+        email: widget.session.identifier,
+        currentPassword: current.text,
+        newPassword: next.text,
+      );
+      if (!mounted) return;
+      Navigator.of(context).pop();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Password updated.')),
+      );
+    } on ApiException catch (caught) {
+      if (mounted) setState(() => error = caught.message);
+    } catch (_) {
+      if (mounted) setState(() => error = 'Unable to change the password.');
+    } finally {
+      if (mounted) setState(() => submitting = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+        title: const Text('Change password'),
+        content: SizedBox(
+          width: 420,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                key: const ValueKey('current-password'),
+                controller: current,
+                obscureText: true,
+                decoration:
+                    const InputDecoration(labelText: 'Current password'),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                key: const ValueKey('new-password'),
+                controller: next,
+                obscureText: true,
+                decoration: const InputDecoration(labelText: 'New password'),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                key: const ValueKey('confirm-password'),
+                controller: confirm,
+                obscureText: true,
+                decoration:
+                    const InputDecoration(labelText: 'Confirm password'),
+              ),
+              if (error != null) ...[
+                const SizedBox(height: 12),
+                Text(error!,
+                    key: const ValueKey('change-password-error'),
+                    style: const TextStyle(color: AppColors.orange)),
+              ],
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+              onPressed: submitting ? null : () => Navigator.of(context).pop(),
+              child: const Text('Cancel')),
+          FilledButton(
+              key: const ValueKey('change-password-submit'),
+              onPressed: submitting ? null : submit,
+              child: Text(submitting ? 'Updating…' : 'Update')),
+        ],
       );
 }
 

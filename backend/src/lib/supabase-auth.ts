@@ -29,8 +29,22 @@ export const looksLikeSupabaseToken = (token: string) => {
   }
 };
 
-/** Verify signature, issuer, audience and subject using the project's JWKS. */
-export const verifySupabaseAccessToken = async (token: string) => {
+export interface SupabaseIdentityClaims {
+  authUserId: string;
+  email: string | null;
+  userMetadata: Record<string, unknown>;
+}
+
+/**
+ * Verify every identity claim the application consumes.
+ *
+ * Callers must use this result rather than decoding the token a second time:
+ * the payload returned here is the one whose signature, issuer, audience and
+ * lifetime were verified by jose.
+ */
+export const verifySupabaseIdentity = async (
+  token: string
+): Promise<SupabaseIdentityClaims> => {
   if (!env.SUPABASE_URL) {
     throw unauthorized("Supabase authentication is not configured");
   }
@@ -42,11 +56,27 @@ export const verifySupabaseAccessToken = async (token: string) => {
     });
 
     if (!payload.sub) throw new Error("Missing subject");
-    return payload.sub;
+
+    const email =
+      typeof payload.email === "string"
+        ? payload.email.trim().toLowerCase()
+        : null;
+    const userMetadata =
+      payload.user_metadata &&
+      typeof payload.user_metadata === "object" &&
+      !Array.isArray(payload.user_metadata)
+        ? (payload.user_metadata as Record<string, unknown>)
+        : {};
+
+    return { authUserId: payload.sub, email, userMetadata };
   } catch {
     throw unauthorized("Invalid or expired access token");
   }
 };
+
+/** Backward-compatible subject-only verifier used by existing callers/tests. */
+export const verifySupabaseAccessToken = async (token: string) =>
+  (await verifySupabaseIdentity(token)).authUserId;
 
 /**
  * Server-only administrative client used to provision staff identities.
