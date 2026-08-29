@@ -4,14 +4,18 @@ import { ScheduleRepository } from "../repositories/schedule.repository.js";
 import { sessionWindowConfig } from "../config/attendance.config.js";
 import { CreateSessionInput } from "../types/session.types.js";
 import { generateQrToken } from "../utils/qr.util.js";
-import { canSeeSession, seesOnlyOwnSessions } from "../utils/session-access.js";
+import {
+    canSeeSession,
+    isSessionOperator,
+    seesOnlyOwnSessions,
+} from "../utils/session-access.js";
 import {
     PaginationQuery,
     paginate,
     toSkipTake,
 } from "../utils/pagination.js";
 import { sameOccurrenceWindow, sessionState } from "../utils/session-window.js";
-import { badRequest, conflict, notFound } from "../utils/AppError.js";
+import { badRequest, conflict, forbidden, notFound } from "../utils/AppError.js";
 
 /** Just enough of the authenticated user to scope and authorize an open. */
 export interface SessionActor {
@@ -62,6 +66,8 @@ export class SessionService {
         actor: SessionActor,
         now: Date = new Date()
     ) {
+        this.assertOperator(actor);
+
         const schedule = input.lectureScheduleId
             ? await this.loadScheduleForOpening(input.lectureScheduleId, actor)
             : null;
@@ -113,6 +119,7 @@ export class SessionService {
      * (D-2).
      */
     async listSessionsFor(actor: SessionActor, query: PaginationQuery) {
+        this.assertOperator(actor);
         const page = toSkipTake(query);
 
         const { data, total } = seesOnlyOwnSessions(actor)
@@ -148,14 +155,7 @@ export class SessionService {
         );
     }
 
-    /**
-     * A rotating QR token, for a user principal.
-     *
-     * Applies the instructor narrowing in utils/session-access.ts. Note that a
-     * STUDENT still reaches this while QR_ENDPOINT_STAFF_ONLY is off, scoped to
-     * their organization — that is the deliberate, tracked deferral this flag
-     * exists for, and closing it is the flag's job, not this method's.
-     */
+    /** A rotating QR token for authorized staff projection. */
     async getQrToken(sessionId: string, actor: SessionActor) {
         return this.mintQrToken(await this.loadVisible(sessionId, actor));
     }
@@ -177,6 +177,12 @@ export class SessionService {
         }
 
         return session;
+    }
+
+    private assertOperator(actor: SessionActor) {
+        if (!isSessionOperator(actor)) {
+            throw forbidden("Only authorized teaching staff may operate attendance sessions");
+        }
     }
 
     /**

@@ -34,6 +34,10 @@ export const makeSchedule = (
   return {
     id,
     organizationId: options.organizationId ?? ORG_A,
+    departmentId: null,
+    cohortId: null,
+    offeringId: null,
+    teachingAssignmentId: null,
     courseId,
     instructorId,
     faculty: "Engineering",

@@ -30,17 +30,6 @@ const envSchema = z.object({
   DATABASE_URL: z.string().min(1, "DATABASE_URL is required"),
 
   /**
-   * Restricts GET /api/sessions/:id/qr to staff.
-   *
-   * Students scan codes but must not mint them. Staff display the code through
-   * the instructor QR screen.
-   */
-  QR_ENDPOINT_STAFF_ONLY: z
-    .enum(["true", "false"])
-    .default("true")
-    .transform((value) => value === "true"),
-
-  /**
    * Whether a student may scan into a session with no lecture behind it.
    *
    * Phase 3 binds scanning to the student's own cohort: a session linked to a
@@ -254,14 +243,12 @@ const envSchema = z.object({
   /**
    * Whether /api/auth/register demands a verification ticket.
    *
-   * Ships OFF, and the reason is the same one QR_ENDPOINT_STAFF_ONLY ships off:
-   * the client that has to change is not in this repository. The Flutter
-   * student app registers with no ticket today, and turning this on before that
-   * app implements the OTP screens would stop student registration outright.
+   * Ships OFF because the legacy ticket-based registration client must remain
+   * available during the Supabase migration. The current web and mobile clients
+   * use Supabase confirmation and complete registration from a verified token.
    *
-   * Turn it on once the Flutter app sends `verificationTicket`. Until then the
-   * endpoints exist, are tested, and can be adopted at the client's own pace —
-   * which is what makes this an additive change rather than a breaking one.
+   * The endpoints remain for legacy rollback during the authentication
+   * transition; they are not part of the current Supabase registration flow.
    */
   STUDENT_EMAIL_VERIFICATION_REQUIRED: z
     .enum(["true", "false"])

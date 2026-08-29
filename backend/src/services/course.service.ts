@@ -6,6 +6,7 @@ import {
     canExportCourse,
     canManageCourse,
 } from "../utils/course-access.js";
+import type { Prisma } from "@prisma/client";
 
 const courseRepo = new CourseRepository();
 
@@ -25,18 +26,33 @@ export class CourseService {
         });
     }
 
-    async getCourse(courseId: string, organizationId: string) {
-        const course = await courseRepo.findById(courseId);
-        // Same error for missing and out-of-org so the API can't be used to probe other tenants
-        if (!course || course.organizationId !== organizationId) {
+    async getCourse(courseId: string, actor: CourseActor, organizationId: string) {
+        const course = await courseRepo.findAccessibleById(
+            courseId,
+            organizationId,
+            this.readScope(actor)
+        );
+        if (!course) {
             throw notFound("Course not found");
         }
-        return course;
+        return this.withPermissions(course, actor);
     }
 
-    async getCourseWithSessions(courseId: string, organizationId: string) {
-        const course = await courseRepo.findWithSessions(courseId);
-        if (!course || course.organizationId !== organizationId) {
+    async getCourseWithSessions(courseId: string, actor: CourseActor, organizationId: string) {
+        if (
+            actor.role !== "INSTRUCTOR" &&
+            actor.role !== "UNIVERSITY_ADMIN" &&
+            actor.role !== "SYSTEM_OWNER"
+        ) {
+            throw forbidden("Course session history is restricted to authorized staff");
+        }
+
+        const course = await courseRepo.findAccessibleWithSessions(
+            courseId,
+            organizationId,
+            this.readScope(actor)
+        );
+        if (!course) {
             throw notFound("Course not found");
         }
         return course;
@@ -55,8 +71,54 @@ export class CourseService {
     }
 
     async getOrgCourses(actor: CourseActor, organizationId: string, query: CourseQuery = {}) {
-        const courses = await courseRepo.findByOrganization(organizationId, query);
+        const courses = await courseRepo.findByOrganization(
+            organizationId,
+            query,
+            this.readScope(actor)
+        );
         return courses.map((course) => this.withPermissions(course, actor));
+    }
+
+    /** Scope is derived only from the authenticated database user. */
+    private readScope(actor: CourseActor): Prisma.CourseWhereInput {
+        if (actor.role === "STUDENT") {
+            return {
+                offerings: {
+                    some: {
+                        enrollments: {
+                            some: { studentId: actor.id, isActive: true },
+                        },
+                    },
+                },
+            };
+        }
+
+        if (actor.role === "INSTRUCTOR") {
+            return {
+                OR: [
+                    { createdById: actor.id },
+                    { lectureSchedules: { some: { instructorId: actor.id, isActive: true } } },
+                    {
+                        offerings: {
+                            some: {
+                                teachingAssignments: {
+                                    some: { instructorId: actor.id, isActive: true },
+                                },
+                            },
+                        },
+                    },
+                ],
+            };
+        }
+
+        if (actor.role === "DEPARTMENT_ADMIN") {
+            if (!actor.departmentId) {
+                return { id: { in: [] } };
+            }
+            return { departmentId: actor.departmentId };
+        }
+
+        return {};
     }
 
     /**

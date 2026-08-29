@@ -18,9 +18,8 @@
  *   * an INSTRUCTOR is an instructor, and sees the sessions they opened;
  *   * UNIVERSITY_ADMIN and SYSTEM_OWNER are scoped to their organization
  *     and no further;
- *   * a STUDENT is scoped to the organization only. Narrowing students to their
- *     own cohort is a separate question that belongs with the QR endpoint guard
- *     (QR_ENDPOINT_STAFF_ONLY) and is deliberately not decided here.
+ *   * every other role is denied. Students scan a QR through the attendance
+ *     endpoint; they never read, close, or mint credentials for a session.
  *
  * Callers answer "not found" rather than "forbidden" when this returns false,
  * for the same reason every other read in this system does: a 403 would confirm
@@ -39,6 +38,12 @@ export interface SessionAuthSubject {
   organizationId: string;
   createdById: string;
 }
+
+/** Roles allowed to operate and inspect attendance sessions. */
+export const isSessionOperator = (actor: SessionAuthActor): boolean =>
+  actor.role === "INSTRUCTOR" ||
+  actor.role === "UNIVERSITY_ADMIN" ||
+  actor.role === "SYSTEM_OWNER";
 
 /**
  * Whether this actor is narrowed to the sessions they opened themselves.
@@ -60,6 +65,10 @@ export const canSeeSession = (
   session: SessionAuthSubject,
   actor: SessionAuthActor
 ): boolean => {
+  if (!isSessionOperator(actor)) {
+    return false;
+  }
+
   // Unconditional, and first: no role widens past its own university.
   if (session.organizationId !== actor.organizationId) {
     return false;
@@ -69,5 +78,5 @@ export const canSeeSession = (
     return session.createdById === actor.id;
   }
 
-  return true;
+  return actor.role === "UNIVERSITY_ADMIN" || actor.role === "SYSTEM_OWNER";
 };

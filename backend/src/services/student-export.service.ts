@@ -26,6 +26,7 @@ export interface ExportActor {
   id: string;
   role: string;
   organizationId: string;
+  departmentId?: string | null;
 }
 
 /** One line of the roster, before it becomes a spreadsheet row. */

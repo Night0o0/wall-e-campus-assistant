@@ -14,9 +14,8 @@ import { getErrorMessage } from '../../lib/api'
  * a lecture hall, and a sidebar full of admin links is both noise and a small
  * privacy leak in a room of two hundred people. It is its own full-bleed route.
  *
- * This page uses the staff token against /api/sessions/:id/qr. When
- * QR_ENDPOINT_STAFF_ONLY is turned on, staff keep projecting codes and students
- * lose the ability to mint their own codes, which is the purpose of the guard.
+ * This page uses the staff token against /api/sessions/:id/qr. The endpoint is
+ * permanently staff-only; students scan its output but cannot mint it.
  */
 export function LiveQr() {
   const { id = '' } = useParams()

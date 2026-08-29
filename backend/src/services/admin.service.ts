@@ -1,5 +1,5 @@
 import bcrypt from "bcrypt";
-import { Prisma, type UserRole } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import { env } from "../config/env.js";
 import { AdminRepository } from "../repositories/admin.repository.js";
 import { UserRepository } from "../repositories/user.repository.js";
@@ -37,9 +37,12 @@ const SALT_ROUNDS = 10;
 /** Just enough of the authenticated user to scope a query. */
 export interface AdminActor {
   id: string;
-  role: UserRole;
+  role: string;
   organizationId: string;
-  departmentId: string | null;
+  // Optional keeps service-level test doubles and legacy internal callers
+  // honest: absence is treated exactly like an unassigned account, never as a
+  // wider scope.
+  departmentId?: string | null;
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000;

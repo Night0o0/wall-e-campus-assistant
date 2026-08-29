@@ -2,6 +2,11 @@
 WALL-E CAMPUS ASSISTANT - FULL FUNCTIONAL REVIEW
 Per account type, per page: what works, what does not.
 ===============================================================================
+ARCHIVED: This August 25 review predates the reduced product scope and the
+completed database, Supabase authentication, account lifecycle, and
+authorization checkpoints. Use docs/PROJECT_STATUS.md and plan.txt for current
+status.
+
 Reviewed : 25 August 2026
 Scope    : backend/ (Express + Prisma), apps/web/ (React), apps/mobile/ (Flutter)
 Baseline : PAGES_AND_GAPS.txt (16 Aug 2026), README.md, docs/

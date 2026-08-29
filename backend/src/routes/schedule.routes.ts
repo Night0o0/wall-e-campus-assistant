@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { authenticate, requireRole } from "../middleware/auth.middleware.js";
+import { authenticate, requireApproved, requireRole } from "../middleware/auth.middleware.js";
 import { validate, validateQuery } from "../middleware/validate.middleware.js";
 import {
   createScheduleSchema,
@@ -17,7 +17,7 @@ import {
 
 const router = Router();
 
-router.use(authenticate);
+router.use(authenticate, requireApproved);
 
 /**
  * Managing the timetable belongs to the university's super admin. SYSTEM_OWNER

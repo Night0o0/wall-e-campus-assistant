@@ -86,12 +86,12 @@ describe("every listing tells the client what it may do", () => {
     expect(course.canManage).toBe(false);
   });
 
-  it("grants both to the instructor who created it", async () => {
+  it("lets a creating instructor export but not mutate the catalogue", async () => {
     const service = new CourseService();
     const [course] = await service.getMyCourses(CREATOR, ORG);
 
     expect(course.canExport).toBe(true);
-    expect(course.canManage).toBe(true);
+    expect(course.canManage).toBe(false);
   });
 
   it("grants both to a super admin on the university-wide list", async () => {
@@ -129,5 +129,42 @@ describe("every listing tells the client what it may do", () => {
       const [course] = await service.getOrgCourses(actor, ORG, {});
       expect(course.canExport).toBe(canExportCourse(COURSE, actor));
     }
+  });
+
+  it("passes an instructor-derived scope to the university course query", async () => {
+    const service = new CourseService();
+    await service.getOrgCourses(TEACHER, ORG, {});
+
+    expect(mocks.findByOrganization).toHaveBeenCalledWith(
+      ORG,
+      {},
+      expect.objectContaining({ OR: expect.any(Array) })
+    );
+  });
+
+  it("passes an enrollment-derived scope for a student", async () => {
+    const service = new CourseService();
+    await service.getOrgCourses({ id: "student-1", role: "STUDENT" }, ORG, {});
+
+    expect(mocks.findByOrganization).toHaveBeenCalledWith(
+      ORG,
+      {},
+      expect.objectContaining({ offerings: expect.any(Object) })
+    );
+  });
+
+  it("passes only the trusted department id for a department admin", async () => {
+    const service = new CourseService();
+    await service.getOrgCourses(
+      { id: "department-admin-1", role: "DEPARTMENT_ADMIN", departmentId: "department-a" },
+      ORG,
+      { department: "client-supplied-other-department" }
+    );
+
+    expect(mocks.findByOrganization).toHaveBeenCalledWith(
+      ORG,
+      expect.objectContaining({ department: "client-supplied-other-department" }),
+      { departmentId: "department-a" }
+    );
   });
 });

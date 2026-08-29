@@ -66,6 +66,9 @@ export const makeScanSession = (seed: ScanSessionSeed = {}) => {
     title: "Electronics",
     createdById: "instructor-1",
     courseId: lecture ? "course-1" : null,
+    course: lecture
+      ? { id: "course-1", courseCode: "MEC201", courseName: "Electronics" }
+      : null,
     organizationId: seed.organizationId ?? ORG_A,
     lectureScheduleId: lecture ? "schedule-1" : null,
     room: "B-204",

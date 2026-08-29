@@ -26,10 +26,16 @@ const OTHER_INSTRUCTOR = { id: "instructor-2", role: "INSTRUCTOR" };
 const TEACHING_INSTRUCTOR = { id: "instructor-3", role: "INSTRUCTOR" };
 const SUPER_ADMIN = { id: "super-1", role: "UNIVERSITY_ADMIN" };
 const SYSTEM_OWNER = { id: "owner-1", role: "SYSTEM_OWNER" };
+const DEPARTMENT_ADMIN = {
+  id: "department-admin-1",
+  role: "DEPARTMENT_ADMIN",
+  departmentId: "department-a",
+};
 
 /** Created by CREATOR, with an active lecture taught by TEACHING_INSTRUCTOR. */
 const COURSE = {
   createdById: CREATOR.id,
+  departmentId: "department-a",
   lectureSchedules: [{ instructorId: TEACHING_INSTRUCTOR.id }],
 };
 
@@ -43,8 +49,8 @@ describe("canManageCourse - who may edit or delete", () => {
     expect(canManageCourse(COURSE, SYSTEM_OWNER)).toBe(true);
   });
 
-  it("lets the creating instructor manage their own course", () => {
-    expect(canManageCourse(COURSE, CREATOR)).toBe(true);
+  it("does not turn course creation history into catalogue authority", () => {
+    expect(canManageCourse(COURSE, CREATOR)).toBe(false);
   });
 
   it("refuses an instructor who neither created nor teaches it", () => {
@@ -57,11 +63,22 @@ describe("canManageCourse - who may edit or delete", () => {
     expect(canManageCourse(COURSE, TEACHING_INSTRUCTOR)).toBe(false);
   });
 
+  it("lets a department admin manage only their linked department", () => {
+    expect(canManageCourse(COURSE, DEPARTMENT_ADMIN)).toBe(true);
+    expect(
+      canManageCourse(COURSE, {
+        ...DEPARTMENT_ADMIN,
+        departmentId: "department-b",
+      })
+    ).toBe(false);
+    expect(
+      canManageCourse(COURSE, { ...DEPARTMENT_ADMIN, departmentId: null })
+    ).toBe(false);
+  });
+
   it("does not depend on lectureSchedules being loaded", () => {
-    // findById does not project lectureSchedules; the manage policy must not
-    // depend on a field its caller does not load.
     expect(canManageCourse({ createdById: CREATOR.id }, SUPER_ADMIN)).toBe(true);
-    expect(canManageCourse({ createdById: CREATOR.id }, CREATOR)).toBe(true);
+    expect(canManageCourse({ createdById: CREATOR.id }, CREATOR)).toBe(false);
     expect(canManageCourse({ createdById: CREATOR.id }, OTHER_INSTRUCTOR)).toBe(
       false
     );
@@ -83,6 +100,16 @@ describe("canExportCourse - who may download the roster", () => {
 
   it("lets the creating instructor export", () => {
     expect(canExportCourse(COURSE, CREATOR)).toBe(true);
+  });
+
+  it("limits a department admin export to their linked department", () => {
+    expect(canExportCourse(COURSE, DEPARTMENT_ADMIN)).toBe(true);
+    expect(
+      canExportCourse(COURSE, {
+        ...DEPARTMENT_ADMIN,
+        departmentId: "department-b",
+      })
+    ).toBe(false);
   });
 
   it("lets an instructor who teaches an active lecture export", () => {

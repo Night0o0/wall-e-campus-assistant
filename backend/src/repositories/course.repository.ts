@@ -1,3 +1,4 @@
+import type { Prisma } from "@prisma/client";
 import prisma from "../lib/prisma.js";
 import { CourseQuery, CreateCourseInput, UpdateCourseInput } from "../types/course.types.js";
 
@@ -67,36 +68,62 @@ export class CourseRepository {
      * derived from the request can displace it — the same construction as
      * UserRepository.findManyInOrganization, and for the same reason.
      */
-    async findByOrganization(organizationId: string, query: CourseQuery = {}) {
+    async findByOrganization(
+        organizationId: string,
+        query: CourseQuery = {},
+        authority: Prisma.CourseWhereInput = {}
+    ) {
         return prisma.course.findMany({
             where: {
-                ...(query.search
-                    ? {
-                          OR: [
-                              { courseCode: { contains: query.search, mode: "insensitive" } },
-                              { courseName: { contains: query.search, mode: "insensitive" } },
-                          ],
-                      }
-                    : {}),
-                ...(query.department
-                    ? { department: { equals: query.department, mode: "insensitive" } }
-                    : {}),
-                ...(query.semester
-                    ? { semester: { equals: query.semester, mode: "insensitive" } }
-                    : {}),
-                // Resolved through the teaching assignment, because a course has
-                // no level of its own. Only active schedules count: a course
-                // dropped from this year's timetable is no longer taught at that
-                // level, whatever it was taught at last year.
-                ...(query.level !== undefined
-                    ? {
-                          lectureSchedules: {
-                              some: { level: query.level, isActive: true },
-                          },
-                      }
-                    : {}),
-
-                // Last, and not optional.
+                AND: [
+                    {
+                        ...(query.search
+                            ? {
+                                  OR: [
+                                      {
+                                          courseCode: {
+                                              contains: query.search,
+                                              mode: "insensitive",
+                                          },
+                                      },
+                                      {
+                                          courseName: {
+                                              contains: query.search,
+                                              mode: "insensitive",
+                                          },
+                                      },
+                                  ],
+                              }
+                            : {}),
+                        ...(query.department
+                            ? {
+                                  department: {
+                                      equals: query.department,
+                                      mode: "insensitive",
+                                  },
+                              }
+                            : {}),
+                        ...(query.semester
+                            ? {
+                                  semester: {
+                                      equals: query.semester,
+                                      mode: "insensitive",
+                                  },
+                              }
+                            : {}),
+                        // Course has no level of its own. Only active teaching
+                        // schedules may satisfy this requested narrowing.
+                        ...(query.level !== undefined
+                            ? {
+                                  lectureSchedules: {
+                                      some: { level: query.level, isActive: true },
+                                  },
+                              }
+                            : {}),
+                    },
+                    authority,
+                ],
+                // Last, and not optional. Authority can only narrow this.
                 organizationId,
             },
             orderBy: { createdAt: 'desc' },
@@ -215,6 +242,7 @@ export class CourseRepository {
                 courseCode: true,
                 courseName: true,
                 department: true,
+                departmentId: true,
                 semester: true,
                 organizationId: true,
                 createdById: true,
@@ -228,6 +256,41 @@ export class CourseRepository {
                         semester: true,
                         section: true,
                     },
+                },
+            },
+        });
+    }
+
+    /** One course through an actor-derived scope, never a client-derived one. */
+    async findAccessibleById(
+        id: string,
+        organizationId: string,
+        authority: Prisma.CourseWhereInput
+    ) {
+        return prisma.course.findFirst({
+            where: { id, organizationId, AND: [authority] },
+            include: {
+                createdBy: { select: { id: true, fullName: true, email: true } },
+                lectureSchedules: activeAssignments,
+                _count: { select: { sessions: true } },
+            },
+        });
+    }
+
+    /** Session history is staff-only and uses the same actor-derived scope. */
+    async findAccessibleWithSessions(
+        id: string,
+        organizationId: string,
+        authority: Prisma.CourseWhereInput
+    ) {
+        return prisma.course.findFirst({
+            where: { id, organizationId, AND: [authority] },
+            include: {
+                createdBy: { select: { id: true, fullName: true, email: true } },
+                lectureSchedules: activeAssignments,
+                sessions: {
+                    orderBy: { createdAt: "desc" },
+                    include: { _count: { select: { attendances: true } } },
                 },
             },
         });

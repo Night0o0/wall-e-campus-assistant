@@ -6,7 +6,7 @@ Leornian Campus Assistant is a multi-tenant university operations platform with:
 - a Flutter mobile app for student and staff workflows
 - an Express + Prisma backend on PostgreSQL
 
-As of August 26, 2026, the active product scope is:
+As of August 28, 2026, the active product scope is:
 
 - attendance by QR
 - academic structure and timetable management
@@ -27,17 +27,19 @@ This README is the current source of truth for the project shape. Older concept 
 What is already verified in code:
 
 - backend schema validates
-- backend typecheck passes
-- backend tests pass
+- backend source and test typechecks pass
+- backend tests pass: 460 tests in 33 files
 - web typecheck/build passes
-- web tests pass
+- web tests pass: 25 tests in 7 files
 - payment and robot code paths were removed from the active app
+- Supabase registration/account lifecycle is implemented
+- the Phase 6 authorization matrix and negative scope tests pass
 
 What still needs runtime finish work:
 
-- apply the latest Prisma migration to the real development database
-- run full browser smoke tests against the live backend
+- run credentialed browser login/restoration/logout after explicit approval
 - run full Flutter runtime validation against the live backend
+- complete backend domain, deployment, observability, and release phases
 
 ## Repository structure
 
@@ -64,8 +66,12 @@ database/
   - university-wide administration
   - timetable, directory, exports, approvals, sessions
 
+- `DEPARTMENT_ADMIN`
+  - linked-department users, cohorts, courses, assignments, and approvals
+  - no organization-wide or cross-department authority
+
 - `INSTRUCTOR`
-  - teaching schedule, sessions, materials, approvals, notifications
+  - assigned courses, teaching schedule, sessions, materials, assignments, approvals, notifications
 
 - `STUDENT`
   - account, assignments, materials, attendance-related student flows
@@ -153,6 +159,7 @@ That file is the operational checklist for “where we are now” and “what re
 ## Key docs
 
 - [docs/PROJECT_STATUS.md](docs/PROJECT_STATUS.md) — current status and next steps
+- [docs/AUTHORIZATION_MATRIX.md](docs/AUTHORIZATION_MATRIX.md) — backend role and scope policy
 - [docs/Architecture.md](docs/Architecture.md) — current system architecture
 - [docs/MIGRATION_RUNBOOK.md](docs/MIGRATION_RUNBOOK.md) — safe migration workflow
 - [apps/web/README.md](apps/web/README.md) — current web app scope

@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { authenticate, requireRole } from "../middleware/auth.middleware.js";
+import { authenticate, requireApproved, requireRole } from "../middleware/auth.middleware.js";
 import { validate, validateQuery } from "../middleware/validate.middleware.js";
 import { courseQuerySchema, createCourseSchema, updateCourseSchema } from "../types/course.types.js";
 import { 
@@ -15,14 +15,15 @@ import { exportCourseStudents } from "../controllers/export.controller.js";
 
 const router = Router();
 
-// All routes require authentication
-router.use(authenticate);
+// Every course route is academic: pending students may complete their profile,
+// but cannot browse the catalogue before approval.
+router.use(authenticate, requireApproved);
 
 // Create a new course (Admin only)
-router.post("/", requireRole('INSTRUCTOR', 'UNIVERSITY_ADMIN', 'SYSTEM_OWNER'), validate(createCourseSchema), createCourse);
+router.post("/", requireRole('UNIVERSITY_ADMIN', 'SYSTEM_OWNER'), validate(createCourseSchema), createCourse);
 
-// Get all courses in the organization (All authenticated users), optionally
-// narrowed by department, semester, academic level or a free-text search.
+// Scope comes from the authenticated role: enrollment for a student, teaching
+// assignment for an instructor, linked department for a department admin.
 router.get("/", validateQuery(courseQuerySchema), getOrgCourses);
 
 // Get courses created by the current user (Admin only)
@@ -32,7 +33,11 @@ router.get("/my", requireRole('INSTRUCTOR', 'UNIVERSITY_ADMIN', 'SYSTEM_OWNER'),
 router.get("/:id", getCourse);
 
 // Get a course with its sessions
-router.get("/:id/sessions", getCourseWithSessions);
+router.get(
+    "/:id/sessions",
+    requireRole('INSTRUCTOR', 'UNIVERSITY_ADMIN', 'SYSTEM_OWNER'),
+    getCourseWithSessions
+);
 
 // Export the course's student roster as .xlsx. Staff only — a student cannot
 // download their classmates' details. Which courses a given member of staff may
@@ -41,14 +46,14 @@ router.get("/:id/sessions", getCourseWithSessions);
 // organization.
 router.get(
     "/:id/students/export",
-    requireRole('INSTRUCTOR', 'UNIVERSITY_ADMIN', 'SYSTEM_OWNER'),
+    requireRole('DEPARTMENT_ADMIN', 'INSTRUCTOR', 'UNIVERSITY_ADMIN', 'SYSTEM_OWNER'),
     exportCourseStudents
 );
 
-// Update a course (Admin who created it)
-router.patch("/:id", requireRole('INSTRUCTOR', 'UNIVERSITY_ADMIN', 'SYSTEM_OWNER'), validate(updateCourseSchema), updateCourse);
+// Department admins are checked against the course's trusted departmentId.
+router.patch("/:id", requireRole('DEPARTMENT_ADMIN', 'UNIVERSITY_ADMIN', 'SYSTEM_OWNER'), validate(updateCourseSchema), updateCourse);
 
-// Delete a course (Admin who created it)
-router.delete("/:id", requireRole('INSTRUCTOR', 'UNIVERSITY_ADMIN', 'SYSTEM_OWNER'), deleteCourse);
+// Delete follows the same trusted department/tenant policy as update.
+router.delete("/:id", requireRole('DEPARTMENT_ADMIN', 'UNIVERSITY_ADMIN', 'SYSTEM_OWNER'), deleteCourse);
 
 export default router;

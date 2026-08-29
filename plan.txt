@@ -10,11 +10,13 @@ EXECUTION STATUS (AUGUST 28, 2026)
 - Phase 4 implementation complete: public registration is token-derived, forced to STUDENT/PENDING, idempotent, and recoverable after cross-device confirmation through non-authoritative user metadata plus completion-on-login/restoration.
 - Phase 5 core account lifecycle is implemented together with Phase 4: web/mobile recovery entry points, reset callbacks/deep links, signed-in password changes, Supabase Admin password reset for linked campus users, trusted-token email projection, and status enforcement.
 - Phase 4 automated checks: backend typecheck and 443/443 backend tests pass; web 25/25 tests, production build, and lint complete (four existing Fast Refresh warnings); rendered Playwright checks pass for login, registration, forgot-password, and reset-callback pages.
-- Outstanding before declaring the product finished: live rendered login/restoration/logout needs approval to transmit a seeded password in the browser; the committed mobile dependency lock targets a newer Flutter/Dart toolchain than the installed Flutter 3.24.5, so the complete committed-lock Flutter suite must be rerun on the matching SDK. Authorization and later product phases below remain open.
+- Phase 6 complete in the working checkpoint: the route-permission matrix is documented, QR issuance is permanently restricted to authorized session staff with no rollback flag, pending students are blocked from generic course/schedule reads, course access is narrowed by trusted enrollment/teaching/department scope, and negative role/tenant/department tests pass.
+- Current automated checks: backend Prisma validation, source/test typechecks, and 460/460 tests in 33 files pass; web 25/25 tests, production build, and lint complete (four existing Fast Refresh warnings).
+- Outstanding before declaring the product finished: live rendered login/restoration/logout needs approval to transmit a seeded password in the browser; the committed mobile dependency lock targets a newer Flutter/Dart toolchain than the installed Flutter 3.24.5, so the complete committed-lock Flutter suite must be rerun on the matching SDK. Phase 7 and later product/release phases below remain open.
 
 CURRENT POSITION
 
-The project is not yet fully finished. Database alignment, seeding, direct Supabase authentication, registration, and the core account lifecycle are complete. Authorization hardening, full live client verification, remaining connected mobile work, deployment, observability, and release checks remain.
+The project is not yet fully finished. Database alignment, seeding, direct Supabase authentication, registration, the core account lifecycle, and Phase 6 authorization hardening are complete. Full live client verification, remaining connected mobile work, backend-domain completion, deployment, observability, and release checks remain.
 
 RECOMMENDED FINAL ARCHITECTURE
 
@@ -383,24 +385,14 @@ PHASE 6 - FINALIZE THE AUTHORIZATION MODEL
 
 Authentication identifies the user. The backend must make every authorization decision.
 
-Decide the QR endpoint policy
+QR endpoint policy — completed
 
-QR_ENDPOINT_STAFF_ONLY currently ships false. The recorded reason was that the
-guard should stay off until a real robot was proven on the device-auth path -
-but robot/device functionality is now permanently excluded, so that
-precondition can never be satisfied and the guard would stay off by default
-forever.
-
-This phase must therefore decide the QR endpoint's authority explicitly, on its
-own merits, and record the decision in docs/QR_CUTOVER.md:
-
-- Who may request a QR payload: instructors only, or students too.
-- Whether QR_ENDPOINT_STAFF_ONLY becomes true, and what the default is in
-  backend/.env.example versus a deployed environment.
-- What session-access scoping applies in each case
-  (see backend/src/utils/session-access.ts, which deliberately defers this).
-
-Withdraw the "waiting for a verified robot" condition wherever it is recorded.
+QR issuance is permanently restricted in code to INSTRUCTOR,
+UNIVERSITY_ADMIN, and SYSTEM_OWNER. Instructors are limited to sessions they
+opened; university administrators and system owners remain limited to the
+organization on their campus API identity. STUDENT and DEPARTMENT_ADMIN are
+denied. The old QR_ENDPOINT_STAFF_ONLY rollback flag and robot precondition were
+removed. See docs/QR_CUTOVER.md.
 
 Final recommended role boundaries
 

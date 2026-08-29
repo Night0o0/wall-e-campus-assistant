@@ -30,6 +30,7 @@ const CATALOGUE_ADMINISTRATORS = new Set(["UNIVERSITY_ADMIN", "SYSTEM_OWNER"]);
 export interface CourseActor {
   id: string;
   role: string;
+  departmentId?: string | null;
 }
 
 /**
@@ -41,6 +42,7 @@ export interface CourseActor {
  */
 export interface CourseForAccess {
   createdById: string;
+  departmentId?: string | null;
   lectureSchedules?: { instructorId: string }[];
 }
 
@@ -52,10 +54,9 @@ export interface CourseForAccess {
  *
  *   - UNIVERSITY_ADMIN and SYSTEM_OWNER: any course. This is the
  *     documented rule and the defect this module was written to fix.
- *   - INSTRUCTOR: only a course they created. Teaching a course is deliberately NOT
- *     enough to delete it — an instructor assigned to one lecture of a shared
- *     subject should not be able to remove the subject from the catalogue.
- *     Note this is narrower than canExportCourse on purpose.
+ *   - DEPARTMENT_ADMIN: only a course carrying their trusted department id.
+ *   - INSTRUCTOR/STUDENT: never. Teaching permits course operations such as
+ *     material, assignment and roster work, not catalogue mutation.
  */
 export const canManageCourse = (
   course: CourseForAccess,
@@ -64,7 +65,12 @@ export const canManageCourse = (
   if (CATALOGUE_ADMINISTRATORS.has(actor.role)) {
     return true;
   }
-  return course.createdById === actor.id;
+  return (
+    actor.role === "DEPARTMENT_ADMIN" &&
+    actor.departmentId !== null &&
+    actor.departmentId !== undefined &&
+    course.departmentId === actor.departmentId
+  );
 };
 
 /**
@@ -85,6 +91,16 @@ export const canExportCourse = (
 ): boolean => {
   if (CATALOGUE_ADMINISTRATORS.has(actor.role)) {
     return true;
+  }
+  if (actor.role === "DEPARTMENT_ADMIN") {
+    return (
+      actor.departmentId !== null &&
+      actor.departmentId !== undefined &&
+      course.departmentId === actor.departmentId
+    );
+  }
+  if (actor.role !== "INSTRUCTOR") {
+    return false;
   }
   if (course.createdById === actor.id) {
     return true;

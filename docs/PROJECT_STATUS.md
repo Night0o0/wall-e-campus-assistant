@@ -28,11 +28,23 @@ Phase 4 implemented in the current checkpoint:
 - Supabase Admin password resets for linked campus accounts
 - confirmed-token email synchronization and coordinated administrator email changes
 
+Phase 6 authorization implemented in the current checkpoint:
+
+- route-permission matrix recorded in `docs/AUTHORIZATION_MATRIX.md`
+- QR issuance permanently limited to instructor/university-admin/system-owner
+- robot-dependent QR flag and stale billing example removed
+- pending students blocked from generic course and schedule reads
+- course list/read scope derived from active enrollment, teaching assignment, or trusted department id
+- instructors cannot mutate the course catalogue
+- department administrators can update/export only linked-department courses
+- session services repeat route authorization as defense in depth
+
 Verified:
 
 - backend Prisma schema validates
 - backend typecheck passes
-- backend tests pass: 443 tests in 32 files
+- backend source and test typechecks pass
+- backend tests pass: 460 tests in 33 files
 - web typecheck/production build passes
 - web tests pass: 25 tests in 7 files
 - rendered browser checks pass for login, registration, forgot-password and reset-callback pages
@@ -42,7 +54,7 @@ Still outstanding:
 
 - browser login/restoration/logout with a real seeded password (requires action-time approval before credential transmission)
 - full Flutter suite with the repository's committed lockfile on its matching newer Flutter/Dart SDK; this machine has Flutter 3.24.5
-- later authorization, connected-client, deployment and release phases in `plan.txt`
+- backend domain completion, connected-client, deployment and release phases in `plan.txt`
 
 ## What “finished” means
 
@@ -57,11 +69,11 @@ The project is considered finished only when all of the following are true:
 
 ## Remaining execution direction
 
-### Next — authorization hardening (plan Phase 6)
+### Next — backend domain completion (plan Phase 7)
 
-- confirm backend remains the source of truth
-- verify forbidden routes and forbidden API access fail correctly
-- verify cross-tenant access is blocked
+- standardize API errors, validation and pagination
+- verify every domain operation and its tenant boundary
+- harden attendance and notification workers for repeat/concurrent execution
 
 ## Scope guardrails
 
@@ -89,5 +101,5 @@ The next best practical step is:
 
 1. finish the approved credentialed browser smoke test
 2. run Flutter on the matching SDK and a device/emulator
-3. execute the route-permission matrix and negative tenant/department/course/cohort tests
-4. continue the remaining phases in `plan.txt`
+3. execute Phase 7 domain verification and close discovered backend gaps
+4. continue the web, mobile, deployment and release phases in `plan.txt`

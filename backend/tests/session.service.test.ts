@@ -39,6 +39,18 @@ const SUPER_ADMIN = {
   organizationId: ORG_A,
 };
 
+const STUDENT = {
+  id: "student-1",
+  role: "STUDENT",
+  organizationId: ORG_A,
+};
+
+const DEPARTMENT_ADMIN = {
+  id: "department-admin-1",
+  role: "DEPARTMENT_ADMIN",
+  organizationId: ORG_A,
+};
+
 const build = (schedules = new FakeScheduleRepository([makeSchedule()])) => {
   const sessions = new FakeSessionRepository();
   const service = new SessionService(sessions, schedules);
@@ -510,6 +522,37 @@ describe("who may see one session", () => {
       await expect(service.getSession("session-1", actor)).rejects.toMatchObject({
         statusCode: 404,
       });
+    }
+  });
+
+  it("never lets a student or department admin read, close, or mint for a session", async () => {
+    for (const actor of [STUDENT, DEPARTMENT_ADMIN]) {
+      const service = serviceOver(openNow());
+
+      for (const call of [
+        () => service.getSession("session-1", actor),
+        () => service.getQrToken("session-1", actor),
+        () => service.closeSession("session-1", actor),
+      ]) {
+        await expect(call()).rejects.toMatchObject({ statusCode: 404 });
+      }
+    }
+  });
+
+  it("defends create and list even if a route guard is accidentally removed", async () => {
+    for (const actor of [STUDENT, DEPARTMENT_ADMIN]) {
+      const { service } = build();
+
+      await expect(
+        service.createSession({ title: "Unauthorized" }, actor)
+      ).rejects.toMatchObject({ statusCode: 403 });
+      await expect(
+        service.listSessionsFor(actor, {
+          page: 1,
+          limit: 10,
+          sortOrder: "desc",
+        })
+      ).rejects.toMatchObject({ statusCode: 403 });
     }
   });
 

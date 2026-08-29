@@ -5,7 +5,9 @@
 
   "compilerOptions": {
     "noEmit": true,
-    "rootDir": "."
+    "rootDir": ".",
+    "module": "ESNext",
+    "moduleResolution": "Bundler"
   },
 
   // `prisma` is here because seed.ts was previously in no tsconfig at all: it

@@ -1,6 +1,11 @@
 ===============================================================================
 WALL-E CAMPUS ASSISTANT - UI PAGE PLAN PER ACCOUNT TYPE
 ===============================================================================
+ARCHIVED: This August 16 snapshot predates removal of robot and billing scope
+and the Supabase/authorization phases. Do not use it as current implementation
+status. Use README.md, docs/PROJECT_STATUS.md, plan.txt, and
+docs/AUTHORIZATION_MATRIX.md.
+
 Scope   : STUDENT, ADMIN (teaching staff), UNIVERSITY_SUPER_ADMIN, ROBOT
           (SYSTEM_OWNER is the platform console and is documented last.)
 Updated : 16 August 2026
