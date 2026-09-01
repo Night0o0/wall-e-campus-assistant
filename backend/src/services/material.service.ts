@@ -9,6 +9,7 @@ import {
 } from "../types/material.types.js";
 import { badRequest, forbidden, notFound } from "../utils/AppError.js";
 import { resolveCohort } from "../utils/cohort.js";
+import { paginate } from "../utils/pagination.js";
 
 /**
  * Where a course's material lives.
@@ -137,7 +138,11 @@ export class MaterialService {
     const scoped =
       actor.role === "INSTRUCTOR" ? { ...query, addedById: actor.id } : query;
 
-    return this.materials.findManyInOrganization(actor.organizationId, scoped);
+    const { data, total } = await this.materials.findManyInOrganization(
+      actor.organizationId,
+      scoped
+    );
+    return paginate(data, total, scoped);
   }
 
   /**

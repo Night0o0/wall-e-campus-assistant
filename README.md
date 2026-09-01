@@ -6,7 +6,7 @@ Leornian Campus Assistant is a multi-tenant university operations platform with:
 - a Flutter mobile app for student and staff workflows
 - an Express + Prisma backend on PostgreSQL
 
-As of August 28, 2026, the active product scope is:
+As of September 1, 2026, the active product scope is:
 
 - attendance by QR
 - academic structure and timetable management
@@ -28,18 +28,23 @@ What is already verified in code:
 
 - backend schema validates
 - backend source and test typechecks pass
-- backend tests pass: 460 tests in 33 files
+- backend tests pass: 495 tests in 39 files
 - web typecheck/build passes
 - web tests pass: 25 tests in 7 files
 - payment and robot code paths were removed from the active app
 - Supabase registration/account lifecycle is implemented
 - the Phase 6 authorization matrix and negative scope tests pass
+- Phase 7 backend domain completion is implemented: academic terms, cohorts,
+  offerings, teaching assignments and enrollments now have tenant-scoped APIs
+- route-parameter/query validation, stable API errors, pagination, database
+  readiness and graceful worker shutdown are verified
 
 What still needs runtime finish work:
 
 - run credentialed browser login/restoration/logout after explicit approval
 - run full Flutter runtime validation against the live backend
-- complete backend domain, deployment, observability, and release phases
+- validate the completed backend against the live database/auth environment
+- complete connected-client, deployment, observability, and release phases
 
 ## Repository structure
 

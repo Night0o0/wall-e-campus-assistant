@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { authenticate, requireRole } from "../middleware/auth.middleware.js";
-import { validate, validateQuery } from "../middleware/validate.middleware.js";
+import { validate, validateQuery, validateUuidParam } from "../middleware/validate.middleware.js";
 import {
   adminUserQuerySchema,
   // university-scoped audit history
@@ -25,6 +25,7 @@ import {
 import { listAuditLogs } from "../controllers/audit-log.controller.js";
 
 const router = Router();
+router.param("id", validateUuidParam("id"));
 
 router.use(authenticate);
 

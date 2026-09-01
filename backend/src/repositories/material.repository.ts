@@ -1,6 +1,7 @@
 import { Prisma } from "@prisma/client";
 import prisma from "../lib/prisma.js";
 import { MaterialQuery } from "../types/material.types.js";
+import { buildOrderBy, toSkipTake } from "../utils/pagination.js";
 
 /**
  * Course material links.
@@ -63,8 +64,7 @@ export class MaterialRepository {
 
   /** The staff-side listing, narrowed by whatever the caller asked for. */
   async findManyInOrganization(organizationId: string, query: MaterialQuery) {
-    return prisma.courseMaterial.findMany({
-      where: {
+    const where: Prisma.CourseMaterialWhereInput = {
         ...(query.courseId ? { courseId: query.courseId } : {}),
         ...(query.department
           ? { department: { equals: query.department, mode: "insensitive" } }
@@ -84,11 +84,22 @@ export class MaterialRepository {
         ...(query.status === "all" ? {} : { isActive: query.status !== "withdrawn" }),
 
         // Last, and not optional.
-        organizationId,
-      },
-      include: withRelations,
-      orderBy: [{ createdAt: "desc" }],
-    });
+      organizationId,
+    };
+    const { skip, take } = toSkipTake(query);
+    const orderBy = buildOrderBy(
+      query.sortBy,
+      query.sortOrder,
+      ["createdAt", "title", "level", "semester"] as const,
+      "createdAt"
+    );
+
+    const [data, total] = await prisma.$transaction([
+      prisma.courseMaterial.findMany({ where, include: withRelations, orderBy, skip, take }),
+      prisma.courseMaterial.count({ where }),
+    ]);
+
+    return { data, total };
   }
 
   /** One link, but only if it belongs to this organization. */

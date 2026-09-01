@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { paginationSchema } from "../utils/pagination.js";
 
 /**
  * Course material links.
@@ -117,7 +118,7 @@ export const updateMaterialSchema = z
 export type UpdateMaterialInput = z.infer<typeof updateMaterialSchema>;
 
 /** Staff-side browsing. The student side takes no filters at all. */
-export const materialQuerySchema = z.object({
+export const materialQuerySchema = paginationSchema.extend({
   courseId: z.string().uuid().optional(),
   department: z.string().trim().min(1).max(100).optional(),
   level: z.coerce.number().int().min(1).max(7).optional(),

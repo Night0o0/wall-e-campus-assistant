@@ -56,6 +56,11 @@ export const notFound = (
 export const conflict = (message: string, code = "CONFLICT") =>
   new AppError(message, 409, undefined, code);
 
+export const serviceUnavailable = (
+  message = "Service temporarily unavailable",
+  code = "SERVICE_UNAVAILABLE"
+) => new AppError(message, 503, undefined, code);
+
 /**
  * 429, for a throttle the application itself enforces.
  *

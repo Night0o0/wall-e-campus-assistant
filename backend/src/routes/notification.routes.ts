@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { env } from "../config/env.js";
 import { authenticate, requireRole } from "../middleware/auth.middleware.js";
-import { validate, validateQuery } from "../middleware/validate.middleware.js";
+import { validate, validateQuery, validateUuidParam } from "../middleware/validate.middleware.js";
 import {
   deactivateDeviceSchema,
   generateRemindersSchema,
@@ -22,6 +22,7 @@ import {
 } from "../controllers/notification.controller.js";
 
 const router = Router();
+router.param("id", validateUuidParam("id"));
 
 router.use(authenticate);
 

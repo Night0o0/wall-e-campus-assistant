@@ -13,6 +13,7 @@ Legend: `OWNER` = `SYSTEM_OWNER`, `UA` = `UNIVERSITY_ADMIN`, `DA` =
 | Surface | Method/path | Allowed principal | Required backend scope |
 |---|---|---|---|
 | Health | `GET /api/health` | Public | No account data |
+| Readiness | `GET /api/health/ready` | Public | Reports database availability only; no account data |
 | Registration/login | `/api/auth/register*`, `/login`, `/mobile-login` | Public or verified Supabase identity, per route | Registration completion derives identity/email from verified token and always creates `STUDENT/PENDING` |
 | Recovery | `/api/auth/forgot-password`, `/reset-password` | Public recovery flow | Non-enumerating, rate-limited; Supabase owns current password reset |
 | Own account | `GET/PATCH /api/auth/profile`, `PATCH /api/auth/password` | Authenticated self | User id from authenticated record; Supabase reauthentication/change rules apply |
@@ -35,6 +36,11 @@ Legend: `OWNER` = `SYSTEM_OWNER`, `UA` = `UNIVERSITY_ADMIN`, `DA` =
 | Materials for student | `GET /api/materials/my` | Approved S | Stored cohort only |
 | Materials staff | `/api/materials` staff routes | I, UA, OWNER | I only assigned lecture/published material; UA/OWNER same university |
 | Assignments | `/api/assignments*` | Approved S for list; DA/I/UA/OWNER for staff operations | S active enrollment/cohort; DA department; I active teaching assignment; tenant fixed |
+| Academic terms | `/api/academic/terms*` | Approved authenticated users for read; UA/OWNER for write | Same university; at most one current term is maintained per university |
+| Cohorts | `/api/academic/cohorts*` | DA/I/UA/OWNER for read; DA/UA/OWNER for write | DA linked department; I active teaching assignments; references and tenant fixed server-side |
+| Course offerings | `/api/academic/offerings*` | Approved authenticated users for read; DA/UA/OWNER for write | S active enrollment; I active teaching assignment; DA linked department; tenant fixed |
+| Teaching assignments | `/api/academic/teaching-assignments*` | DA/I/UA/OWNER for read; DA/UA/OWNER for write | I self; DA linked department; offering, instructor and cohort references validated in tenant |
+| Enrollments | `/api/academic/enrollments*` | Approved authenticated users for read; DA/UA/OWNER for write | S self; I assigned offering; DA linked department; only active approved students may enroll |
 | Approval queue | `/api/admin/students*` | DA, I, UA, OWNER | UA/OWNER university; DA linked department cohorts; I assigned cohorts |
 | Audit logs | `GET /api/admin/audit-logs` | UA, OWNER | Same university; query never widens tenant scope |
 | Campus directory/accounts | `/api/admin/users*`, `/overview` | UA, OWNER | Same university; cannot administer owner/peer admin roles through campus endpoint |
@@ -59,3 +65,5 @@ Legend: `OWNER` = `SYSTEM_OWNER`, `UA` = `UNIVERSITY_ADMIN`, `DA` =
   existence would leak information.
 - Invalid client input: `400`/validation response; client-supplied authority is
   stripped or rejected before service execution.
+- Unexpected server failures: generic `500` with `INTERNAL_SERVER_ERROR`; internal
+  exception messages are logged but never returned to clients.

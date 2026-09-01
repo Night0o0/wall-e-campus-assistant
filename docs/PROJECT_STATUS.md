@@ -1,4 +1,4 @@
-# Project status — August 28, 2026
+# Project status — September 1, 2026
 
 This file is the operational source of truth for the current project state.
 
@@ -39,12 +39,23 @@ Phase 6 authorization implemented in the current checkpoint:
 - department administrators can update/export only linked-department courses
 - session services repeat route authorization as defense in depth
 
+Phase 7 backend domain completion implemented in the current checkpoint:
+
+- tenant-scoped APIs for academic terms, cohorts, course offerings, teaching
+  assignments and enrollments
+- reference-integrity checks and audit events for every new academic mutation
+- bounded UUID, body and query validation across backend route surfaces
+- consistent pagination for academic resources and staff materials
+- stable machine-readable API errors without unexpected exception leakage
+- separate liveness and database readiness endpoints
+- graceful worker stop, HTTP request draining and Prisma disconnect on shutdown
+
 Verified:
 
 - backend Prisma schema validates
 - backend typecheck passes
 - backend source and test typechecks pass
-- backend tests pass: 460 tests in 33 files
+- backend tests pass: 495 tests in 39 files
 - web typecheck/production build passes
 - web tests pass: 25 tests in 7 files
 - rendered browser checks pass for login, registration, forgot-password and reset-callback pages
@@ -54,7 +65,7 @@ Still outstanding:
 
 - browser login/restoration/logout with a real seeded password (requires action-time approval before credential transmission)
 - full Flutter suite with the repository's committed lockfile on its matching newer Flutter/Dart SDK; this machine has Flutter 3.24.5
-- backend domain completion, connected-client, deployment and release phases in `plan.txt`
+- live database/auth verification, connected-client, deployment and release phases in `plan.txt`
 
 ## What “finished” means
 
@@ -69,11 +80,13 @@ The project is considered finished only when all of the following are true:
 
 ## Remaining execution direction
 
-### Next — backend domain completion (plan Phase 7)
+### Next — live database and authentication verification
 
-- standardize API errors, validation and pagination
-- verify every domain operation and its tenant boundary
-- harden attendance and notification workers for repeat/concurrent execution
+- deploy/apply the committed schema to the designated verification database
+- seed or verify the approved development identities
+- exercise registration, login, restoration, logout and the new academic APIs
+  against real Supabase/PostgreSQL services
+- record evidence without placing credentials or tokens in repository files
 
 ## Scope guardrails
 
@@ -99,7 +112,7 @@ Reason:
 
 The next best practical step is:
 
-1. finish the approved credentialed browser smoke test
-2. run Flutter on the matching SDK and a device/emulator
-3. execute Phase 7 domain verification and close discovered backend gaps
+1. run the live database/auth verification checkpoint
+2. finish the approved credentialed browser smoke test
+3. run Flutter on the matching SDK and a device/emulator
 4. continue the web, mobile, deployment and release phases in `plan.txt`

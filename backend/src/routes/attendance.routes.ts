@@ -4,12 +4,13 @@ import {
   requireApproved,
   requireRole,
 } from "../middleware/auth.middleware.js";
-import { validate, validateQuery } from "../middleware/validate.middleware.js";
+import { validate, validateQuery, validateUuidParam } from "../middleware/validate.middleware.js";
 import { myAttendanceQuerySchema, scanAttendanceSchema } from "../types/attendance.types.js";
 import { scanAttendance, getSessionAttendance, getMyAttendance, getMyAttendanceSummary, getSessionStats, getAdminAnalytics } from "../controllers/attendance.controller.js";
 import { scanLimiter } from "../utils/rate-limit.js";
 
 const router = Router();
+router.param("sessionId", validateUuidParam("sessionId"));
 
 router.use(authenticate);
 

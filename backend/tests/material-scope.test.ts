@@ -32,7 +32,7 @@ const build = () => {
   class FakeMaterials extends MaterialRepository {
     override async findManyInOrganization(organizationId: string, query: any) {
       queries.push({ organizationId, query });
-      return [] as never;
+      return { data: [], total: 0 } as never;
     }
   }
 

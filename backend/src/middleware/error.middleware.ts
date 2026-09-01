@@ -1,7 +1,6 @@
 import { Request, Response, NextFunction } from "express";
 import { ZodError } from "zod";
 import { Prisma } from "@prisma/client";
-import { env } from "../config/env.js";
 import { AppError } from "../utils/AppError.js";
 
 interface ErrorResponse {
@@ -9,14 +8,53 @@ interface ErrorResponse {
   /** Stable machine-readable identifier. Absent when the thrower set none. */
   code?: string;
   errors?: unknown;
-  stack?: string;
 }
 
-const resolve = (err: unknown): { status: number; body: ErrorResponse } => {
+const statusCodeName = (status: number) =>
+  ({
+    400: "BAD_REQUEST",
+    401: "UNAUTHORIZED",
+    403: "FORBIDDEN",
+    404: "NOT_FOUND",
+    409: "CONFLICT",
+    413: "PAYLOAD_TOO_LARGE",
+    429: "RATE_LIMITED",
+    503: "SERVICE_UNAVAILABLE",
+  })[status] ?? "INTERNAL_SERVER_ERROR";
+
+export const resolveError = (err: unknown): { status: number; body: ErrorResponse } => {
   if (err instanceof AppError) {
     return {
       status: err.statusCode,
-      body: { message: err.message, code: err.code, errors: err.details },
+      body: {
+        message: err.message,
+        code: err.code ?? statusCodeName(err.statusCode),
+        errors: err.details,
+      },
+    };
+  }
+
+  if (
+    err instanceof SyntaxError &&
+    "status" in err &&
+    err.status === 400 &&
+    "type" in err &&
+    err.type === "entity.parse.failed"
+  ) {
+    return {
+      status: 400,
+      body: { message: "Request body contains invalid JSON", code: "INVALID_JSON" },
+    };
+  }
+
+  if (
+    err instanceof Error &&
+    "type" in err &&
+    err.type === "entity.too.large"
+  ) {
+    return {
+      status: 413,
+      body: { message: "Request body is too large", code: "PAYLOAD_TOO_LARGE" },
     };
   }
 
@@ -74,10 +112,10 @@ const resolve = (err: unknown): { status: number; body: ErrorResponse } => {
     };
   }
 
-  const message =
-    err instanceof Error ? err.message : "Internal Server Error";
-
-  return { status: 500, body: { message } };
+  return {
+    status: 500,
+    body: { message: "Internal Server Error", code: "INTERNAL_SERVER_ERROR" },
+  };
 };
 
 export const errorHandler = (
@@ -86,7 +124,7 @@ export const errorHandler = (
   res: Response,
   _next: NextFunction
 ) => {
-  const { status, body } = resolve(err);
+  const { status, body } = resolveError(err);
 
   if (status >= 500) {
     console.error("[error]", err);
@@ -98,10 +136,6 @@ export const errorHandler = (
 
   if (body.code === undefined) {
     delete body.code;
-  }
-
-  if (!env.isProduction && err instanceof Error) {
-    body.stack = err.stack;
   }
 
   res.status(status).json(body);

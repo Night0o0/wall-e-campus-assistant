@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { authenticate, requireOwner } from "../middleware/auth.middleware.js";
-import { validate, validateQuery } from "../middleware/validate.middleware.js";
+import { validate, validateQuery, validateUuidParam } from "../middleware/validate.middleware.js";
 import {
   createUserSchema,
   updateUserSchema,
@@ -18,6 +18,7 @@ import {
 } from "../controllers/user.controller.js";
 
 const router = Router();
+router.param("id", validateUuidParam("id"));
 
 router.use(authenticate, requireOwner);
 

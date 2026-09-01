@@ -1,8 +1,9 @@
 import { Router } from "express";
 import { authenticate, requireApproved, requireRole } from "../middleware/auth.middleware.js";
-import { validate, validateQuery } from "../middleware/validate.middleware.js";
+import { validate, validateQuery, validateUuidParam } from "../middleware/validate.middleware.js";
 import {
   createScheduleSchema,
+  scheduleAttendanceLogQuerySchema,
   scheduleQuerySchema,
   updateScheduleSchema,
 } from "../types/schedule.types.js";
@@ -16,6 +17,7 @@ import {
 } from "../controllers/schedule.controller.js";
 
 const router = Router();
+router.param("id", validateUuidParam("id"));
 
 router.use(authenticate, requireApproved);
 
@@ -48,6 +50,7 @@ router.get("/:id", getSchedule);
 router.get(
   "/:id/attendance-log",
   requireRole("INSTRUCTOR", "UNIVERSITY_ADMIN", "SYSTEM_OWNER"),
+  validateQuery(scheduleAttendanceLogQuerySchema),
   getScheduleAttendanceLog
 );
 

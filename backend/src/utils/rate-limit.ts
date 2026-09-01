@@ -80,7 +80,7 @@ export const apiLimiter = rateLimit({
   keyGenerator: (req) => principalKey(req) ?? ipKeyGenerator(req.ip ?? ""),
   standardHeaders: "draft-7",
   legacyHeaders: false,
-  message: { message: "Too many requests, please try again later" },
+  message: { message: "Too many requests, please try again later", code: "RATE_LIMITED" },
   // Development stays effectively unlimited, as it was before.
   skip: () => !env.isProduction,
 });
@@ -103,6 +103,7 @@ export const scanLimiter = rateLimit({
   legacyHeaders: false,
   message: {
     message: "Too many scan attempts, please wait a moment and try again",
+    code: "RATE_LIMITED",
   },
   skip: () => !env.isProduction,
 });
@@ -128,5 +129,6 @@ export const otpLimiter = rateLimit({
   legacyHeaders: false,
   message: {
     message: "Too many attempts, please try again later",
+    code: "RATE_LIMITED",
   },
 });

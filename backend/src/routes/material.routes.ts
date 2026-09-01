@@ -4,7 +4,7 @@ import {
   requireApproved,
   requireRole,
 } from "../middleware/auth.middleware.js";
-import { validate, validateQuery } from "../middleware/validate.middleware.js";
+import { validate, validateQuery, validateUuidParam } from "../middleware/validate.middleware.js";
 import {
   createMaterialSchema,
   materialQuerySchema,
@@ -19,6 +19,7 @@ import {
 } from "../controllers/material.controller.js";
 
 const router = Router();
+router.param("id", validateUuidParam("id"));
 
 router.use(authenticate);
 

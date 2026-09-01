@@ -20,6 +20,7 @@ import adminRoutes from "./routes/admin.routes.js";
 import organizationRoutes from "./routes/organization.routes.js";
 import userRoutes from "./routes/user.routes.js";
 import metricsRoutes from "./routes/metrics.routes.js";
+import academicRoutes from "./routes/academic.routes.js";
 import { errorHandler, notFoundHandler } from "./middleware/error.middleware.js";
 
 const app = express();
@@ -55,7 +56,7 @@ const authLimiter = rateLimit({
   skipSuccessfulRequests: true,
   standardHeaders: "draft-7",
   legacyHeaders: false,
-  message: { message: "Too many attempts, please try again later" },
+  message: { message: "Too many attempts, please try again later", code: "RATE_LIMITED" },
 });
 
 // Routes
@@ -78,6 +79,7 @@ app.use("/api/admin", adminRoutes);
 app.use("/api/organizations", organizationRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/metrics", metricsRoutes);
+app.use("/api/academic", academicRoutes);
 
 // Error handling
 app.use(notFoundHandler);

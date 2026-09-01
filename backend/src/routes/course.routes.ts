@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { authenticate, requireApproved, requireRole } from "../middleware/auth.middleware.js";
-import { validate, validateQuery } from "../middleware/validate.middleware.js";
+import { validate, validateQuery, validateUuidParam } from "../middleware/validate.middleware.js";
 import { courseQuerySchema, createCourseSchema, updateCourseSchema } from "../types/course.types.js";
 import { 
     createCourse, 
@@ -14,6 +14,7 @@ import {
 import { exportCourseStudents } from "../controllers/export.controller.js";
 
 const router = Router();
+router.param("id", validateUuidParam("id"));
 
 // Every course route is academic: pending students may complete their profile,
 // but cannot browse the catalogue before approval.

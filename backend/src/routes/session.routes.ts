@@ -1,11 +1,12 @@
 import { Router } from "express";
 import { authenticate, requireRole } from "../middleware/auth.middleware.js";
-import { validate, validateQuery } from "../middleware/validate.middleware.js";
+import { validate, validateQuery, validateUuidParam } from "../middleware/validate.middleware.js";
 import { createSessionSchema } from "../types/session.types.js";
 import { paginationSchema } from "../utils/pagination.js";
 import { createSession, getMySessions, getSession, closeSession, getQrToken } from "../controllers/session.controller.js";
 
 const router = Router();
+router.param("id", validateUuidParam("id"));
 
 router.use(authenticate);
 

@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
 import { AttendanceLifecycleService } from "../services/attendance-lifecycle.service.js";
 import { ScheduleService } from "../services/schedule.service.js";
-import { ScheduleQuery } from "../types/schedule.types.js";
+import { ScheduleAttendanceLogQuery, ScheduleQuery } from "../types/schedule.types.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 
 const scheduleService = new ScheduleService();
@@ -62,12 +62,12 @@ export const deactivateSchedule = asyncHandler(
  */
 export const getScheduleAttendanceLog = asyncHandler(
   async (req: Request, res: Response) => {
-    const weeks = Number(req.query.weeks);
+    const { weeks } = req.validatedQuery as ScheduleAttendanceLogQuery;
 
     const log = await lifecycleService.occurrenceStates(
       req.params.id as string,
       req.user!,
-      { weeks: Number.isFinite(weeks) ? weeks : undefined }
+      { weeks }
     );
 
     res.status(200).json(log);
