@@ -3,7 +3,7 @@ import { Link, Navigate, useLocation, useNavigate, useSearchParams } from 'react
 import { GraduationCap, Eye, EyeOff, AlertCircle } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { getErrorMessage } from '../lib/api'
-import { homeRouteFor } from '../lib/navigation'
+import { routeAfterLogin } from '../lib/navigation'
 import { Button } from '../components/ui/Button'
 import { Input } from '../components/ui/Field'
 
@@ -21,7 +21,7 @@ export function Login() {
 
   if (!isRestoringSession && user) {
     const from = (location.state as { from?: string } | null)?.from
-    return <Navigate to={from ?? '/'} replace />
+    return <Navigate to={routeAfterLogin(user.role, from)} replace />
   }
 
   const handleSubmit = async (event: FormEvent) => {
@@ -33,7 +33,7 @@ export function Login() {
       const profile = await login(email.trim(), password)
       const from = (location.state as { from?: string } | null)?.from
 
-      navigate(from ?? homeRouteFor(profile.role), { replace: true })
+      navigate(routeAfterLogin(profile.role, from), { replace: true })
     } catch (err) {
       setError(getErrorMessage(err, 'Unable to sign in'))
     } finally {

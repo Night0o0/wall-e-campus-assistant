@@ -61,6 +61,19 @@ Live database and authentication verification completed:
 - normalized academic APIs, pagination, validation and cross-tenant safe-404 behavior
   passed against populated live data
 
+Connected web workflow verification completed:
+
+- real Supabase sign-in, session restoration and sign-out passed in the rendered app
+- owner, university-admin, department-admin, instructor and student routes loaded
+  against the live backend with role-safe denial for cross-role pages
+- pending students reached approval status/account completion only, and disabled
+  accounts remained at sign-in with the expected deactivation error
+- instructor session detail and closed-session projector/QR state passed
+- responsive university-admin navigation passed at a 390 × 844 viewport
+- login return paths are now validated against the authenticated role
+- department administrators now use the trusted department-scoped course API and
+  server-provided per-course permissions instead of the instructor-only endpoint
+
 Verified:
 
 - backend Prisma schema validates
@@ -68,15 +81,14 @@ Verified:
 - backend source and test typechecks pass
 - backend tests pass: 495 tests in 39 files
 - web typecheck/production build passes
-- web tests pass: 25 tests in 7 files
-- rendered browser checks pass for login, registration, forgot-password and reset-callback pages
+- web tests pass: 28 tests in 7 files
+- rendered browser checks pass for public auth pages and every connected seeded role workflow
 - mobile runtime walker covers 25 screens with zero reported findings
 
 Still outstanding:
 
-- rendered connected browser role workflows
 - full Flutter suite with the repository's committed lockfile on its matching newer Flutter/Dart SDK; this machine has Flutter 3.24.5
-- connected-client, deployment, observability and release phases in `plan.txt`
+- mobile connected-client, deployment, observability and release phases in `plan.txt`
 
 ## What “finished” means
 
@@ -91,12 +103,12 @@ The project is considered finished only when all of the following are true:
 
 ## Remaining execution direction
 
-### Next — connected web workflows
+### Next — connected mobile workflows
 
-- run the React app against the verified live backend
-- exercise credentialed role routing and the owner/admin/instructor/student dashboards
-- verify connected loading, empty, error and mutation states in the browser
-- close any remaining web API-contract gaps and add regression coverage
+- run Flutter with the repository's committed lockfile on a matching Flutter/Dart SDK
+- connect the app to the verified live backend on a device or emulator
+- exercise student and teaching-staff authentication, navigation and academic flows
+- close any remaining mobile API-contract or platform-integration gaps and add regression coverage
 
 ## Scope guardrails
 
@@ -122,6 +134,6 @@ Reason:
 
 The next best practical step is:
 
-1. finish the connected rendered web workflows
-2. run Flutter on the matching SDK and a device/emulator
+1. run Flutter on the matching SDK and a device/emulator
+2. finish the connected mobile workflows
 3. continue deployment, observability, security and release phases in `plan.txt`

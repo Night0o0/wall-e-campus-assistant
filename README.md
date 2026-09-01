@@ -30,7 +30,7 @@ What is already verified in code:
 - backend source and test typechecks pass
 - backend tests pass: 495 tests in 39 files
 - web typecheck/build passes
-- web tests pass: 25 tests in 7 files
+- web tests pass: 28 tests in 7 files
 - payment and robot code paths were removed from the active app
 - Supabase registration/account lifecycle is implemented
 - the Phase 6 authorization matrix and negative scope tests pass
@@ -40,12 +40,14 @@ What is already verified in code:
   readiness and graceful worker shutdown are verified
 - the live Supabase/PostgreSQL environment has all 14 migrations applied and
   passes database, authentication, registration, session and academic API checks
+- connected rendered web workflows pass for every seeded role, account-state
+  gating, session restoration/sign-out, instructor session/QR state, and the
+  responsive university-admin shell
 
 What still needs runtime finish work:
 
-- finish connected rendered browser role workflows
 - run full Flutter runtime validation against the live backend
-- complete connected-client, deployment, observability, and release phases
+- complete mobile connected-client, deployment, observability, and release phases
 
 ## Repository structure
 

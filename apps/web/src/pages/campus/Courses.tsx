@@ -18,12 +18,11 @@ import type { Course } from '../../types/campus'
 /**
  * Courses.
  *
- * Two roles, one page, and the difference is what the server will let through
- * rather than what this file renders: an INSTRUCTOR sees the courses they are
- * assigned to or created and can export only those; a super admin sees and
- * edits every course in the university. Create, edit and delete are hidden for
- * an INSTRUCTOR because the endpoints would refuse them — showing a button that
- * always 403s is worse than not showing it.
+ * Three roles, one page, with scope decided by the server: an INSTRUCTOR sees
+ * courses they are assigned to or created, a DEPARTMENT_ADMIN sees only the
+ * catalogue linked to their trusted department id, and a UNIVERSITY_ADMIN sees
+ * the whole university. Per-course edit, delete and export buttons follow the
+ * permissions returned by the API rather than reimplementing those rules here.
  *
  * ── On `level` ─────────────────────────────────────────────────────────────
  *
@@ -37,17 +36,21 @@ export function Courses() {
   const toast = useToast()
   const queryClient = useQueryClient()
 
-  const isSuperAdmin = user?.role === 'UNIVERSITY_ADMIN'
+  const isUniversityAdmin = user?.role === 'UNIVERSITY_ADMIN'
+  const isDepartmentAdmin = user?.role === 'DEPARTMENT_ADMIN'
+  const usesOrganizationScope = isUniversityAdmin || isDepartmentAdmin
 
   /**
-   * An INSTRUCTOR gets the courses they are assigned to or created; a super admin
-   * gets the whole university.
+   * An INSTRUCTOR gets the courses they are assigned to or created. University
+   * and department administrators use the organization endpoint, whose server
+   * scope narrows a department administrator to their trusted department id.
    *
    * This page used to call the university-wide endpoint for BOTH roles while
    * its own subtitle told an instructor these were the subjects they are
    * assigned to (D-4). coursesApi.mine() existed and was called from nowhere.
    */
-  const canManage = isSuperAdmin
+  const canCreate = isUniversityAdmin
+  const canEditCatalogue = isUniversityAdmin || isDepartmentAdmin
 
   const [search, setSearch] = useState('')
   const [department, setDepartment] = useState('')
@@ -61,8 +64,8 @@ export function Courses() {
   const params = { search: debouncedSearch, department, level }
 
   const { data, isLoading, error, refetch } = useQuery({
-    queryKey: ['campus', 'courses', isSuperAdmin ? 'org' : 'mine', params],
-    queryFn: () => (isSuperAdmin ? coursesApi.list(params) : coursesApi.mine()),
+    queryKey: ['campus', 'courses', usesOrganizationScope ? 'org' : 'mine', params],
+    queryFn: () => (usesOrganizationScope ? coursesApi.list(params) : coursesApi.mine()),
   })
 
   const invalidate = () =>
@@ -155,7 +158,7 @@ export function Courses() {
               onClick={() => void download(course)}
             />
           )}
-          {canManage && (
+          {course.canManage && (
             <>
               <Button
                 size="sm"
@@ -178,14 +181,22 @@ export function Courses() {
 
   return (
     <Page
-      title={canManage ? 'Courses' : 'My Courses'}
+      title={
+        isUniversityAdmin
+          ? 'Courses'
+          : isDepartmentAdmin
+            ? 'Department Courses'
+            : 'My Courses'
+      }
       subtitle={
-        canManage
+        isUniversityAdmin
           ? 'Every subject taught in your university.'
+          : isDepartmentAdmin
+            ? 'Subjects linked to your department.'
           : 'The subjects you are assigned to or created.'
       }
       actions={
-        canManage ? (
+        canCreate ? (
           <Button icon={Plus} onClick={() => setCreating(true)}>
             New course
           </Button>
@@ -232,7 +243,7 @@ export function Courses() {
         }
       />
 
-      {canManage && (
+      {canEditCatalogue && (
         <CourseFormModal
           open={creating || editing !== null}
           course={editing}

@@ -9,14 +9,15 @@ EXECUTION STATUS (SEPTEMBER 1, 2026)
 - Phase 3 complete and live-verified: all seeded roles authenticate through Supabase, invalid/legacy tokens are rejected, account-state gates hold, and login/restoration/refresh/logout pass against the running backend.
 - Phase 4 complete and live-verified: public registration is token-derived, forced to STUDENT/PENDING, idempotent, recoverable after cross-device confirmation, and a self-cleaning real registration run passed.
 - Phase 5 core account lifecycle is implemented together with Phase 4: web/mobile recovery entry points, reset callbacks/deep links, signed-in password changes, Supabase Admin password reset for linked campus users, trusted-token email projection, and status enforcement.
-- Automated checks: backend source/test typechecks and 495/495 tests pass; web 25/25 tests and production build pass; rendered checks cover login, registration, forgot-password, and reset-callback pages.
+- Automated checks: backend source/test typechecks and 495/495 tests pass; web 28/28 tests and production build pass; rendered checks cover public auth pages and connected owner, university-admin, department-admin, instructor, student, pending and disabled-account workflows.
 - Phase 6 complete in the working checkpoint: the route-permission matrix is documented, QR issuance is permanently restricted to authorized session staff with no rollback flag, pending students are blocked from generic course/schedule reads, course access is narrowed by trusted enrollment/teaching/department scope, and negative role/tenant/department tests pass.
 - Phase 7 backend completion is implemented and live-verified: normalized academic APIs, pagination, validation, stable errors, readiness, shutdown behavior, tenant scope, and populated live academic reads all pass.
-- Outstanding before declaring the product finished: connected rendered web workflows; the complete committed-lock Flutter suite on its matching newer Flutter/Dart SDK; deployment, observability, security, and release checks.
+- Connected rendered web workflows are complete: real Supabase login/restoration/logout, role routes, cross-role denial, department-scoped courses, session detail/QR terminal state, pending/disabled gates and responsive navigation passed against the live backend.
+- Outstanding before declaring the product finished: the complete committed-lock Flutter suite on its matching newer Flutter/Dart SDK; connected mobile workflows; deployment, observability, security, and release checks.
 
 CURRENT POSITION
 
-The project is not yet fully finished. Database alignment, seeding, direct Supabase authentication, registration, account lifecycle, authorization hardening, backend-domain completion, and live backend verification are complete. Connected web, mobile, deployment, observability, security, and release checks remain.
+The project is not yet fully finished. Database alignment, seeding, direct Supabase authentication, registration, account lifecycle, authorization hardening, backend-domain completion, live backend verification, and connected web workflows are complete. Mobile, deployment, observability, security, and release checks remain.
 
 RECOMMENDED FINAL ARCHITECTURE
 

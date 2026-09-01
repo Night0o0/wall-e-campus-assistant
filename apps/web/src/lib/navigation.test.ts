@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   homeRouteFor,
   navigationFor,
+  routeAfterLogin,
 } from './navigation'
 import type { AuthUser, UserRole } from '../types/api'
 
@@ -48,5 +49,20 @@ describe('role navigation', () => {
       '/notifications',
       '/account',
     ])
+  })
+
+  it('returns a user to a route their role can open', () => {
+    expect(routeAfterLogin('INSTRUCTOR', '/sessions/session-1')).toBe('/sessions/session-1')
+    expect(routeAfterLogin('SYSTEM_OWNER', '/organizations/org-1')).toBe('/organizations/org-1')
+  })
+
+  it('falls back to the role home when the requested route is forbidden', () => {
+    expect(routeAfterLogin('UNIVERSITY_ADMIN', '/settings')).toBe('/')
+    expect(routeAfterLogin('STUDENT', '/sessions/session-1')).toBe('/')
+  })
+
+  it('rejects external redirect targets', () => {
+    expect(routeAfterLogin('SYSTEM_OWNER', '//example.com')).toBe('/')
+    expect(routeAfterLogin('INSTRUCTOR', 'https://example.com')).toBe('/teaching')
   })
 })

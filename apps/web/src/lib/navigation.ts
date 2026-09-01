@@ -189,3 +189,31 @@ export function homeRouteFor(role: string): string {
       return '/'
   }
 }
+
+/**
+ * Choose a safe, role-accessible destination after authentication.
+ *
+ * React Router records the protected page an anonymous visitor originally
+ * requested. That is useful when the same person signs in, but it must not
+ * override the newly authenticated role: a university administrator signing
+ * in after an owner signed out from `/settings`, for example, cannot open the
+ * platform settings page. Navigation entries are the shared source of truth
+ * for role access, and child pages inherit access from their listed parent.
+ */
+export function routeAfterLogin(role: string, requestedFrom?: string): string {
+  const fallback = homeRouteFor(role)
+
+  // Only same-origin application paths are valid redirect targets.
+  if (!requestedFrom?.startsWith('/') || requestedFrom.startsWith('//')) {
+    return fallback
+  }
+
+  const allowed = NAV_BY_ROLE[role] ?? []
+  const canOpen = allowed.some(({ href }) => (
+    href === '/'
+      ? requestedFrom === '/'
+      : requestedFrom === href || requestedFrom.startsWith(`${href}/`)
+  ))
+
+  return canOpen ? requestedFrom : fallback
+}
