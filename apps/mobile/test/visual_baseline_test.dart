@@ -8,7 +8,7 @@ import 'helpers/load_fonts.dart';
 /// The targeted golden subset from plan.txt Phase 0.8.
 ///
 /// Deliberately FIVE screens, not thirty: login, plus one representative screen
-/// from each of the four role shells. Every other screen is covered by the
+/// from each release-facing role shell. Every other screen is covered by the
 /// manual screenshot comparison described in Phase 0.9.
 ///
 /// Keeping this small is the point. Flutter goldens are sensitive to font
@@ -34,7 +34,7 @@ import 'helpers/load_fonts.dart';
 /// intended, update them in the same commit as the change and say so in the
 /// message. If it was not, it is the regression this suite exists to find.
 ///
-/// The five figma_theme_*.png files already in test/goldens/ are unrelated
+/// The figma_theme_*.png files already in test/goldens/ are unrelated
 /// reference renders from the original design pass. Nothing asserts against
 /// them; they are kept as design references only.
 
@@ -93,5 +93,4 @@ void main() {
       matchesGoldenFile('goldens/baseline_super_admin_shell.png'),
     );
   });
-
 }

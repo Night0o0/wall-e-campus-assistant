@@ -7,9 +7,10 @@ import 'brand_logo.dart';
 import 'register_page.dart';
 
 class LoginPage extends StatefulWidget {
-  const LoginPage({required this.api, super.key});
+  const LoginPage({required this.api, this.initialError, super.key});
 
   final CampusGateway api;
+  final String? initialError;
 
   @override
   State<LoginPage> createState() => _LoginPageState();
@@ -21,6 +22,12 @@ class _LoginPageState extends State<LoginPage> {
   bool _obscure = true;
   bool _submitting = false;
   String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _error = widget.initialError;
+  }
 
   @override
   void dispose() {
@@ -72,18 +79,16 @@ class _LoginPageState extends State<LoginPage> {
             child: LayoutBuilder(
               builder: (context, constraints) {
                 return SingleChildScrollView(
-                  child: Center(
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 430),
-                      child: SizedBox(
-                        height: constraints.maxHeight < 785
-                            ? 785
-                            : constraints.maxHeight,
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(minHeight: constraints.maxHeight),
+                    child: Center(
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 430),
                         child: Padding(
                           padding: const EdgeInsets.fromLTRB(24, 32, 24, 26),
                           child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              const Spacer(),
                               const _BrandLockup(),
                               const SizedBox(height: 48),
                               Container(
@@ -198,7 +203,7 @@ class _LoginPageState extends State<LoginPage> {
                                   ],
                                 ),
                               ),
-                              const Spacer(),
+                              const SizedBox(height: 24),
                               const Text(
                                 'Leornian v2.0 · Semester 2 · 2025/2026',
                                 style: TextStyle(

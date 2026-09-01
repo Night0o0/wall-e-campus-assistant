@@ -49,6 +49,8 @@ class RegistrationResult {
 abstract class CampusGateway {
   Future<AuthSession> login(String identifier, String password);
 
+  Future<AuthSession?> restoreSession();
+
   Future<RegistrationResult> registerStudent({
     required String organizationCode,
     required String universityId,
@@ -135,35 +137,10 @@ class CampusApi implements CampusGateway {
       }
 
       await _completePendingRegistration(accessToken);
-
-      final provisional = AuthSession(
-        token: accessToken,
-        role: AccountRole.student,
-        id: response.user?.id ?? '',
-        name: '',
-        identifier: normalized,
-        organizationId: '',
-      );
-      final profileResponse = await _send(
-        'GET',
-        '/auth/profile',
-        session: provisional,
-      );
-      final user = _map(profileResponse['user']);
-      final role = AccountRoleDetails.fromApi(user['role']?.toString());
-      if (role == null) {
-        throw const ApiException(
-            'This account type cannot use the mobile app.');
-      }
-
-      return AuthSession(
-        token: accessToken,
-        role: role,
-        id: user['id']?.toString() ?? '',
-        name: user['fullName']?.toString() ?? role.label,
-        identifier: user['email']?.toString() ?? normalized,
-        organizationId: user['organizationId']?.toString() ?? '',
-        isVerified: user['isVerified'] == true,
+      return _sessionFromSupabaseToken(
+        accessToken,
+        fallbackIdentifier: normalized,
+        fallbackUserId: response.user?.id ?? '',
       );
     }
 
@@ -234,6 +211,30 @@ class CampusApi implements CampusGateway {
     );
   }
 
+  @override
+  Future<AuthSession?> restoreSession() async {
+    if (!supabaseConfigured) return null;
+
+    final session = Supabase.instance.client.auth.currentSession;
+    if (session == null) return null;
+
+    try {
+      await _completePendingRegistration(session.accessToken);
+      return await _sessionFromSupabaseToken(
+        session.accessToken,
+        fallbackIdentifier:
+            Supabase.instance.client.auth.currentUser?.email ?? '',
+        fallbackUserId: session.user.id,
+      );
+    } on ApiException catch (error) {
+      if (error.statusCode == 401 || error.statusCode == 403) {
+        await Supabase.instance.client.auth.signOut();
+        return null;
+      }
+      rethrow;
+    }
+  }
+
   Future<void> _completePendingRegistration(String accessToken) async {
     final raw = await _secureStorage.read(key: _registrationStorageKey);
     Map<String, dynamic>? registration;
@@ -265,6 +266,41 @@ class CampusApi implements CampusGateway {
       body: registration,
     );
     await _secureStorage.delete(key: _registrationStorageKey);
+  }
+
+  Future<AuthSession> _sessionFromSupabaseToken(
+    String accessToken, {
+    required String fallbackIdentifier,
+    required String fallbackUserId,
+  }) async {
+    final provisional = AuthSession(
+      token: accessToken,
+      role: AccountRole.student,
+      id: fallbackUserId,
+      name: '',
+      identifier: fallbackIdentifier,
+      organizationId: '',
+    );
+    final profileResponse = await _send(
+      'GET',
+      '/auth/profile',
+      session: provisional,
+    );
+    final user = _map(profileResponse['user']);
+    final role = AccountRoleDetails.fromApi(user['role']?.toString());
+    if (role == null) {
+      throw const ApiException('This account type cannot use the mobile app.');
+    }
+
+    return AuthSession(
+      token: accessToken,
+      role: role,
+      id: user['id']?.toString() ?? fallbackUserId,
+      name: user['fullName']?.toString() ?? role.label,
+      identifier: user['email']?.toString() ?? fallbackIdentifier,
+      organizationId: user['organizationId']?.toString() ?? '',
+      isVerified: user['isVerified'] == true,
+    );
   }
 
   @override

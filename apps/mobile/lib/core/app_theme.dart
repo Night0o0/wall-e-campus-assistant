@@ -106,7 +106,7 @@ abstract final class AppTheme {
         foregroundColor: AppColors.ink,
         surfaceTintColor: Colors.transparent,
       ),
-      cardTheme: CardThemeData(
+      cardTheme: CardTheme(
         elevation: 0,
         color: AppColors.surface,
         surfaceTintColor: Colors.transparent,

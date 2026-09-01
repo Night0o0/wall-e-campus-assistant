@@ -148,11 +148,13 @@ class _PendingApproval extends StatelessWidget {
                     ),
                     const SizedBox(height: 28),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 12),
                       decoration: BoxDecoration(
                         color: AppColors.orange.withOpacity(.1),
                         borderRadius: BorderRadius.circular(14),
-                        border: Border.all(color: AppColors.orange.withOpacity(.25)),
+                        border: Border.all(
+                            color: AppColors.orange.withOpacity(.25)),
                       ),
                       child: const Row(
                         mainAxisSize: MainAxisSize.min,
@@ -224,13 +226,18 @@ class _RoleHeader extends StatelessWidget {
             ),
           ),
           const Spacer(),
-          Text(
-            role.label.toUpperCase(),
-            style: const TextStyle(
-              color: AppColors.muted,
-              fontSize: 9,
-              fontWeight: FontWeight.w700,
-              letterSpacing: .7,
+          Flexible(
+            child: Text(
+              role.label.toUpperCase(),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.right,
+              style: const TextStyle(
+                color: AppColors.muted,
+                fontSize: 9,
+                fontWeight: FontWeight.w700,
+                letterSpacing: .7,
+              ),
             ),
           ),
           const SizedBox(width: 10),
@@ -335,6 +342,10 @@ class _RoleNavItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final navKey = ValueKey(
+      'role-nav-${destination.label.toLowerCase().replaceAll(' & ', '-and-').replaceAll(' ', '-')}',
+    );
+
     if (raised) {
       return SizedBox(
         height: 79,
@@ -346,6 +357,7 @@ class _RoleNavItem extends StatelessWidget {
               right: 0,
               top: -12,
               child: InkWell(
+                key: navKey,
                 onTap: onTap,
                 borderRadius: BorderRadius.circular(18),
                 child: Column(
@@ -393,6 +405,7 @@ class _RoleNavItem extends StatelessWidget {
 
     final color = selected ? AppColors.blue : AppColors.muted;
     return InkWell(
+      key: navKey,
       onTap: onTap,
       child: Padding(
         padding: const EdgeInsets.fromLTRB(4, 12, 4, 8),

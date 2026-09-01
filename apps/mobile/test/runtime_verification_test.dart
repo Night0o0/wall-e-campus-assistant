@@ -151,7 +151,7 @@ void main() {
   tearDownAll(() {
     // ignore: avoid_print
     print('\n=== MOBILE RUNTIME VERIFICATION ===');
-    for (final role in ['STUDENT', 'INSTRUCTOR', 'SUPER_ADMIN', 'ROBOT']) {
+    for (final role in ['STUDENT', 'INSTRUCTOR', 'SUPER_ADMIN']) {
       final rows = reports.where((r) => r.role == role);
       if (rows.isEmpty) continue;
       // ignore: avoid_print
@@ -224,5 +224,4 @@ void main() {
       await _visit(tester, 'SUPER_ADMIN', label);
     }
   });
-
 }

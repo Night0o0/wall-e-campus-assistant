@@ -1,20 +1,74 @@
-/// Shared test double for the campus backend.
-///
-/// Extracted from wall_e_app_test.dart so the behavioural tests and the
-/// golden visual baseline render from exactly the same data. If these two
-/// drifted apart, a golden could pass against data no behavioural test ever
-/// exercises, which would make the visual baseline meaningless.
+// Shared test double for the campus backend.
+//
+// Extracted from wall_e_app_test.dart so the behavioural tests and the
+// golden visual baseline render from exactly the same data. If these two
+// drifted apart, a golden could pass against data no behavioural test ever
+// exercises, which would make the visual baseline meaningless.
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wall_e_mobile/data/campus_api.dart';
 import 'package:wall_e_mobile/models/account_role.dart';
 
 class FakeCampusApi implements CampusGateway {
+  FakeCampusApi({this.restoredSession, this.restoreError});
+
   String? changedPassword;
   String? recoveredPassword;
+  bool didLogout = false;
+  AuthSession? restoredSession;
+  ApiException? restoreError;
+  int qrFetchCount = 0;
+  final List<String> postPaths = [];
+  final List<String> patchPaths = [];
+  final List<Map<String, dynamic>> sessions = [
+    {
+      'id': 'session-1',
+      'title': 'MEC201 - Electronics',
+      'status': 'ACTIVE',
+      'startTime': '2026-08-18T09:00:00.000Z',
+      'room': 'B-204',
+      'courseId': 'course-1',
+      'course': {
+        'id': 'course-1',
+        'courseCode': 'MEC201',
+        'courseName': 'Electronics',
+      },
+      'createdBy': {
+        'id': 'admin-1',
+        'fullName': 'Omar Adel',
+      },
+      '_count': {'attendances': 12},
+    },
+    {
+      'id': 'session-2',
+      'title': 'MEC202 - Control Systems',
+      'status': 'CLOSED',
+      'startTime': '2026-08-17T11:00:00.000Z',
+      'room': 'C-101',
+      'courseId': 'course-2',
+      'course': {
+        'id': 'course-2',
+        'courseCode': 'MEC202',
+        'courseName': 'Control Systems',
+      },
+      'createdBy': {
+        'id': 'admin-1',
+        'fullName': 'Omar Adel',
+      },
+      '_count': {'attendances': 19},
+    },
+  ];
 
   @override
-  Future<void> logout() async {}
+  Future<void> logout() async {
+    didLogout = true;
+  }
+
+  @override
+  Future<AuthSession?> restoreSession() async {
+    if (restoreError != null) throw restoreError!;
+    return restoredSession;
+  }
 
   @override
   Future<AuthSession> login(String identifier, String password) async {
@@ -222,9 +276,11 @@ class FakeCampusApi implements CampusGateway {
     if (path == '/auth/profile') {
       return {
         'user': {
-          'fullName': 'Ali Mahmoud',
-          'email': 'student@campus.edu',
-          'universityId': 'NCTU-DEMO-A1',
+          'fullName': session.name,
+          'email': session.identifier,
+          'universityId': session.role == AccountRole.student
+              ? 'NCTU-DEMO-A1'
+              : 'FAC-STAFF-17',
         }
       };
     }
@@ -246,29 +302,61 @@ class FakeCampusApi implements CampusGateway {
     // like the real response here so that stays true.
     if (path == '/sessions') {
       return {
-        'data': [
-          {
-            'id': 'session-1',
-            'title': 'MEC201 - Electronics',
-            'status': 'ACTIVE',
-            'startTime': '2026-08-18T09:00:00.000Z',
-            'room': 'B-204',
-            'course': {
-              'id': 'course-1',
-              'courseCode': 'MEC201',
-              'courseName': 'Electronics',
-            },
-            '_count': {'attendances': 12},
-          },
-        ],
+        'data': sessions,
         'meta': {
           'page': 1,
-          'limit': 25,
-          'total': 1,
+          'limit': 50,
+          'total': sessions.length,
           'totalPages': 1,
           'hasNext': false,
           'hasPrev': false,
         },
+      };
+    }
+    if (path.startsWith('/sessions/') && path.endsWith('/qr')) {
+      qrFetchCount++;
+      return {
+        'token': 'demo-qr-token-$qrFetchCount',
+        'expiresIn': 30,
+      };
+    }
+    if (path.startsWith('/sessions/')) {
+      final id = path.split('/').last;
+      return sessions.firstWhere((row) => row['id'] == id);
+    }
+    if (path.endsWith('/stats') && path.startsWith('/attendance/session/')) {
+      return {
+        'total': 12,
+        'present': 10,
+        'late': 2,
+        'absent': 1,
+        'roll': 13,
+      };
+    }
+    if (path.startsWith('/attendance/session/')) {
+      return {
+        'data': [
+          {
+            'id': 'attendance-1',
+            'status': 'PRESENT',
+            'scanTime': '2026-08-18T09:03:00.000Z',
+            'student': {
+              'id': 'student-1',
+              'fullName': 'Ali Mahmoud',
+              'universityId': 'NCTU-DEMO-A1',
+            },
+          },
+          {
+            'id': 'attendance-2',
+            'status': 'LATE',
+            'scanTime': '2026-08-18T09:14:00.000Z',
+            'student': {
+              'id': 'student-2',
+              'fullName': 'Sara Hany',
+              'universityId': 'NCTU-DEMO-A2',
+            },
+          },
+        ],
       };
     }
     if (path.contains('/pending')) return {'data': [], 'total': 0};
@@ -280,16 +368,65 @@ class FakeCampusApi implements CampusGateway {
     String path,
     AuthSession session, [
     Map<String, dynamic>? body,
-  ]) async =>
-      {};
+  ]) async {
+    patchPaths.add(path);
+    if (path.startsWith('/sessions/') && path.endsWith('/close')) {
+      final id = path.split('/')[2];
+      final index = sessions.indexWhere((row) => row['id'] == id);
+      if (index >= 0) {
+        sessions[index] = {
+          ...sessions[index],
+          'status': 'CLOSED',
+        };
+        return sessions[index];
+      }
+    }
+    return {};
+  }
 
   @override
   Future<Map<String, dynamic>> post(
     String path,
     AuthSession session, [
     Map<String, dynamic>? body,
-  ]) async =>
-      {};
+  ]) async {
+    postPaths.add(path);
+    if (path == '/sessions') {
+      final lectureScheduleId = '${body?['lectureScheduleId'] ?? ''}';
+      final linkedCourse = lectureScheduleId == 'schedule-2'
+          ? {
+              'id': 'course-2',
+              'courseCode': 'MEC202',
+              'courseName': 'Control Systems',
+            }
+          : {
+              'id': 'course-1',
+              'courseCode': 'MEC201',
+              'courseName': 'Electronics',
+            };
+      final opened = {
+        'id': 'session-${sessions.length + 1}',
+        'title': body?['title'] ?? 'Attendance session',
+        'status': 'ACTIVE',
+        'startTime': '2026-08-18T09:00:00.000Z',
+        'room': lectureScheduleId == 'schedule-2' ? 'C-101' : 'B-204',
+        'courseId': linkedCourse['id'],
+        'course': linkedCourse,
+        'lectureSchedule': {
+          'id': lectureScheduleId,
+          'room': lectureScheduleId == 'schedule-2' ? 'C-101' : 'B-204',
+        },
+        'createdBy': {
+          'id': 'admin-1',
+          'fullName': session.name,
+        },
+        '_count': {'attendances': 0},
+      };
+      sessions.insert(0, opened);
+      return opened;
+    }
+    return {};
+  }
 
   @override
   Future<void> requestPasswordReset(String email) async {}
@@ -310,6 +447,7 @@ class FakeCampusApi implements CampusGateway {
 }
 
 Future<void> signIn(WidgetTester tester, String email) async {
+  await tester.pumpAndSettle();
   await tester.enterText(find.byKey(const ValueKey('login-email')), email);
   await tester.enterText(
     find.byKey(const ValueKey('login-password')),

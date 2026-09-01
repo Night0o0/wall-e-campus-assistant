@@ -1,4 +1,7 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
 import '../core/app_theme.dart';
@@ -248,8 +251,10 @@ class _ConnectedTimetableState extends State<ConnectedTimetable> {
   ];
 
   var version = 0;
+  String? openingScheduleId;
 
   bool get canManage => widget.session.role == AccountRole.universityAdmin;
+  bool get canOpenAttendance => widget.session.role == AccountRole.instructor;
 
   Future<Map<String, dynamic>> _load() async {
     final schedulePath = widget.session.role == AccountRole.instructor
@@ -527,6 +532,45 @@ class _ConnectedTimetableState extends State<ConnectedTimetable> {
     }
   }
 
+  Future<void> _openAttendance(Map<String, dynamic> schedule) async {
+    final scheduleId = '${schedule['id'] ?? ''}';
+    if (scheduleId.isEmpty || openingScheduleId != null) return;
+
+    final course = _map(schedule['course']);
+    final courseCode = '${course['courseCode'] ?? 'Lecture'}';
+    final courseName = '${course['courseName'] ?? 'Attendance'}';
+
+    setState(() => openingScheduleId = scheduleId);
+    try {
+      final opened = await widget.api.post('/sessions', widget.session, {
+        'title': '$courseCode — $courseName',
+        'lectureScheduleId': scheduleId,
+      });
+      if (!mounted) return;
+      setState(() => version++);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Attendance is open for this lecture.'),
+        ),
+      );
+      await showDialog<void>(
+        context: context,
+        builder: (_) => _SessionQrDialog(
+          api: widget.api,
+          session: widget.session,
+          sessionId: '${opened['id'] ?? ''}',
+          sessionTitle: '${opened['title'] ?? '$courseCode — $courseName'}',
+        ),
+      );
+    } on ApiException catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(error.message)));
+    } finally {
+      if (mounted) setState(() => openingScheduleId = null);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return KeyedSubtree(
@@ -535,7 +579,9 @@ class _ConnectedTimetableState extends State<ConnectedTimetable> {
           title: 'Timetable',
           subtitle: canManage
               ? 'Manage the official timetable shown automatically to matching students.'
-              : 'Your assigned teaching timetable. University super-admins manage changes.',
+              : canOpenAttendance
+                  ? 'Your assigned teaching timetable. Start attendance directly from each lecture.'
+                  : 'Your assigned teaching timetable. University super-admins manage changes.',
           load: _load,
           builder: (data) {
             final schedules = _items(_map(data['schedules']),
@@ -553,7 +599,7 @@ class _ConnectedTimetableState extends State<ConnectedTimetable> {
                   icon: const Icon(Icons.add_rounded),
                   label: const Text('Add timetable lecture'),
                 )
-              else
+              else if (!canOpenAttendance)
                 const SectionCard(
                   child: Row(
                     children: [
@@ -587,14 +633,37 @@ class _ConnectedTimetableState extends State<ConnectedTimetable> {
                           color: AppColors.blue,
                         )
                       : null,
-                  child: Wrap(spacing: 8, runSpacing: 8, children: [
-                    StatusPill('${schedule['room'] ?? 'No room'}'),
-                    StatusPill('Section ${schedule['section'] ?? '—'}',
-                        color: AppColors.violet),
-                    StatusPill(
-                        '${_map(schedule['instructor'])['fullName'] ?? ''}',
-                        color: AppColors.orange),
-                  ]),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Wrap(spacing: 8, runSpacing: 8, children: [
+                        StatusPill('${schedule['room'] ?? 'No room'}'),
+                        StatusPill('Section ${schedule['section'] ?? '—'}',
+                            color: AppColors.violet),
+                        StatusPill(
+                            '${_map(schedule['instructor'])['fullName'] ?? ''}',
+                            color: AppColors.orange),
+                      ]),
+                      if (canOpenAttendance) ...[
+                        const SizedBox(height: 14),
+                        FilledButton.icon(
+                          onPressed: openingScheduleId == null
+                              ? () => _openAttendance(schedule)
+                              : null,
+                          icon: Icon(
+                            openingScheduleId == '${schedule['id']}'
+                                ? Icons.sync_rounded
+                                : Icons.play_circle_rounded,
+                          ),
+                          label: Text(
+                            openingScheduleId == '${schedule['id']}'
+                                ? 'Opening…'
+                                : 'Open attendance',
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
                 ),
             ];
           },
@@ -668,74 +737,679 @@ class _ConnectedCourseCard extends StatelessWidget {
   }
 }
 
-class ConnectedSessions extends StatelessWidget {
+class ConnectedSessions extends StatefulWidget {
   const ConnectedSessions(
       {required this.api, required this.session, super.key});
   final CampusGateway api;
   final AuthSession session;
 
   @override
-  Widget build(BuildContext context) => _DataPage(
-        title: 'Attendance Sessions',
-        subtitle: 'Live and completed sessions visible to this account.',
-        load: () => api.get('/sessions', session),
-        builder: (data) {
-          final rows = _items(data, keys: const ['sessions', 'data']);
-          final live = rows.where((row) => row['status'] == 'ACTIVE').length;
-          final totalScans = rows.fold<int>(
-            0,
-            (sum, row) =>
-                sum +
-                ((_map(row['_count'])['attendances'] as num?)?.toInt() ??
-                    (row['attendanceCount'] as num?)?.toInt() ??
-                    0),
-          );
-          return [
-            if (rows.isEmpty)
-              const _EmptyMessage('No attendance sessions found.'),
-            ResponsiveMetricGrid(
+  State<ConnectedSessions> createState() => _ConnectedSessionsState();
+}
+
+class _ConnectedSessionsState extends State<ConnectedSessions> {
+  var version = 0;
+  String? closingSessionId;
+
+  Future<void> _showSessionDetails(Map<String, dynamic> row) async {
+    final sessionId = '${row['id'] ?? ''}';
+    if (sessionId.isEmpty) return;
+
+    await showDialog<void>(
+      context: context,
+      builder: (_) => _SessionDetailDialog(
+        api: widget.api,
+        session: widget.session,
+        sessionId: sessionId,
+        sessionTitle: '${row['title'] ?? 'Attendance session'}',
+      ),
+    );
+  }
+
+  Future<void> _showSessionQr(Map<String, dynamic> row) async {
+    final sessionId = '${row['id'] ?? ''}';
+    if (sessionId.isEmpty) return;
+
+    await showDialog<void>(
+      context: context,
+      builder: (_) => _SessionQrDialog(
+        api: widget.api,
+        session: widget.session,
+        sessionId: sessionId,
+        sessionTitle: '${row['title'] ?? 'Attendance session'}',
+      ),
+    );
+  }
+
+  Future<void> _closeSession(Map<String, dynamic> row) async {
+    final sessionId = '${row['id'] ?? ''}';
+    if (sessionId.isEmpty || closingSessionId != null) return;
+
+    final confirmed = await showDialog<bool>(
+          context: context,
+          builder: (dialogContext) => AlertDialog(
+            title: const Text('Close this session?'),
+            content: const Text(
+              'Students will no longer be able to scan into it. Anyone still missing will be recorded absent when the roll is finalized.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext, false),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(dialogContext, true),
+                child: const Text('Close session'),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+
+    if (!confirmed) return;
+
+    setState(() => closingSessionId = sessionId);
+    try {
+      await widget.api.patch('/sessions/$sessionId/close', widget.session, {});
+      if (!mounted) return;
+      setState(() => version++);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Session closed.')),
+      );
+    } on ApiException catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(error.message)));
+    } finally {
+      if (mounted) setState(() => closingSessionId = null);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => KeyedSubtree(
+        key: ValueKey(version),
+        child: _DataPage(
+          title: 'Attendance Sessions',
+          subtitle: 'Live and completed sessions visible to this account.',
+          load: () => widget.api.get(
+            '/sessions',
+            widget.session,
+            query: const {'limit': '50'},
+          ),
+          builder: (data) {
+            final rows = _items(data, keys: const ['sessions', 'data']);
+            final live = rows.where(_sessionIsActive).length;
+            final totalScans = rows.fold<int>(
+              0,
+              (sum, row) => sum + _sessionAttendanceCount(row),
+            );
+
+            return [
+              if (rows.isEmpty)
+                const _EmptyMessage('No attendance sessions found.'),
+              ResponsiveMetricGrid(
+                children: [
+                  MetricCard(
+                    label: 'Live now',
+                    value: '$live',
+                    icon: Icons.wifi_tethering_rounded,
+                    accent: AppColors.success,
+                  ),
+                  MetricCard(
+                    label: 'Sessions',
+                    value: '${rows.length}',
+                    icon: Icons.today_rounded,
+                  ),
+                  MetricCard(
+                    label: 'Recorded scans',
+                    value: '$totalScans',
+                    icon: Icons.groups_rounded,
+                    accent: AppColors.orange,
+                  ),
+                ],
+              ),
+              SectionCard(
+                title: 'Attendance sessions',
+                child: Column(
+                  children: [
+                    for (var index = 0; index < rows.length; index++) ...[
+                      _SessionCard(
+                        row: rows[index],
+                        closing: closingSessionId == '${rows[index]['id']}',
+                        onMonitor: () => _showSessionDetails(rows[index]),
+                        onShowCode: _sessionIsActive(rows[index])
+                            ? () => _showSessionQr(rows[index])
+                            : null,
+                        onClose: _sessionIsActive(rows[index])
+                            ? () => _closeSession(rows[index])
+                            : null,
+                      ),
+                      if (index < rows.length - 1) const Divider(),
+                    ],
+                  ],
+                ),
+              ),
+            ];
+          },
+        ),
+      );
+}
+
+class _SessionCard extends StatelessWidget {
+  const _SessionCard({
+    required this.row,
+    required this.onMonitor,
+    this.onShowCode,
+    this.onClose,
+    this.closing = false,
+  });
+
+  final Map<String, dynamic> row;
+  final VoidCallback onMonitor;
+  final VoidCallback? onShowCode;
+  final VoidCallback? onClose;
+  final bool closing;
+
+  @override
+  Widget build(BuildContext context) {
+    final active = _sessionIsActive(row);
+    final course = _map(row['course']);
+    final schedule = _map(row['lectureSchedule']);
+    final room = '${row['room'] ?? schedule['room'] ?? 'No room'}';
+    final statusColor = active ? AppColors.success : AppColors.muted;
+    final attendanceCount = _sessionAttendanceCount(row);
+    final title = '${row['title'] ?? 'Session'}';
+    final courseSummary = course.isEmpty
+        ? 'Ad-hoc session — no course linked'
+        : '${course['courseCode'] ?? ''} · ${course['courseName'] ?? ''}';
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: statusColor.withOpacity(.12),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(
+                  active
+                      ? Icons.play_circle_rounded
+                      : Icons.check_circle_rounded,
+                  color: statusColor,
+                ),
+              ),
+              const SizedBox(width: 13),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(title, style: Theme.of(context).textTheme.titleMedium),
+                    const SizedBox(height: 4),
+                    Text(courseSummary,
+                        style: Theme.of(context).textTheme.bodyMedium),
+                    const SizedBox(height: 4),
+                    Text(
+                      '$room · ${_dateText(row['startTime'])}',
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 12),
+              StatusPill(
+                active ? 'ACTIVE' : '${row['status'] ?? 'CLOSED'}',
+                color: statusColor,
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              StatusPill('$attendanceCount scans', color: AppColors.orange),
+              if ('${_map(row['createdBy'])['fullName'] ?? ''}'
+                  .trim()
+                  .isNotEmpty)
+                StatusPill(
+                  '${_map(row['createdBy'])['fullName']}',
+                  color: AppColors.violet,
+                ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            children: [
+              OutlinedButton.icon(
+                onPressed: onMonitor,
+                icon: const Icon(Icons.monitor_heart_rounded),
+                label: const Text('Monitor'),
+              ),
+              if (onShowCode != null)
+                FilledButton.icon(
+                  onPressed: onShowCode,
+                  icon: const Icon(Icons.qr_code_2_rounded),
+                  label: const Text('Show code'),
+                ),
+              if (onClose != null)
+                OutlinedButton.icon(
+                  onPressed: closing ? null : onClose,
+                  icon: Icon(
+                    closing ? Icons.sync_rounded : Icons.stop_circle_rounded,
+                  ),
+                  label: Text(closing ? 'Closing…' : 'Close'),
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SessionDetailDialog extends StatefulWidget {
+  const _SessionDetailDialog({
+    required this.api,
+    required this.session,
+    required this.sessionId,
+    required this.sessionTitle,
+  });
+
+  final CampusGateway api;
+  final AuthSession session;
+  final String sessionId;
+  final String sessionTitle;
+
+  @override
+  State<_SessionDetailDialog> createState() => _SessionDetailDialogState();
+}
+
+class _SessionDetailDialogState extends State<_SessionDetailDialog> {
+  late Future<Map<String, dynamic>> future;
+
+  @override
+  void initState() {
+    super.initState();
+    future = _load();
+  }
+
+  Future<Map<String, dynamic>> _load() async {
+    final values = await Future.wait<Map<String, dynamic>>([
+      widget.api.get('/sessions/${widget.sessionId}', widget.session),
+      widget.api.get('/attendance/session/${widget.sessionId}', widget.session),
+      widget.api
+          .get('/attendance/session/${widget.sessionId}/stats', widget.session),
+    ]);
+
+    return {
+      'session': values[0],
+      'attendance': values[1],
+      'stats': values[2],
+    };
+  }
+
+  void _refresh() => setState(() => future = _load());
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+        title: Text(widget.sessionTitle),
+        content: SizedBox(
+          width: 420,
+          child: FutureBuilder<Map<String, dynamic>>(
+            future: future,
+            builder: (context, snapshot) {
+              if (snapshot.connectionState != ConnectionState.done) {
+                return const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 32),
+                  child: Center(child: CircularProgressIndicator()),
+                );
+              }
+
+              if (snapshot.hasError) {
+                final error = snapshot.error;
+                return Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      error is ApiException
+                          ? error.message
+                          : 'Could not load attendance details.',
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 16),
+                    FilledButton.icon(
+                      onPressed: _refresh,
+                      icon: const Icon(Icons.refresh_rounded),
+                      label: const Text('Try again'),
+                    ),
+                  ],
+                );
+              }
+
+              final data = snapshot.data ?? const <String, dynamic>{};
+              final sessionData = _map(data['session']);
+              final attendance = _items(
+                _map(data['attendance']),
+                keys: const ['attendance', 'data', 'items'],
+              );
+              final stats = _map(data['stats']);
+              final room =
+                  '${sessionData['room'] ?? _map(sessionData['lectureSchedule'])['room'] ?? 'No room'}';
+              final active = _sessionIsActive(sessionData);
+
+              return ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxHeight: MediaQuery.of(context).size.height * .62,
+                ),
+                child: SingleChildScrollView(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Text(
+                        _sessionCourseSummary(sessionData),
+                        style: Theme.of(context).textTheme.bodyLarge,
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        '$room · ${_dateText(sessionData['startTime'])}',
+                        style: Theme.of(context).textTheme.bodyMedium,
+                      ),
+                      const SizedBox(height: 16),
+                      ResponsiveMetricGrid(
+                        children: [
+                          MetricCard(
+                            label: 'Turned up',
+                            value: '${stats['total'] ?? attendance.length}',
+                            icon: Icons.groups_rounded,
+                          ),
+                          MetricCard(
+                            label: 'Late',
+                            value: '${stats['late'] ?? 0}',
+                            icon: Icons.schedule_rounded,
+                            accent: AppColors.orange,
+                          ),
+                          MetricCard(
+                            label: 'Absent',
+                            value: '${stats['absent'] ?? 0}',
+                            icon: Icons.person_off_rounded,
+                            accent: AppColors.danger,
+                          ),
+                          MetricCard(
+                            label: 'Status',
+                            value: active ? 'Open' : 'Closed',
+                            icon: active
+                                ? Icons.play_circle_rounded
+                                : Icons.check_circle_rounded,
+                            accent:
+                                active ? AppColors.success : AppColors.muted,
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      if (attendance.isEmpty)
+                        _EmptyMessage(
+                          active
+                              ? 'Nobody has scanned yet.'
+                              : 'This session closed with no attendance recorded.',
+                        )
+                      else
+                        SectionCard(
+                          title: 'Attendance roster',
+                          padding: const EdgeInsets.all(14),
+                          child: Column(
+                            children: [
+                              for (var index = 0;
+                                  index < attendance.length;
+                                  index++) ...[
+                                _AttendanceRowCard(row: attendance[index]),
+                                if (index < attendance.length - 1)
+                                  const Divider(),
+                              ],
+                            ],
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+        actions: [
+          TextButton.icon(
+            onPressed: _refresh,
+            icon: const Icon(Icons.refresh_rounded),
+            label: const Text('Refresh'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Close'),
+          ),
+        ],
+      );
+}
+
+class _AttendanceRowCard extends StatelessWidget {
+  const _AttendanceRowCard({required this.row});
+
+  final Map<String, dynamic> row;
+
+  @override
+  Widget build(BuildContext context) {
+    final student = _map(row['student']);
+    final status = '${row['status'] ?? 'UNKNOWN'}';
+    final color = switch (status) {
+      'PRESENT' => AppColors.success,
+      'LATE' => AppColors.orange,
+      'ABSENT' => AppColors.danger,
+      _ => AppColors.muted,
+    };
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 42,
+            height: 42,
+            decoration: BoxDecoration(
+              color: color.withOpacity(.12),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(Icons.school_rounded, color: color),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                MetricCard(
-                  label: 'Live now',
-                  value: '$live',
-                  icon: Icons.wifi_tethering_rounded,
-                  accent: AppColors.success,
+                Text(
+                  '${student['fullName'] ?? 'Student'}',
+                  style: Theme.of(context).textTheme.titleMedium,
                 ),
-                MetricCard(
-                  label: 'Sessions',
-                  value: '${rows.length}',
-                  icon: Icons.today_rounded,
-                ),
-                MetricCard(
-                  label: 'Recorded scans',
-                  value: '$totalScans',
-                  icon: Icons.groups_rounded,
-                  accent: AppColors.orange,
+                const SizedBox(height: 3),
+                Text(
+                  '${student['universityId'] ?? 'No university id'} · ${_dateText(row['scanTime'])}',
+                  style: Theme.of(context).textTheme.bodyMedium,
                 ),
               ],
             ),
-            SectionCard(
-                title: 'Attendance sessions',
-                child: Column(children: [
-                  for (final row in rows)
-                    AppListTile(
-                      title: '${row['title'] ?? 'Session'}',
-                      subtitle:
-                          '${row['room'] ?? 'No room'} · ${_dateText(row['startTime'])}',
-                      icon: row['status'] == 'ACTIVE'
-                          ? Icons.play_circle_rounded
-                          : Icons.check_circle_rounded,
-                      iconColor: row['status'] == 'ACTIVE'
-                          ? AppColors.success
-                          : AppColors.muted,
-                      trailing: StatusPill('${row['status'] ?? 'UNKNOWN'}',
-                          color: row['status'] == 'ACTIVE'
-                              ? AppColors.success
-                              : AppColors.muted),
+          ),
+          const SizedBox(width: 12),
+          StatusPill(status, color: color),
+        ],
+      ),
+    );
+  }
+}
+
+class _SessionQrDialog extends StatefulWidget {
+  const _SessionQrDialog({
+    required this.api,
+    required this.session,
+    required this.sessionId,
+    required this.sessionTitle,
+  });
+
+  final CampusGateway api;
+  final AuthSession session;
+  final String sessionId;
+  final String sessionTitle;
+
+  @override
+  State<_SessionQrDialog> createState() => _SessionQrDialogState();
+}
+
+class _SessionQrDialogState extends State<_SessionQrDialog> {
+  Timer? ticker;
+  String? token;
+  String? errorText;
+  int secondsLeft = 0;
+  bool loading = true;
+  bool refreshing = false;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_refreshToken());
+    ticker = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (!mounted || loading || refreshing) return;
+      if (secondsLeft > 1) {
+        setState(() => secondsLeft--);
+        return;
+      }
+      unawaited(_refreshToken());
+    });
+  }
+
+  @override
+  void dispose() {
+    ticker?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _refreshToken() async {
+    if (refreshing) return;
+    setState(() {
+      refreshing = true;
+      loading = token == null;
+      errorText = null;
+    });
+
+    try {
+      final payload = await widget.api
+          .get('/sessions/${widget.sessionId}/qr', widget.session);
+      if (!mounted) return;
+      setState(() {
+        token = '${payload['token'] ?? ''}';
+        secondsLeft = (payload['expiresIn'] as num?)?.toInt() ?? 30;
+        loading = false;
+        refreshing = false;
+      });
+    } on ApiException catch (error) {
+      if (!mounted) return;
+      setState(() {
+        errorText = error.message;
+        loading = false;
+        refreshing = false;
+      });
+    }
+  }
+
+  Future<void> _copyToken() async {
+    if (token == null || token!.isEmpty) return;
+    await Clipboard.setData(ClipboardData(text: token!));
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Attendance token copied.')),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+        title: Text(widget.sessionTitle),
+        content: SizedBox(
+          width: 420,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Text(
+                'The mobile app is showing the signed attendance token this session rotates every 30 seconds.',
+              ),
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.all(18),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF0C1324),
+                  borderRadius: BorderRadius.circular(18),
+                  border: Border.all(color: Colors.white.withOpacity(.08)),
+                ),
+                child: Column(
+                  children: [
+                    if (loading)
+                      const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 36),
+                        child: CircularProgressIndicator(),
+                      )
+                    else if (errorText != null)
+                      Text(
+                        errorText!,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(color: AppColors.orange),
+                      )
+                    else
+                      SelectableText(
+                        token ?? '',
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    const SizedBox(height: 14),
+                    Text(
+                      loading
+                          ? 'Requesting token…'
+                          : 'Refresh in ${secondsLeft}s',
+                      style: const TextStyle(
+                        color: AppColors.muted,
+                        fontSize: 12,
+                      ),
                     ),
-                ])),
-          ];
-        },
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton.icon(
+            onPressed: refreshing ? null : _refreshToken,
+            icon: const Icon(Icons.refresh_rounded),
+            label: const Text('Refresh'),
+          ),
+          TextButton.icon(
+            onPressed: token == null || token!.isEmpty ? null : _copyToken,
+            icon: const Icon(Icons.copy_rounded),
+            label: const Text('Copy'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Close'),
+          ),
+        ],
       );
 }
 
@@ -1662,6 +2336,19 @@ List<Map<String, dynamic>> _items(Map<String, dynamic> data,
   candidate ??= data['data'] is List ? data['data'] : null;
   if (candidate is! List) return const [];
   return candidate.map(_map).toList();
+}
+
+int _sessionAttendanceCount(Map<String, dynamic> row) =>
+    ((_map(row['_count'])['attendances'] as num?)?.toInt() ??
+        (row['attendanceCount'] as num?)?.toInt() ??
+        0);
+
+bool _sessionIsActive(Map<String, dynamic> row) => row['status'] == 'ACTIVE';
+
+String _sessionCourseSummary(Map<String, dynamic> row) {
+  final course = _map(row['course']);
+  if (course.isEmpty) return 'Ad-hoc session — no course linked';
+  return '${course['courseCode'] ?? ''} · ${course['courseName'] ?? ''}';
 }
 
 String _firstName(String name) =>
