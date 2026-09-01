@@ -23,7 +23,11 @@ const resolve = (err: unknown): { status: number; body: ErrorResponse } => {
   if (err instanceof ZodError) {
     return {
       status: 400,
-      body: { message: "Validation failed", errors: err.issues },
+      body: {
+        message: "Validation failed",
+        code: "VALIDATION_ERROR",
+        errors: err.issues,
+      },
     };
   }
 
@@ -34,6 +38,7 @@ const resolve = (err: unknown): { status: number; body: ErrorResponse } => {
       return {
         status: 409,
         body: {
+          code: "UNIQUE_CONSTRAINT_VIOLATION",
           message: target
             ? `A record with this ${target} already exists`
             : "A record with these values already exists",
@@ -42,13 +47,17 @@ const resolve = (err: unknown): { status: number; body: ErrorResponse } => {
     }
 
     if (err.code === "P2025") {
-      return { status: 404, body: { message: "Record not found" } };
+      return {
+        status: 404,
+        body: { message: "Record not found", code: "RECORD_NOT_FOUND" },
+      };
     }
 
     if (err.code === "P2003") {
       return {
         status: 409,
         body: {
+          code: "FOREIGN_KEY_CONSTRAINT_VIOLATION",
           message: "This record is still referenced by other records",
         },
       };
@@ -56,7 +65,13 @@ const resolve = (err: unknown): { status: number; body: ErrorResponse } => {
   }
 
   if (err instanceof Prisma.PrismaClientValidationError) {
-    return { status: 400, body: { message: "Invalid query parameters" } };
+    return {
+      status: 400,
+      body: {
+        message: "Invalid query parameters",
+        code: "INVALID_QUERY_PARAMETERS",
+      },
+    };
   }
 
   const message =
@@ -93,7 +108,8 @@ export const errorHandler = (
 };
 
 export const notFoundHandler = (req: Request, res: Response) => {
-  res
-    .status(404)
-    .json({ message: `Route not found: ${req.method} ${req.originalUrl}` });
+  res.status(404).json({
+    message: `Route not found: ${req.method} ${req.originalUrl}`,
+    code: "ROUTE_NOT_FOUND",
+  });
 };

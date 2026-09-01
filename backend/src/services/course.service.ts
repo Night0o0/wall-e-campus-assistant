@@ -1,6 +1,12 @@
 import { CourseRepository } from "../repositories/course.repository.js";
-import { CourseQuery, CreateCourseInput, UpdateCourseInput } from "../types/course.types.js";
+import {
+    CourseQuery,
+    CreateCourseInput,
+    UpdateCourseInput,
+    defaultCourseQuery,
+} from "../types/course.types.js";
 import { conflict, forbidden, notFound } from "../utils/AppError.js";
+import { paginate } from "../utils/pagination.js";
 import {
     CourseActor,
     canExportCourse,
@@ -65,18 +71,38 @@ export class CourseService {
      * what /courses/my now means, and what the web My Courses page now calls
      * instead of the university-wide list (D-4).
      */
-    async getMyCourses(actor: CourseActor, organizationId: string) {
-        const courses = await courseRepo.findAssignedTo(actor.id, organizationId);
-        return courses.map((course) => this.withPermissions(course, actor));
+    async getMyCourses(
+        actor: CourseActor,
+        organizationId: string,
+        query: CourseQuery = defaultCourseQuery
+    ) {
+        const { data, total } = await courseRepo.findAssignedTo(
+            actor.id,
+            organizationId,
+            query
+        );
+        return paginate(
+            data.map((course) => this.withPermissions(course, actor)),
+            total,
+            query
+        );
     }
 
-    async getOrgCourses(actor: CourseActor, organizationId: string, query: CourseQuery = {}) {
-        const courses = await courseRepo.findByOrganization(
+    async getOrgCourses(
+        actor: CourseActor,
+        organizationId: string,
+        query: CourseQuery = defaultCourseQuery
+    ) {
+        const { data, total } = await courseRepo.findByOrganization(
             organizationId,
             query,
             this.readScope(actor)
         );
-        return courses.map((course) => this.withPermissions(course, actor));
+        return paginate(
+            data.map((course) => this.withPermissions(course, actor)),
+            total,
+            query
+        );
     }
 
     /** Scope is derived only from the authenticated database user. */

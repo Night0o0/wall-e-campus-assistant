@@ -1,12 +1,23 @@
 import type { Request, Response } from "express";
 import { AssignmentService } from "../services/assignment.service.js";
+import type { AssignmentQuery } from "../types/assignment.types.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 
 const assignments = new AssignmentService();
 
 export const listAssignments = asyncHandler(async (req: Request, res: Response) => {
-  res.json({ assignments: await assignments.list(req.user!) });
+  const result = await assignments.list(
+    req.user!,
+    (req.validatedQuery ?? {}) as AssignmentQuery
+  );
+  res.json({ assignments: result.data, meta: result.meta });
 });
+
+export const getManageableOfferings = asyncHandler(
+  async (req: Request, res: Response) => {
+    res.json({ offerings: await assignments.manageableOfferings(req.user!) });
+  }
+);
 
 export const createAssignment = asyncHandler(async (req: Request, res: Response) => {
   res.status(201).json({ assignment: await assignments.create(req.body, req.user!) });

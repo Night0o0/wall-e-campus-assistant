@@ -1,6 +1,12 @@
 import type { Prisma } from "@prisma/client";
 import prisma from "../lib/prisma.js";
-import { CourseQuery, CreateCourseInput, UpdateCourseInput } from "../types/course.types.js";
+import {
+    CourseQuery,
+    CreateCourseInput,
+    UpdateCourseInput,
+    defaultCourseQuery,
+} from "../types/course.types.js";
+import { buildOrderBy, toSkipTake } from "../utils/pagination.js";
 
 /**
  * The active teaching assignments of a course, projected small.
@@ -16,6 +22,8 @@ const activeAssignments = {
     where: { isActive: true },
     select: { instructorId: true },
 } as const;
+
+const SORTABLE = ["createdAt", "courseCode", "courseName", "semester"] as const;
 
 export class CourseRepository {
 
@@ -70,73 +78,83 @@ export class CourseRepository {
      */
     async findByOrganization(
         organizationId: string,
-        query: CourseQuery = {},
+        query: CourseQuery = defaultCourseQuery,
         authority: Prisma.CourseWhereInput = {}
     ) {
-        return prisma.course.findMany({
-            where: {
-                AND: [
-                    {
-                        ...(query.search
-                            ? {
-                                  OR: [
-                                      {
-                                          courseCode: {
-                                              contains: query.search,
-                                              mode: "insensitive",
-                                          },
+        const where = {
+            AND: [
+                {
+                    ...(query.search
+                        ? {
+                              OR: [
+                                  {
+                                      courseCode: {
+                                          contains: query.search,
+                                          mode: "insensitive",
                                       },
-                                      {
-                                          courseName: {
-                                              contains: query.search,
-                                              mode: "insensitive",
-                                          },
+                                  },
+                                  {
+                                      courseName: {
+                                          contains: query.search,
+                                          mode: "insensitive",
                                       },
-                                  ],
-                              }
-                            : {}),
-                        ...(query.department
-                            ? {
-                                  department: {
-                                      equals: query.department,
-                                      mode: "insensitive",
                                   },
-                              }
-                            : {}),
-                        ...(query.semester
-                            ? {
-                                  semester: {
-                                      equals: query.semester,
-                                      mode: "insensitive",
-                                  },
-                              }
-                            : {}),
-                        // Course has no level of its own. Only active teaching
-                        // schedules may satisfy this requested narrowing.
-                        ...(query.level !== undefined
-                            ? {
-                                  lectureSchedules: {
-                                      some: { level: query.level, isActive: true },
-                                  },
-                              }
-                            : {}),
+                              ],
+                          }
+                        : {}),
+                    ...(query.department
+                        ? {
+                              department: {
+                                  equals: query.department,
+                                  mode: "insensitive",
+                              },
+                          }
+                        : {}),
+                    ...(query.semester
+                        ? {
+                              semester: {
+                                  equals: query.semester,
+                                  mode: "insensitive",
+                              },
+                          }
+                        : {}),
+                    ...(query.level !== undefined
+                        ? {
+                              lectureSchedules: {
+                                  some: { level: query.level, isActive: true },
+                              },
+                          }
+                        : {}),
+                },
+                authority,
+            ],
+            organizationId,
+        } satisfies Prisma.CourseWhereInput;
+
+        const [data, total] = await Promise.all([
+            prisma.course.findMany({
+                where,
+                ...toSkipTake(query),
+                orderBy: buildOrderBy(
+                    query.sortBy,
+                    query.sortOrder,
+                    SORTABLE,
+                    "createdAt"
+                ),
+                include: {
+                    createdBy: {
+                        select: { id: true, fullName: true },
                     },
-                    authority,
-                ],
-                // Last, and not optional. Authority can only narrow this.
-                organizationId,
-            },
-            orderBy: { createdAt: 'desc' },
-            include: {
-                createdBy: {
-                    select: { id: true, fullName: true },
+                    lectureSchedules: activeAssignments,
+                    _count: {
+                        select: { sessions: true },
+                    },
                 },
-                lectureSchedules: activeAssignments,
-                _count: {
-                    select: { sessions: true },
-                },
-            },
-        });
+            }),
+            prisma.course.count({ where }),
+        ]);
+
+        return { data, total };
     }
 
     /**
@@ -152,26 +170,92 @@ export class CourseRepository {
      * row, whether it may export and manage - rather than the client rendering
      * a button that predictably 403s (D-5).
      */
-    async findAssignedTo(userId: string, organizationId: string) {
-        return prisma.course.findMany({
-            where: {
-                organizationId,
-                OR: [
-                    { createdById: userId },
-                    {
-                        lectureSchedules: {
-                            some: { instructorId: userId, isActive: true },
-                        },
+    async findAssignedTo(
+        userId: string,
+        organizationId: string,
+        query: CourseQuery = defaultCourseQuery
+    ) {
+        const where = {
+            organizationId,
+            OR: [
+                { createdById: userId },
+                {
+                    lectureSchedules: {
+                        some: { instructorId: userId, isActive: true },
                     },
-                ],
-            },
-            orderBy: { createdAt: 'desc' },
-            include: {
-                createdBy: { select: { id: true, fullName: true } },
-                lectureSchedules: activeAssignments,
-                _count: { select: { sessions: true } },
-            },
-        });
+                },
+            ],
+            ...(query.search
+                ? {
+                      AND: [
+                          {
+                              OR: [
+                                  {
+                                      courseCode: {
+                                          contains: query.search,
+                                          mode: "insensitive",
+                                      },
+                                  },
+                                  {
+                                      courseName: {
+                                          contains: query.search,
+                                          mode: "insensitive",
+                                      },
+                                  },
+                              ],
+                          },
+                      ],
+                  }
+                : {}),
+            ...(query.department
+                ? {
+                      department: {
+                          equals: query.department,
+                          mode: "insensitive",
+                      },
+                  }
+                : {}),
+            ...(query.semester
+                ? {
+                      semester: {
+                          equals: query.semester,
+                          mode: "insensitive",
+                      },
+                  }
+                : {}),
+            ...(query.level !== undefined
+                ? {
+                      lectureSchedules: {
+                          some: {
+                              instructorId: userId,
+                              isActive: true,
+                              level: query.level,
+                          },
+                      },
+                  }
+                : {}),
+        } satisfies Prisma.CourseWhereInput;
+
+        const [data, total] = await Promise.all([
+            prisma.course.findMany({
+                where,
+                ...toSkipTake(query),
+                orderBy: buildOrderBy(
+                    query.sortBy,
+                    query.sortOrder,
+                    SORTABLE,
+                    "createdAt"
+                ),
+                include: {
+                    createdBy: { select: { id: true, fullName: true } },
+                    lectureSchedules: activeAssignments,
+                    _count: { select: { sessions: true } },
+                },
+            }),
+            prisma.course.count({ where }),
+        ]);
+
+        return { data, total };
     }
 
     async findByCreator(createdById: string, organizationId: string) {

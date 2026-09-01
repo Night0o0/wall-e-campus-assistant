@@ -1,6 +1,7 @@
 import { Router } from "express";
 import {
   createAssignment,
+  getManageableOfferings,
   getAssignmentGradebook,
   gradeAssignment,
   listAssignments,
@@ -8,8 +9,9 @@ import {
   updateAssignment,
 } from "../controllers/assignment.controller.js";
 import { authenticate, requireApproved, requireRole } from "../middleware/auth.middleware.js";
-import { validate } from "../middleware/validate.middleware.js";
+import { validate, validateQuery } from "../middleware/validate.middleware.js";
 import {
+  assignmentQuerySchema,
   createAssignmentSchema,
   gradeAssignmentSchema,
   updateAssignmentSchema,
@@ -19,7 +21,8 @@ const router = Router();
 const staff = requireRole("SYSTEM_OWNER", "UNIVERSITY_ADMIN", "DEPARTMENT_ADMIN", "INSTRUCTOR");
 
 router.use(authenticate);
-router.get("/", requireApproved, listAssignments);
+router.get("/", requireApproved, validateQuery(assignmentQuerySchema), listAssignments);
+router.get("/options", staff, getManageableOfferings);
 router.post("/", staff, validate(createAssignmentSchema), createAssignment);
 router.patch("/:id", staff, validate(updateAssignmentSchema), updateAssignment);
 router.post("/:id/publish", staff, publishAssignment);

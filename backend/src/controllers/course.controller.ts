@@ -23,7 +23,8 @@ export const createCourse = asyncHandler(async (req: Request, res: Response) => 
 export const getMyCourses = asyncHandler(async (req: Request, res: Response) => {
   const courses = await courseService.getMyCourses(
     courseActor(req),
-    req.user!.organizationId
+    req.user!.organizationId,
+    (req.validatedQuery ?? {}) as CourseQuery
   );
   res.status(200).json(courses);
 });

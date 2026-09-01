@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { paginationSchema } from "../utils/pagination.js";
 
 export const createAssignmentSchema = z.object({
   offeringId: z.string().uuid(),
@@ -26,6 +27,26 @@ export const gradeAssignmentSchema = z.object({
   publish: z.boolean().default(false),
 });
 
+export const assignmentQuerySchema = paginationSchema
+  .omit({ search: true })
+  .extend({
+    page: z.coerce.number().int().min(1).default(1),
+    limit: z.coerce.number().int().min(1).max(100).default(100),
+    search: z.string().trim().min(1).max(160).optional(),
+    offeringId: z.string().uuid().optional(),
+    isPublished: z
+      .enum(["true", "false"])
+      .transform((value) => value === "true")
+      .optional(),
+    sortBy: z.enum(["deadline", "createdAt", "title"]).optional(),
+  });
+
 export type CreateAssignmentInput = z.infer<typeof createAssignmentSchema>;
 export type UpdateAssignmentInput = z.infer<typeof updateAssignmentSchema>;
 export type GradeAssignmentInput = z.infer<typeof gradeAssignmentSchema>;
+export type AssignmentQuery = z.infer<typeof assignmentQuerySchema>;
+export const defaultAssignmentQuery: AssignmentQuery = {
+  page: 1,
+  limit: 100,
+  sortOrder: "desc",
+};

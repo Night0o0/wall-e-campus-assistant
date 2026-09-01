@@ -1,12 +1,17 @@
 import { Prisma } from "@prisma/client";
 import prisma from "../lib/prisma.js";
 import type { AuthenticatedUser } from "../middleware/auth.middleware.js";
+import {
+  defaultAssignmentQuery,
+} from "../types/assignment.types.js";
 import type {
+  AssignmentQuery,
   CreateAssignmentInput,
   GradeAssignmentInput,
   UpdateAssignmentInput,
 } from "../types/assignment.types.js";
 import { badRequest, forbidden, notFound } from "../utils/AppError.js";
+import { paginate, type Paginated } from "../utils/pagination.js";
 
 const assignmentInclude = {
   offering: {
@@ -22,44 +27,190 @@ const assignmentInclude = {
 } as const;
 
 export class AssignmentService {
-  async list(actor: AuthenticatedUser) {
+  async list(
+    actor: AuthenticatedUser,
+    query: AssignmentQuery = defaultAssignmentQuery
+  ): Promise<Paginated<any>> {
+    const orderBy: Prisma.AssignmentOrderByWithRelationInput[] =
+      query.sortBy === "createdAt"
+        ? [{ createdAt: query.sortOrder }, { deadline: "asc" }]
+        : query.sortBy === "title"
+          ? [{ title: query.sortOrder }, { deadline: "asc" }]
+          : [{ deadline: query.sortOrder }];
+    const skip = (query.page - 1) * query.limit;
+
     if (actor.role === "STUDENT") {
       const profile = await prisma.studentProfile.findUnique({
         where: { userId: actor.id },
         select: { cohortId: true },
       });
 
-      return prisma.assignment.findMany({
-        where: {
-          organizationId: actor.organizationId,
-          isPublished: true,
-          offering: {
-            enrollments: { some: { studentId: actor.id, isActive: true } },
-          },
-          ...(profile?.cohortId
+      const where: Prisma.AssignmentWhereInput = {
+        organizationId: actor.organizationId,
+        isPublished: true,
+        offering: {
+          enrollments: { some: { studentId: actor.id, isActive: true } },
+        },
+        ...(query.offeringId ? { offeringId: query.offeringId } : {}),
+        AND: [
+          ...(query.search
+            ? [
+                {
+                  OR: [
+                    {
+                      title: {
+                        contains: query.search,
+                        mode: "insensitive" as const,
+                      },
+                    },
+                    {
+                      description: {
+                        contains: query.search,
+                        mode: "insensitive" as const,
+                      },
+                    },
+                    {
+                      offering: {
+                        course: {
+                          OR: [
+                            {
+                              courseCode: {
+                                contains: query.search,
+                                mode: "insensitive" as const,
+                              },
+                            },
+                            {
+                              courseName: {
+                                contains: query.search,
+                                mode: "insensitive" as const,
+                              },
+                            },
+                          ],
+                        },
+                      },
+                    },
+                  ],
+                },
+              ]
+            : []),
+          profile?.cohortId
             ? {
                 OR: [
                   { cohorts: { none: {} } },
                   { cohorts: { some: { cohortId: profile.cohortId } } },
                 ],
               }
-            : { cohorts: { none: {} } }),
-        },
-        include: {
-          ...assignmentInclude,
-          grades: {
-            where: { studentId: actor.id, publishedAt: { not: null } },
-            select: { score: true, feedback: true, gradedAt: true, publishedAt: true },
+            : { cohorts: { none: {} } },
+        ],
+      };
+
+      const [data, total] = await Promise.all([
+        prisma.assignment.findMany({
+          where,
+          skip,
+          take: query.limit,
+          include: {
+            ...assignmentInclude,
+            grades: {
+              where: { studentId: actor.id, publishedAt: { not: null } },
+              select: { score: true, feedback: true, gradedAt: true, publishedAt: true },
+            },
           },
-        },
-        orderBy: { deadline: "asc" },
-      });
+          orderBy,
+        }),
+        prisma.assignment.count({ where }),
+      ]);
+
+      return paginate(data, total, query);
     }
 
-    return prisma.assignment.findMany({
-      where: this.staffScope(actor),
-      include: assignmentInclude,
-      orderBy: { deadline: "desc" },
+    const where: Prisma.AssignmentWhereInput = {
+      ...this.staffScope(actor),
+      ...(query.offeringId ? { offeringId: query.offeringId } : {}),
+      ...(query.isPublished === undefined ? {} : { isPublished: query.isPublished }),
+      ...(query.search
+        ? {
+            OR: [
+              {
+                title: {
+                  contains: query.search,
+                  mode: "insensitive" as const,
+                },
+              },
+              {
+                description: {
+                  contains: query.search,
+                  mode: "insensitive" as const,
+                },
+              },
+              {
+                offering: {
+                  course: {
+                    OR: [
+                      {
+                        courseCode: {
+                          contains: query.search,
+                          mode: "insensitive" as const,
+                        },
+                      },
+                      {
+                        courseName: {
+                          contains: query.search,
+                          mode: "insensitive" as const,
+                        },
+                      },
+                    ],
+                  },
+                },
+              },
+            ],
+          }
+        : {}),
+    };
+
+    const [data, total] = await Promise.all([
+      prisma.assignment.findMany({
+        where,
+        skip,
+        take: query.limit,
+        include: assignmentInclude,
+        orderBy,
+      }),
+      prisma.assignment.count({ where }),
+    ]);
+
+    return paginate(data, total, query);
+  }
+
+  async manageableOfferings(actor: AuthenticatedUser) {
+    return prisma.courseOffering.findMany({
+      where: this.manageableOfferingScope(actor),
+      include: {
+        course: {
+          select: { id: true, courseCode: true, courseName: true },
+        },
+        term: {
+          select: { id: true, name: true },
+        },
+        cohorts: {
+          include: {
+            cohort: {
+              select: {
+                id: true,
+                name: true,
+                academicYear: true,
+                level: true,
+                section: true,
+                groupName: true,
+              },
+            },
+          },
+        },
+      },
+      orderBy: [
+        { course: { courseCode: "asc" } },
+        { term: { name: "desc" } },
+      ],
     });
   }
 
@@ -293,5 +444,37 @@ export class AssignmentService {
     if (count !== unique.length) {
       throw badRequest("Every target cohort must belong to the course offering");
     }
+  }
+
+  private manageableOfferingScope(
+    actor: AuthenticatedUser
+  ): Prisma.CourseOfferingWhereInput {
+    const base: Prisma.CourseOfferingWhereInput = {
+      organizationId: actor.organizationId,
+      isActive: true,
+    };
+
+    if (actor.role === "SYSTEM_OWNER" || actor.role === "UNIVERSITY_ADMIN") {
+      return base;
+    }
+
+    if (actor.role === "DEPARTMENT_ADMIN") {
+      if (!actor.departmentId) {
+        throw forbidden("Your account has no department scope");
+      }
+      return { ...base, departmentId: actor.departmentId };
+    }
+
+    if (actor.role === "INSTRUCTOR") {
+      return {
+        ...base,
+        departmentId: actor.departmentId ?? undefined,
+        teachingAssignments: {
+          some: { instructorId: actor.id, isActive: true },
+        },
+      };
+    }
+
+    throw forbidden();
   }
 }

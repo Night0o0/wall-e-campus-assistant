@@ -5,7 +5,7 @@ import { asyncHandler } from "../utils/asyncHandler.js";
 const service = new DepartmentService();
 
 export const listDepartments = asyncHandler(async (req: Request, res: Response) => {
-  res.json(await service.list(req.query as never, req.user!));
+  res.json(await service.list(req.validatedQuery as never, req.user!));
 });
 
 export const getDepartment = asyncHandler(async (req: Request, res: Response) => {

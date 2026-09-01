@@ -27,7 +27,12 @@ router.post("/", requireRole('UNIVERSITY_ADMIN', 'SYSTEM_OWNER'), validate(creat
 router.get("/", validateQuery(courseQuerySchema), getOrgCourses);
 
 // Get courses created by the current user (Admin only)
-router.get("/my", requireRole('INSTRUCTOR', 'UNIVERSITY_ADMIN', 'SYSTEM_OWNER'), getMyCourses);
+router.get(
+    "/my",
+    requireRole('INSTRUCTOR', 'UNIVERSITY_ADMIN', 'SYSTEM_OWNER'),
+    validateQuery(courseQuerySchema),
+    getMyCourses
+);
 
 // Get a single course by ID
 router.get("/:id", getCourse);

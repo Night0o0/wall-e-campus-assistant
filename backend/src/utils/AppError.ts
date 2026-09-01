@@ -32,19 +32,29 @@ export class AppError extends Error {
   }
 }
 
-export const badRequest = (message: string, details?: unknown) =>
-  new AppError(message, 400, details);
+export const badRequest = (
+  message: string,
+  details?: unknown,
+  code = "BAD_REQUEST"
+) => new AppError(message, 400, details, code);
 
-export const unauthorized = (message = "Unauthorized") =>
-  new AppError(message, 401);
+export const unauthorized = (
+  message = "Unauthorized",
+  code = "UNAUTHORIZED"
+) => new AppError(message, 401, undefined, code);
 
-export const forbidden = (message = "Forbidden: insufficient permissions") =>
-  new AppError(message, 403);
+export const forbidden = (
+  message = "Forbidden: insufficient permissions",
+  code = "FORBIDDEN"
+) => new AppError(message, 403, undefined, code);
 
-export const notFound = (message = "Resource not found") =>
-  new AppError(message, 404);
+export const notFound = (
+  message = "Resource not found",
+  code = "NOT_FOUND"
+) => new AppError(message, 404, undefined, code);
 
-export const conflict = (message: string) => new AppError(message, 409);
+export const conflict = (message: string, code = "CONFLICT") =>
+  new AppError(message, 409, undefined, code);
 
 /**
  * 429, for a throttle the application itself enforces.

@@ -36,6 +36,7 @@ Legend: `OWNER` = `SYSTEM_OWNER`, `UA` = `UNIVERSITY_ADMIN`, `DA` =
 | Materials staff | `/api/materials` staff routes | I, UA, OWNER | I only assigned lecture/published material; UA/OWNER same university |
 | Assignments | `/api/assignments*` | Approved S for list; DA/I/UA/OWNER for staff operations | S active enrollment/cohort; DA department; I active teaching assignment; tenant fixed |
 | Approval queue | `/api/admin/students*` | DA, I, UA, OWNER | UA/OWNER university; DA linked department cohorts; I assigned cohorts |
+| Audit logs | `GET /api/admin/audit-logs` | UA, OWNER | Same university; query never widens tenant scope |
 | Campus directory/accounts | `/api/admin/users*`, `/overview` | UA, OWNER | Same university; cannot administer owner/peer admin roles through campus endpoint |
 | Instructor schedule | `GET /api/admin/schedule` | I | Authenticated instructor only |
 | Notifications | `/api/notifications*` | Authenticated self | Recipient/user id always from token; production simulation routes absent |

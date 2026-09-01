@@ -3,11 +3,13 @@ import { authenticate, requireRole } from "../middleware/auth.middleware.js";
 import { validate, validateQuery } from "../middleware/validate.middleware.js";
 import {
   adminUserQuerySchema,
+  // university-scoped audit history
   createCampusUserSchema,
   pendingStudentQuerySchema,
   resetCampusPasswordSchema,
   updateCampusUserSchema,
 } from "../types/admin.types.js";
+import { auditLogQuerySchema } from "../types/audit-log.types.js";
 import { getMyTeachingSchedule } from "../controllers/schedule.controller.js";
 import {
   approveStudent,
@@ -20,6 +22,7 @@ import {
   resetOrganizationUserPassword,
   updateOrganizationUser,
 } from "../controllers/admin.controller.js";
+import { listAuditLogs } from "../controllers/audit-log.controller.js";
 
 const router = Router();
 
@@ -44,6 +47,12 @@ router.get("/schedule", requireRole("INSTRUCTOR"), getMyTeachingSchedule);
 const canAdminister = requireRole("UNIVERSITY_ADMIN", "SYSTEM_OWNER");
 
 router.get("/overview", canAdminister, getOrganizationOverview);
+router.get(
+  "/audit-logs",
+  canAdminister,
+  validateQuery(auditLogQuerySchema),
+  listAuditLogs
+);
 
 router.get(
   "/users",
