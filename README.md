@@ -38,12 +38,13 @@ What is already verified in code:
   offerings, teaching assignments and enrollments now have tenant-scoped APIs
 - route-parameter/query validation, stable API errors, pagination, database
   readiness and graceful worker shutdown are verified
+- the live Supabase/PostgreSQL environment has all 14 migrations applied and
+  passes database, authentication, registration, session and academic API checks
 
 What still needs runtime finish work:
 
-- run credentialed browser login/restoration/logout after explicit approval
+- finish connected rendered browser role workflows
 - run full Flutter runtime validation against the live backend
-- validate the completed backend against the live database/auth environment
 - complete connected-client, deployment, observability, and release phases
 
 ## Repository structure

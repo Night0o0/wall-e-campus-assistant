@@ -1,22 +1,22 @@
 LEORNIAN CAMPUS ASSISTANT - COMPLETE PROJECT EXECUTION PLAN
-Date: August 28, 2026
+Date: September 1, 2026
 
-EXECUTION STATUS (AUGUST 28, 2026)
+EXECUTION STATUS (SEPTEMBER 1, 2026)
 
 - Phase 0 complete: protected Git checkpoints exist and secret/test isolation is enforced.
-- Phase 1 complete: all 13 migrations replayed and the Supabase public schema matches Prisma; retired robot and billing data is absent.
+- Phase 1 and live re-verification complete: all 14 migrations are applied and the Supabase public schema matches the current migration history; retired robot and billing data is absent.
 - Phase 2 complete: the Supabase-aware seed is idempotent and created 12 linked development identities/application users twice without duplicates.
-- Phase 3 complete: direct Supabase JWT verification and seeded-role authentication are implemented and verified; legacy code remains only as the requested fallback pending later removal.
-- Phase 4 implementation complete: public registration is token-derived, forced to STUDENT/PENDING, idempotent, and recoverable after cross-device confirmation through non-authoritative user metadata plus completion-on-login/restoration.
+- Phase 3 complete and live-verified: all seeded roles authenticate through Supabase, invalid/legacy tokens are rejected, account-state gates hold, and login/restoration/refresh/logout pass against the running backend.
+- Phase 4 complete and live-verified: public registration is token-derived, forced to STUDENT/PENDING, idempotent, recoverable after cross-device confirmation, and a self-cleaning real registration run passed.
 - Phase 5 core account lifecycle is implemented together with Phase 4: web/mobile recovery entry points, reset callbacks/deep links, signed-in password changes, Supabase Admin password reset for linked campus users, trusted-token email projection, and status enforcement.
-- Phase 4 automated checks: backend typecheck and 443/443 backend tests pass; web 25/25 tests, production build, and lint complete (four existing Fast Refresh warnings); rendered Playwright checks pass for login, registration, forgot-password, and reset-callback pages.
+- Automated checks: backend source/test typechecks and 495/495 tests pass; web 25/25 tests and production build pass; rendered checks cover login, registration, forgot-password, and reset-callback pages.
 - Phase 6 complete in the working checkpoint: the route-permission matrix is documented, QR issuance is permanently restricted to authorized session staff with no rollback flag, pending students are blocked from generic course/schedule reads, course access is narrowed by trusted enrollment/teaching/department scope, and negative role/tenant/department tests pass.
-- Current automated checks: backend Prisma validation, source/test typechecks, and 460/460 tests in 33 files pass; web 25/25 tests, production build, and lint complete (four existing Fast Refresh warnings).
-- Outstanding before declaring the product finished: live rendered login/restoration/logout needs approval to transmit a seeded password in the browser; the committed mobile dependency lock targets a newer Flutter/Dart toolchain than the installed Flutter 3.24.5, so the complete committed-lock Flutter suite must be rerun on the matching SDK. Phase 7 and later product/release phases below remain open.
+- Phase 7 backend completion is implemented and live-verified: normalized academic APIs, pagination, validation, stable errors, readiness, shutdown behavior, tenant scope, and populated live academic reads all pass.
+- Outstanding before declaring the product finished: connected rendered web workflows; the complete committed-lock Flutter suite on its matching newer Flutter/Dart SDK; deployment, observability, security, and release checks.
 
 CURRENT POSITION
 
-The project is not yet fully finished. Database alignment, seeding, direct Supabase authentication, registration, the core account lifecycle, and Phase 6 authorization hardening are complete. Full live client verification, remaining connected mobile work, backend-domain completion, deployment, observability, and release checks remain.
+The project is not yet fully finished. Database alignment, seeding, direct Supabase authentication, registration, account lifecycle, authorization hardening, backend-domain completion, and live backend verification are complete. Connected web, mobile, deployment, observability, security, and release checks remain.
 
 RECOMMENDED FINAL ARCHITECTURE
 

@@ -10,7 +10,7 @@ Completed and checkpointed before this phase:
 - billing/payment/subscription/invoice feature removed from active app scope
 - backend aligned to the reduced product scope
 - web app aligned to the reduced product scope
-- all 13 migrations applied and verified against the rebuilt Supabase public schema
+- all 14 migrations applied and verified against the Supabase public schema
 - idempotent Supabase-aware seed with 12 linked development accounts
 - direct verified Supabase JWT authentication
 
@@ -50,6 +50,17 @@ Phase 7 backend domain completion implemented in the current checkpoint:
 - separate liveness and database readiness endpoints
 - graceful worker stop, HTTP request draining and Prisma disconnect on shutdown
 
+Live database and authentication verification completed:
+
+- all 14 migrations deployed with zero pending migrations
+- 12 application users linked to Supabase identities with no local password hashes
+- every role, account state and both tenant scopes verified against the running backend
+- real Supabase login, restoration, token refresh and logout passed
+- invalid, tampered and legacy tokens rejected; pending/rejected/disabled gates passed
+- real registration completion proved forced `STUDENT/PENDING`, idempotency and cleanup
+- normalized academic APIs, pagination, validation and cross-tenant safe-404 behavior
+  passed against populated live data
+
 Verified:
 
 - backend Prisma schema validates
@@ -63,9 +74,9 @@ Verified:
 
 Still outstanding:
 
-- browser login/restoration/logout with a real seeded password (requires action-time approval before credential transmission)
+- rendered connected browser role workflows
 - full Flutter suite with the repository's committed lockfile on its matching newer Flutter/Dart SDK; this machine has Flutter 3.24.5
-- live database/auth verification, connected-client, deployment and release phases in `plan.txt`
+- connected-client, deployment, observability and release phases in `plan.txt`
 
 ## What “finished” means
 
@@ -80,13 +91,12 @@ The project is considered finished only when all of the following are true:
 
 ## Remaining execution direction
 
-### Next — live database and authentication verification
+### Next — connected web workflows
 
-- deploy/apply the committed schema to the designated verification database
-- seed or verify the approved development identities
-- exercise registration, login, restoration, logout and the new academic APIs
-  against real Supabase/PostgreSQL services
-- record evidence without placing credentials or tokens in repository files
+- run the React app against the verified live backend
+- exercise credentialed role routing and the owner/admin/instructor/student dashboards
+- verify connected loading, empty, error and mutation states in the browser
+- close any remaining web API-contract gaps and add regression coverage
 
 ## Scope guardrails
 
@@ -112,7 +122,6 @@ Reason:
 
 The next best practical step is:
 
-1. run the live database/auth verification checkpoint
-2. finish the approved credentialed browser smoke test
-3. run Flutter on the matching SDK and a device/emulator
-4. continue the web, mobile, deployment and release phases in `plan.txt`
+1. finish the connected rendered web workflows
+2. run Flutter on the matching SDK and a device/emulator
+3. continue deployment, observability, security and release phases in `plan.txt`
