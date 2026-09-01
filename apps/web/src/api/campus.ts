@@ -1,17 +1,26 @@
 import { api } from '../lib/api'
 import type { ListParams, Paginated } from '../types/api'
 import type {
+  AssignmentGradebook,
+  AssignmentOfferingOption,
   AttendanceRow,
+  CampusAssignment,
   CampusNotification,
   CampusSession,
   CampusUser,
   Course,
   CourseMaterial,
+  Department,
   LectureSchedule,
   OrganizationOverview,
   PendingStudent,
   QrToken,
   SessionStats,
+  StudentAttendanceHistoryRow,
+  StudentAttendanceSummary,
+  StudentMaterials,
+  StudentProfile,
+  StudentTimetable,
 } from '../types/campus'
 
 /**
@@ -102,6 +111,47 @@ export const campusAdminApi = {
       .then((r) => r.data),
 }
 
+/* ------------------------------- Departments ------------------------------ */
+
+export const departmentsApi = {
+  list: (params: ListParams & Record<string, unknown> = {}) =>
+    api
+      .get<Paginated<Department>>('/departments', { params: clean(params) })
+      .then((r) => r.data),
+
+  get: (id: string) =>
+    api
+      .get<{ data: Department }>(`/departments/${id}`)
+      .then((r) => r.data.data),
+
+  create: (data: { code: string; name: string }) =>
+    api
+      .post<{ data: Department }>('/departments', data)
+      .then((r) => r.data.data),
+
+  update: (id: string, data: { code?: string; name?: string; isActive?: boolean }) =>
+    api
+      .patch<{ data: Department }>(`/departments/${id}`, data)
+      .then((r) => r.data.data),
+}
+
+/* -------------------------------- Students ------------------------------- */
+
+export const studentsApi = {
+  profile: () =>
+    api
+      .get<{ profile: StudentProfile }>('/students/me/profile')
+      .then((r) => r.data.profile),
+
+  updateProfile: (data: Record<string, unknown>) =>
+    api
+      .patch<{ profile: StudentProfile }>('/students/me/profile', data)
+      .then((r) => r.data.profile),
+
+  schedule: () =>
+    api.get<StudentTimetable>('/students/me/schedule').then((r) => r.data),
+}
+
 /* -------------------------------- Timetable ------------------------------- */
 
 export const schedulesApi = {
@@ -179,36 +229,15 @@ export const coursesApi = {
       })),
 }
 
-/* ------------------------------ Assignments ------------------------------ */
-
-export interface CampusAssignment {
-  id: string
-  title: string
-  description?: string | null
-  deadline: string
-  maxScore: string | number
-  isPublished: boolean
-  publishedAt?: string | null
-  offering: {
-    id: string
-    displayName?: string | null
-    course: { id: string; courseCode: string; courseName: string }
-    term: { id: string; name: string }
-  }
-  cohorts: Array<{ cohort: { id: string; name: string; code: string } }>
-  grades?: Array<{
-    score: string | number
-    feedback?: string | null
-    gradedAt: string
-    publishedAt: string
-  }>
-}
-
 export const assignmentsApi = {
   list: () =>
     api
       .get<{ assignments: CampusAssignment[] }>('/assignments')
       .then((response) => response.data.assignments),
+  options: () =>
+    api
+      .get<{ offerings: AssignmentOfferingOption[] }>('/assignments/options')
+      .then((response) => response.data.offerings),
   create: (data: Record<string, unknown>) =>
     api
       .post<{ assignment: CampusAssignment }>('/assignments', data)
@@ -221,6 +250,16 @@ export const assignmentsApi = {
     api
       .post<{ assignment: CampusAssignment }>(`/assignments/${id}/publish`)
       .then((response) => response.data.assignment),
+  gradebook: (id: string) =>
+    api.get<AssignmentGradebook>(`/assignments/${id}/gradebook`).then((r) => r.data),
+  grade: (
+    id: string,
+    studentId: string,
+    data: { score: number; feedback?: string | null; publish?: boolean }
+  ) =>
+    api
+      .put<{ grade: unknown }>(`/assignments/${id}/grades/${studentId}`, data)
+      .then((response) => response.data.grade),
 }
 
 /* -------------------------------- Sessions -------------------------------- */
@@ -262,6 +301,18 @@ export const sessionsApi = {
 }
 
 export const attendanceApi = {
+  history: (params: { courseId?: string } = {}) =>
+    api
+      .get<StudentAttendanceHistoryRow[]>('/attendance/history', {
+        params: clean(params),
+      })
+      .then((r) => r.data),
+
+  summary: () =>
+    api
+      .get<StudentAttendanceSummary>('/attendance/summary')
+      .then((r) => r.data),
+
   bySession: (sessionId: string) =>
     api
       .get<{ attendance: AttendanceRow[] } | AttendanceRow[]>(
@@ -281,6 +332,9 @@ export const attendanceApi = {
 /* -------------------------------- Materials ------------------------------- */
 
 export const materialsApi = {
+  mine: () =>
+    api.get<StudentMaterials>('/materials/my').then((r) => r.data),
+
   list: (params: Record<string, unknown> = {}) =>
     api
       .get<Paginated<CourseMaterial> | CourseMaterial[]>('/materials', {

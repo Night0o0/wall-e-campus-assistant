@@ -21,7 +21,7 @@ describe('role navigation', () => {
   it.each([
     ['SYSTEM_OWNER', '/'],
     ['UNIVERSITY_ADMIN', '/'],
-    ['DEPARTMENT_ADMIN', '/'],
+    ['DEPARTMENT_ADMIN', '/departments'],
     ['INSTRUCTOR', '/teaching'],
     ['STUDENT', '/'],
   ] as const)('sends %s to %s after login', (role, path) => {
@@ -39,6 +39,14 @@ describe('role navigation', () => {
 
   it('gives students only their portal links', () => {
     const paths = navigationFor(account('STUDENT')).map((item) => item.href)
-    expect(paths).toEqual(['/', '/assignments', '/account'])
+    expect(paths).toEqual([
+      '/',
+      '/timetable',
+      '/assignments',
+      '/materials',
+      '/attendance',
+      '/notifications',
+      '/account',
+    ])
   })
 })

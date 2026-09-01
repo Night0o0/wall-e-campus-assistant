@@ -1,211 +1,64 @@
-import { useEffect, useState, type FormEvent } from 'react'
-import { useMutation } from '@tanstack/react-query'
-import { User as UserIcon, Lock, Server } from 'lucide-react'
+import { Server, ShieldCheck, Link2 } from 'lucide-react'
 import { Page, Card } from '../components/layout/Page'
-import { Button } from '../components/ui/Button'
-import { Input } from '../components/ui/Field'
-import { Badge } from '../components/ui/Badge'
-import { useToast } from '../components/ui/Toast'
 import { useAuth } from '../context/AuthContext'
-import { getErrorMessage } from '../lib/api'
-import { formatDate } from '../lib/utils'
-import { changeOwnPassword, updateOwnAccount } from '../lib/accountAuth'
 
 export function Settings() {
-  const { user, setUser } = useAuth()
-  const toast = useToast()
-
-  const [profile, setProfile] = useState({ fullName: '', email: '' })
-  const [passwords, setPasswords] = useState({
-    currentPassword: '',
-    newPassword: '',
-    confirmPassword: '',
-  })
-  const [passwordError, setPasswordError] = useState<string | null>(null)
-
-  useEffect(() => {
-    if (user) {
-      setProfile({ fullName: user.fullName, email: user.email })
-    }
-  }, [user])
-
-  const updateProfile = useMutation({
-    mutationFn: () => updateOwnAccount({
-      currentEmail: user!.email,
-      fullName: profile.fullName,
-      email: profile.email,
-    }),
-    onSuccess: ({ user: updated, emailConfirmationPending }) => {
-      setUser({ ...user!, ...updated })
-      toast.success(emailConfirmationPending
-        ? 'Profile updated. Confirm the new sign-in email to finish changing it.'
-        : 'Profile updated')
-    },
-    onError: (error) => toast.error(getErrorMessage(error)),
-  })
-
-  const changePassword = useMutation({
-    mutationFn: () => changeOwnPassword({
-      email: user!.email,
-      currentPassword: passwords.currentPassword,
-      newPassword: passwords.newPassword,
-    }),
-    onSuccess: () => {
-      setPasswords({ currentPassword: '', newPassword: '', confirmPassword: '' })
-      toast.success('Password changed')
-    },
-    onError: (error) => toast.error(getErrorMessage(error)),
-  })
-
-  const handleProfileSubmit = (event: FormEvent) => {
-    event.preventDefault()
-    updateProfile.mutate()
-  }
-
-  const handlePasswordSubmit = (event: FormEvent) => {
-    event.preventDefault()
-
-    if (passwords.newPassword !== passwords.confirmPassword) {
-      setPasswordError('Passwords do not match')
-      return
-    }
-
-    setPasswordError(null)
-    changePassword.mutate()
-  }
+  const { user } = useAuth()
 
   return (
-    <Page title="Settings" subtitle="Your account and platform details.">
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+    <Page
+      title="Platform"
+      subtitle="Deployment and platform context for the owner console."
+    >
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <Card
-          title="Profile"
-          description="How your account appears across the console."
+          title="Environment"
+          description="Which backend this browser is currently talking to."
         >
-          <form onSubmit={handleProfileSubmit} className="space-y-4">
-            <div className="flex items-center gap-4 rounded-lg bg-slate-50 p-4">
-              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary-100">
-                <UserIcon className="h-6 w-6 text-primary-600" />
-              </div>
-              <div className="min-w-0">
-                <p className="truncate font-medium text-slate-900">
-                  {user?.fullName}
-                </p>
-                <div className="mt-1 flex flex-wrap items-center gap-2">
-                  <Badge tone="purple">System Owner</Badge>
-                  {user?.createdAt && (
-                    <span className="text-xs text-slate-500">
-                      Joined {formatDate(user.createdAt)}
-                    </span>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            <Input
-              label="Full name"
-              required
-              value={profile.fullName}
-              onChange={(event) =>
-                setProfile({ ...profile, fullName: event.target.value })
-              }
+          <dl className="space-y-3">
+            <Row
+              label="API endpoint"
+              value={import.meta.env.VITE_API_URL ?? '/api (dev proxy)'}
             />
-
-            <Input
-              label="Email"
-              type="email"
-              required
-              value={profile.email}
-              onChange={(event) =>
-                setProfile({ ...profile, email: event.target.value })
-              }
+            <Row
+              label="Auth provider"
+              value={import.meta.env.VITE_SUPABASE_URL ? 'supabase-capable' : 'legacy only'}
             />
-
-            <Input
-              label="University ID"
-              value={user?.universityId ?? ''}
-              disabled
-              hint="Assigned at account creation and cannot be changed"
-            />
-
-            <Button type="submit" loading={updateProfile.isPending}>
-              Save profile
-            </Button>
-          </form>
+            <Row label="Role" value={user?.role ?? 'SYSTEM_OWNER'} />
+          </dl>
         </Card>
 
-        <div className="space-y-6">
-          <Card title="Password" description="Change the password you sign in with.">
-            <form onSubmit={handlePasswordSubmit} className="space-y-4">
-              <Input
-                label="Current password"
-                type="password"
-                required
-                autoComplete="current-password"
-                value={passwords.currentPassword}
-                onChange={(event) =>
-                  setPasswords({
-                    ...passwords,
-                    currentPassword: event.target.value,
-                  })
-                }
-              />
-              <Input
-                label="New password"
-                type="password"
-                required
-                minLength={8}
-                autoComplete="new-password"
-                value={passwords.newPassword}
-                onChange={(event) =>
-                  setPasswords({ ...passwords, newPassword: event.target.value })
-                }
-                hint="At least 8 characters"
-              />
-              <Input
-                label="Confirm new password"
-                type="password"
-                required
-                minLength={8}
-                autoComplete="new-password"
-                value={passwords.confirmPassword}
-                onChange={(event) =>
-                  setPasswords({
-                    ...passwords,
-                    confirmPassword: event.target.value,
-                  })
-                }
-                error={passwordError ?? undefined}
-              />
-              <Button
-                type="submit"
-                icon={Lock}
-                loading={changePassword.isPending}
-              >
-                Change password
-              </Button>
-            </form>
-          </Card>
+        <Card title="Access model" description="What this owner console is responsible for.">
+          <div className="flex items-start gap-3 rounded-lg bg-slate-50 p-4">
+            <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-slate-400" />
+            <p className="text-sm text-slate-600">
+              This screen no longer duplicates Account profile or password work.
+              Those live on the shared Account page. Platform responsibilities
+              here are organizations, university administrators, platform users,
+              and cross-tenant metrics.
+            </p>
+          </div>
+        </Card>
 
-          <Card title="Platform" description="Environment this console is talking to.">
-            <dl className="space-y-3">
-              <Row
-                label="API endpoint"
-                value={import.meta.env.VITE_API_URL ?? '/api (dev proxy)'}
-              />
-              <Row label="Your organization" value={user?.organization?.name ?? '—'} />
-              <Row label="Organization code" value={user?.organization?.code ?? '—'} />
-              <Row label="Role" value="SYSTEM_OWNER" />
-            </dl>
+        <Card title="Cutover guard" description="Supabase staging remains an explicit verification step.">
+          <div className="flex items-start gap-3 rounded-lg bg-slate-50 p-4">
+            <Link2 className="mt-0.5 h-5 w-5 shrink-0 text-slate-400" />
+            <p className="text-sm text-slate-600">
+              Legacy authentication stays in place until a staging run proves
+              `AUTH_PROVIDER=supabase` end to end. This page reports context; it
+              does not flip that switch.
+            </p>
+          </div>
 
-            <div className="mt-4 flex items-start gap-3 rounded-lg bg-slate-50 p-4">
-              <Server className="mt-0.5 h-5 w-5 shrink-0 text-slate-400" />
-              <p className="text-sm text-slate-600">
-                Platform email, authentication and operational settings are
-                configured by the deployment environment.
-              </p>
-            </div>
-          </Card>
-        </div>
+          <div className="mt-4 flex items-start gap-3 rounded-lg bg-slate-50 p-4">
+            <Server className="mt-0.5 h-5 w-5 shrink-0 text-slate-400" />
+            <p className="text-sm text-slate-600">
+              Platform email, authentication and operational settings are
+              configured by the deployment environment rather than in-browser
+              controls.
+            </p>
+          </div>
+        </Card>
       </div>
     </Page>
   )

@@ -1,2 +1,4 @@
 node_modules/
 .claude/
+apps/web/test-results/
+apps/web/playwright-report/

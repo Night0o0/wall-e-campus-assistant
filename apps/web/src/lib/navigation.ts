@@ -57,7 +57,8 @@ const SYSTEM_OWNER_NAV: NavItem[] = [
   { name: 'Dashboard', href: '/', icon: LayoutDashboard, end: true, mobile: true },
   { name: 'Organizations', href: '/organizations', icon: Building2, mobile: true },
   { name: 'Users', href: '/users', icon: Users, mobile: true },
-  { name: 'Settings', href: '/settings', icon: Settings },
+  { name: 'Account', href: '/account', icon: Settings, mobile: true },
+  { name: 'Platform', href: '/settings', icon: FolderOpen },
 ]
 
 /**
@@ -74,6 +75,7 @@ const ADMIN_NAV: NavItem[] = [
   { name: 'Pending Students', href: '/pending-students', icon: UserCheck, mobile: true },
   { name: 'My Courses', href: '/courses', icon: Library },
   { name: 'Course Material', href: '/materials', icon: FolderOpen },
+  { name: 'Assignments', href: '/assignments', icon: FileText },
   // Instructors receive the 24-hour and 30-minute lecture reminders, so they
   // need somewhere to read them. The generator was writing rows the web client
   // had no page for.
@@ -91,6 +93,7 @@ const ADMIN_NAV: NavItem[] = [
  */
 const SUPER_ADMIN_NAV: NavItem[] = [
   { name: 'Dashboard', href: '/', icon: LayoutDashboard, end: true, mobile: true },
+  { name: 'Departments', href: '/departments', icon: Building2 },
   { name: 'Timetable', href: '/timetable', icon: CalendarDays },
   { name: 'Courses', href: '/courses', icon: Library },
   { name: 'Sessions', href: '/sessions', icon: MonitorPlay, mobile: true },
@@ -100,6 +103,7 @@ const SUPER_ADMIN_NAV: NavItem[] = [
   // bottleneck for the whole university at the start of term.
   { name: 'Pending Students', href: '/pending-students', icon: UserCheck, mobile: true },
   { name: 'Course Material', href: '/materials', icon: FolderOpen },
+  { name: 'Assignments', href: '/assignments', icon: FileText },
   { name: 'Exports', href: '/exports', icon: FileText },
   { name: 'Notifications', href: '/notifications', icon: Bell },
   { name: 'Account', href: '/account', icon: Settings },
@@ -107,7 +111,21 @@ const SUPER_ADMIN_NAV: NavItem[] = [
 
 const STUDENT_NAV: NavItem[] = [
   { name: 'Dashboard', href: '/', icon: LayoutDashboard, end: true, mobile: true },
+  { name: 'Timetable', href: '/timetable', icon: CalendarDays, mobile: true },
   { name: 'Assignments', href: '/assignments', icon: FileText, mobile: true },
+  { name: 'Materials', href: '/materials', icon: FolderOpen },
+  { name: 'Attendance', href: '/attendance', icon: MonitorPlay, mobile: true },
+  { name: 'Notifications', href: '/notifications', icon: Bell },
+  { name: 'Account', href: '/account', icon: Settings, mobile: true },
+]
+
+const DEPARTMENT_ADMIN_NAV: NavItem[] = [
+  { name: 'Departments', href: '/departments', icon: Building2, end: true, mobile: true },
+  { name: 'Timetable', href: '/timetable', icon: CalendarDays },
+  { name: 'Courses', href: '/courses', icon: Library },
+  { name: 'Pending Students', href: '/pending-students', icon: UserCheck, mobile: true },
+  { name: 'Assignments', href: '/assignments', icon: FileText, mobile: true },
+  { name: 'Notifications', href: '/notifications', icon: Bell },
   { name: 'Account', href: '/account', icon: Settings, mobile: true },
 ]
 
@@ -115,9 +133,7 @@ const NAV_BY_ROLE: Record<string, NavItem[]> = {
   SYSTEM_OWNER: SYSTEM_OWNER_NAV,
   INSTRUCTOR: ADMIN_NAV,
   UNIVERSITY_ADMIN: SUPER_ADMIN_NAV,
-  DEPARTMENT_ADMIN: SUPER_ADMIN_NAV.filter(
-    (item) => item.href !== '/exports'
-  ),
+  DEPARTMENT_ADMIN: DEPARTMENT_ADMIN_NAV,
   STUDENT: STUDENT_NAV,
 }
 
@@ -165,9 +181,10 @@ export function homeRouteFor(role: string): string {
     case 'INSTRUCTOR':
       return '/teaching'
     case 'UNIVERSITY_ADMIN':
-    case 'DEPARTMENT_ADMIN':
     case 'SYSTEM_OWNER':
       return '/'
+    case 'DEPARTMENT_ADMIN':
+      return '/departments'
     default:
       return '/'
   }

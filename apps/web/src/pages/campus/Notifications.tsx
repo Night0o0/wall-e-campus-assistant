@@ -57,6 +57,7 @@ export function Notifications() {
   const queryClient = useQueryClient()
 
   const isSuperAdmin = user?.role === 'UNIVERSITY_ADMIN'
+  const isStudent = user?.role === 'STUDENT'
 
   const {
     data: notifications = [],
@@ -93,7 +94,11 @@ export function Notifications() {
   return (
     <Page
       title="Notifications"
-      subtitle="Lecture reminders addressed to you."
+      subtitle={
+        isStudent
+          ? 'Approvals, reminders and updates addressed to you.'
+          : 'Lecture reminders and account updates addressed to you.'
+      }
       actions={
         unreadCount > 0 ? (
           <Button
@@ -131,9 +136,9 @@ export function Notifications() {
       {!isLoading && !error && notifications.length === 0 && (
         <Card title="Nothing here yet">
           <p className="text-sm text-slate-600">
-            Reminders arrive 24 hours and 30 minutes before each lecture you
-            teach. They are generated ahead of time, so an empty inbox usually
-            means there is nothing on your timetable within the horizon.
+            {isStudent
+              ? 'Approval notices and lecture reminders arrive here once your account and timetable are active.'
+              : 'Reminders arrive 24 hours and 30 minutes before each lecture you teach. They are generated ahead of time, so an empty inbox usually means there is nothing on your timetable within the horizon.'}
           </p>
         </Card>
       )}

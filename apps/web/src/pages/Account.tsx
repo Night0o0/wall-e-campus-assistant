@@ -1,15 +1,28 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import { useMutation } from '@tanstack/react-query'
+import { useMutation, useQuery } from '@tanstack/react-query'
 import { User as UserIcon, Lock, LifeBuoy } from 'lucide-react'
 import { Page, Card } from '../components/layout/Page'
 import { Button } from '../components/ui/Button'
-import { Input } from '../components/ui/Field'
+import { Input, Select } from '../components/ui/Field'
 import { Badge } from '../components/ui/Badge'
+import { Skeleton } from '../components/ui/Skeleton'
 import { useToast } from '../components/ui/Toast'
 import { useAuth } from '../context/AuthContext'
 import { getErrorMessage } from '../lib/api'
 import { formatDate } from '../lib/utils'
 import { changeOwnPassword, updateOwnAccount } from '../lib/accountAuth'
+import { studentsApi } from '../api/campus'
+
+const PROFILE_FIELD_LABELS: Record<string, string> = {
+  faculty: 'Faculty',
+  department: 'Department',
+  level: 'Level',
+  semester: 'Semester',
+  section: 'Section',
+  phoneNumber: 'Phone number',
+  nationalId: 'National ID',
+  dateOfBirth: 'Date of birth',
+}
 
 const ROLE_LABELS: Record<string, string> = {
   SYSTEM_OWNER: 'System Owner',
@@ -31,6 +44,7 @@ const ROLE_LABELS: Record<string, string> = {
 export function Account() {
   const { user, setUser } = useAuth()
   const toast = useToast()
+  const isStudent = user?.role === 'STUDENT'
 
   const [profile, setProfile] = useState({ fullName: '', email: '' })
   const [passwords, setPasswords] = useState({
@@ -39,12 +53,47 @@ export function Account() {
     confirmPassword: '',
   })
   const [passwordError, setPasswordError] = useState<string | null>(null)
+  const [academicProfile, setAcademicProfile] = useState({
+    faculty: '',
+    department: '',
+    level: '',
+    semester: '',
+    section: '',
+    groupName: '',
+    academicYear: '',
+    phoneNumber: '',
+    nationalId: '',
+    dateOfBirth: '',
+  })
 
   useEffect(() => {
     if (user) {
       setProfile({ fullName: user.fullName, email: user.email })
     }
   }, [user])
+
+  const studentProfile = useQuery({
+    queryKey: ['student-profile'],
+    queryFn: studentsApi.profile,
+    enabled: isStudent,
+  })
+
+  useEffect(() => {
+    if (!studentProfile.data) return
+
+    setAcademicProfile({
+      faculty: studentProfile.data.faculty ?? '',
+      department: studentProfile.data.department ?? '',
+      level: studentProfile.data.level ? String(studentProfile.data.level) : '',
+      semester: studentProfile.data.semester ?? '',
+      section: studentProfile.data.section ?? '',
+      groupName: studentProfile.data.groupName ?? '',
+      academicYear: studentProfile.data.academicYear ?? '',
+      phoneNumber: studentProfile.data.phoneNumber ?? '',
+      nationalId: studentProfile.data.nationalId ?? '',
+      dateOfBirth: studentProfile.data.dateOfBirth ?? '',
+    })
+  }, [studentProfile.data])
 
   const updateProfile = useMutation({
     mutationFn: () => updateOwnAccount({
@@ -70,6 +119,27 @@ export function Account() {
     onSuccess: () => {
       setPasswords({ currentPassword: '', newPassword: '', confirmPassword: '' })
       toast.success('Password changed')
+    },
+    onError: (error) => toast.error(getErrorMessage(error)),
+  })
+
+  const updateAcademicProfile = useMutation({
+    mutationFn: () =>
+      studentsApi.updateProfile({
+        faculty: academicProfile.faculty.trim() || undefined,
+        department: academicProfile.department.trim() || undefined,
+        level: academicProfile.level ? Number(academicProfile.level) : undefined,
+        semester: academicProfile.semester.trim() || undefined,
+        section: academicProfile.section.trim() || undefined,
+        groupName: academicProfile.groupName.trim() || undefined,
+        academicYear: academicProfile.academicYear.trim() || undefined,
+        phoneNumber: academicProfile.phoneNumber.trim() || undefined,
+        nationalId: academicProfile.nationalId.trim() || undefined,
+        dateOfBirth: academicProfile.dateOfBirth || undefined,
+      }),
+    onSuccess: () => {
+      void studentProfile.refetch()
+      toast.success('Academic profile updated')
     },
     onError: (error) => toast.error(getErrorMessage(error)),
   })
@@ -156,6 +226,168 @@ export function Account() {
         </Card>
 
         <div className="space-y-6">
+          {isStudent && (
+            <Card
+              title="Academic profile"
+              description="Complete this so your timetable, course material and attendance scope can be derived from stored records."
+            >
+              {studentProfile.isLoading ? (
+                <Skeleton className="h-56" />
+              ) : studentProfile.error ? (
+                <p className="text-sm text-danger-600">
+                  {getErrorMessage(studentProfile.error)}
+                </p>
+              ) : (
+                <>
+                  <div className="mb-4 flex flex-wrap items-center gap-2">
+                    <Badge
+                      tone={
+                        studentProfile.data?.status === 'COMPLETED'
+                          ? 'success'
+                          : 'warning'
+                      }
+                    >
+                      {studentProfile.data?.status === 'COMPLETED'
+                        ? 'Complete'
+                        : 'Incomplete'}
+                    </Badge>
+                    {studentProfile.data?.missingFields.map((field) => (
+                      <Badge key={field} tone="neutral">
+                        Missing {PROFILE_FIELD_LABELS[field] ?? field}
+                      </Badge>
+                    ))}
+                  </div>
+
+                  <form
+                    onSubmit={(event) => {
+                      event.preventDefault()
+                      updateAcademicProfile.mutate()
+                    }}
+                    className="space-y-4"
+                  >
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                      <Input
+                        label="Faculty"
+                        value={academicProfile.faculty}
+                        onChange={(event) =>
+                          setAcademicProfile({
+                            ...academicProfile,
+                            faculty: event.target.value,
+                          })
+                        }
+                      />
+                      <Input
+                        label="Department"
+                        value={academicProfile.department}
+                        onChange={(event) =>
+                          setAcademicProfile({
+                            ...academicProfile,
+                            department: event.target.value,
+                          })
+                        }
+                      />
+                      <Select
+                        label="Level"
+                        value={academicProfile.level}
+                        onChange={(event) =>
+                          setAcademicProfile({
+                            ...academicProfile,
+                            level: event.target.value,
+                          })
+                        }
+                      >
+                        <option value="">Choose level…</option>
+                        {[1, 2, 3, 4, 5, 6, 7].map((value) => (
+                          <option key={value} value={value}>
+                            Level {value}
+                          </option>
+                        ))}
+                      </Select>
+                      <Input
+                        label="Semester"
+                        placeholder="First semester"
+                        value={academicProfile.semester}
+                        onChange={(event) =>
+                          setAcademicProfile({
+                            ...academicProfile,
+                            semester: event.target.value,
+                          })
+                        }
+                      />
+                      <Input
+                        label="Section"
+                        value={academicProfile.section}
+                        onChange={(event) =>
+                          setAcademicProfile({
+                            ...academicProfile,
+                            section: event.target.value,
+                          })
+                        }
+                      />
+                      <Input
+                        label="Group"
+                        value={academicProfile.groupName}
+                        onChange={(event) =>
+                          setAcademicProfile({
+                            ...academicProfile,
+                            groupName: event.target.value,
+                          })
+                        }
+                      />
+                      <Input
+                        label="Academic year"
+                        placeholder="2026/2027"
+                        value={academicProfile.academicYear}
+                        onChange={(event) =>
+                          setAcademicProfile({
+                            ...academicProfile,
+                            academicYear: event.target.value,
+                          })
+                        }
+                      />
+                      <Input
+                        label="Phone number"
+                        value={academicProfile.phoneNumber}
+                        onChange={(event) =>
+                          setAcademicProfile({
+                            ...academicProfile,
+                            phoneNumber: event.target.value,
+                          })
+                        }
+                      />
+                      <Input
+                        label="National ID"
+                        inputMode="numeric"
+                        value={academicProfile.nationalId}
+                        onChange={(event) =>
+                          setAcademicProfile({
+                            ...academicProfile,
+                            nationalId: event.target.value,
+                          })
+                        }
+                      />
+                      <Input
+                        label="Date of birth"
+                        type="date"
+                        value={academicProfile.dateOfBirth}
+                        onChange={(event) =>
+                          setAcademicProfile({
+                            ...academicProfile,
+                            dateOfBirth: event.target.value,
+                          })
+                        }
+                      />
+                    </div>
+
+                    <Button type="submit" loading={updateAcademicProfile.isPending}>
+                      Save academic profile
+                    </Button>
+                  </form>
+                </>
+              )}
+            </Card>
+          )}
+
           <Card title="Password" description="Change the password you sign in with.">
             <form onSubmit={handlePasswordSubmit} className="space-y-4">
               <Input

@@ -94,10 +94,11 @@ afterEach(cleanup)
 describe('Supabase web session lifecycle', () => {
   it('restores a session and idempotently repairs registration before profile', async () => {
     auth.getSession.mockResolvedValue({ data: { session } })
-    tokenStorage.get.mockReturnValue('access-token')
+    tokenStorage.get.mockImplementation(() => 'access-token')
     renderProvider()
 
     await waitFor(() => expect(screen.getByText('student@example.edu')).toBeTruthy())
+    expect(tokenStorage.set).toHaveBeenCalledWith('access-token')
     expect(complete).toHaveBeenCalledWith(session)
     expect(profile).toHaveBeenCalledTimes(1)
   })

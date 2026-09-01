@@ -11,6 +11,7 @@ import { ConfirmDialog } from '../../components/ui/ConfirmDialog'
 import { useToast } from '../../components/ui/Toast'
 import { campusAdminApi, coursesApi, schedulesApi } from '../../api/campus'
 import { getErrorMessage } from '../../lib/api'
+import { useAuth } from '../../context/AuthContext'
 import { DAYS_OF_WEEK, type LectureSchedule } from '../../types/campus'
 
 /**
@@ -31,8 +32,10 @@ import { DAYS_OF_WEEK, type LectureSchedule } from '../../types/campus'
  * copy would eventually disagree with the server's.
  */
 export function Timetable() {
+  const { user } = useAuth()
   const toast = useToast()
   const queryClient = useQueryClient()
+  const canManage = user?.role === 'UNIVERSITY_ADMIN'
 
   const [filters, setFilters] = useState({
     department: '',
@@ -127,36 +130,43 @@ export function Timetable() {
       key: 'actions',
       header: '',
       align: 'right',
-      render: (lecture) => (
-        <div className="flex justify-end gap-1">
-          <Button
-            size="sm"
-            variant="ghost"
-            icon={Pencil}
-            onClick={() => setEditing(lecture)}
-          />
-          {lecture.isActive && (
+      render: (lecture) =>
+        canManage ? (
+          <div className="flex justify-end gap-1">
             <Button
               size="sm"
               variant="ghost"
-              icon={Ban}
-              title="Deactivate"
-              onClick={() => setDeactivating(lecture)}
+              icon={Pencil}
+              onClick={() => setEditing(lecture)}
             />
-          )}
-        </div>
-      ),
+            {lecture.isActive && (
+              <Button
+                size="sm"
+                variant="ghost"
+                icon={Ban}
+                title="Deactivate"
+                onClick={() => setDeactivating(lecture)}
+              />
+            )}
+          </div>
+        ) : null,
     },
   ]
 
   return (
     <Page
-      title="Timetable Management"
-      subtitle="Every lecture in your university."
+      title={canManage ? 'Timetable Management' : 'Timetable'}
+      subtitle={
+        canManage
+          ? 'Every lecture in your university.'
+          : 'The timetable currently visible to your department scope.'
+      }
       actions={
-        <Button icon={Plus} onClick={() => setCreating(true)}>
-          New lecture
-        </Button>
+        canManage ? (
+          <Button icon={Plus} onClick={() => setCreating(true)}>
+            New lecture
+          </Button>
+        ) : undefined
       }
     >
       <DataTable
@@ -219,30 +229,34 @@ export function Timetable() {
         }
       />
 
-      <LectureFormModal
-        open={creating || editing !== null}
-        lecture={editing}
-        onClose={() => {
-          setCreating(false)
-          setEditing(null)
-        }}
-        onSaved={() => {
-          invalidate()
-          setCreating(false)
-          setEditing(null)
-        }}
-      />
+      {canManage && (
+        <LectureFormModal
+          open={creating || editing !== null}
+          lecture={editing}
+          onClose={() => {
+            setCreating(false)
+            setEditing(null)
+          }}
+          onSaved={() => {
+            invalidate()
+            setCreating(false)
+            setEditing(null)
+          }}
+        />
+      )}
 
-      <ConfirmDialog
-        open={deactivating !== null}
-        title="Deactivate this lecture?"
-        message="It stops generating reminders and no new session can be opened from it. Attendance already recorded against it is untouched — this is a soft delete precisely so that history survives."
-        confirmLabel="Deactivate"
-        destructive
-        loading={deactivate.isPending}
-        onConfirm={() => deactivating && deactivate.mutate(deactivating.id)}
-        onClose={() => setDeactivating(null)}
-      />
+      {canManage && (
+        <ConfirmDialog
+          open={deactivating !== null}
+          title="Deactivate this lecture?"
+          message="It stops generating reminders and no new session can be opened from it. Attendance already recorded against it is untouched — this is a soft delete precisely so that history survives."
+          confirmLabel="Deactivate"
+          destructive
+          loading={deactivate.isPending}
+          onConfirm={() => deactivating && deactivate.mutate(deactivating.id)}
+          onClose={() => setDeactivating(null)}
+        />
+      )}
     </Page>
   )
 }

@@ -184,6 +184,147 @@ export interface CourseMaterial {
   createdAt: string
 }
 
+export interface Department {
+  id: string
+  code: string
+  name: string
+  isActive: boolean
+  createdAt: string
+  updatedAt: string
+  _count?: {
+    members: number
+    courses: number
+    cohorts: number
+  }
+}
+
+export interface StudentProfile {
+  id: string
+  userId: string
+  universityId: string
+  fullName: string
+  email: string
+  organizationId: string
+  faculty?: string | null
+  department?: string | null
+  level?: number | null
+  semester?: string | null
+  section?: string | null
+  groupName?: string | null
+  academicYear?: string | null
+  phoneNumber?: string | null
+  nationalId?: string | null
+  dateOfBirth?: string | null
+  status: string
+  completedAt?: string | null
+  missingFields: string[]
+  dataSource?: string
+  externalStudentId?: string | null
+  lastSyncedAt?: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export interface StudentTimetable {
+  criteria: {
+    faculty: string
+    department: string
+    level: number
+    semester: number
+    section: string
+    groupName?: string | null
+    semesterLabel?: string | null
+  }
+  count: number
+  schedules: LectureSchedule[]
+}
+
+export interface StudentMaterialGroup {
+  course: CourseSummary
+  materials: Array<{
+    id: string
+    title: string
+    driveUrl: string
+    addedBy: { id: string; fullName: string }
+    createdAt: string
+  }>
+}
+
+export interface StudentMaterials {
+  cohort: {
+    faculty: string
+    department: string
+    level: number
+    semester: number
+    section: string
+    groupName?: string | null
+  }
+  courses: StudentMaterialGroup[]
+}
+
+export interface CampusAssignment {
+  id: string
+  title: string
+  description?: string | null
+  deadline: string
+  maxScore: string | number
+  isPublished: boolean
+  publishedAt?: string | null
+  offering: {
+    id: string
+    displayName?: string | null
+    course: { id: string; courseCode: string; courseName: string }
+    term: { id: string; name: string }
+  }
+  cohorts: Array<{
+    cohort: {
+      id: string
+      name: string
+      academicYear?: string
+      level?: number
+      section?: string | null
+      groupName?: string | null
+    }
+  }>
+  grades?: Array<{
+    score: string | number
+    feedback?: string | null
+    gradedAt: string
+    publishedAt: string
+  }>
+}
+
+export interface StudentAttendanceHistoryRow {
+  id: string
+  status: AttendanceStatus
+  scanTime: string
+  session: {
+    id: string
+    title: string
+    startTime: string
+    endTime?: string | null
+    status: SessionStatus
+    room?: string | null
+    course: CourseSummary | null
+  }
+}
+
+export interface AttendanceSummaryTally {
+  present: number
+  late: number
+  absent: number
+  recordedLectures: number
+  attended: number
+  attendanceRate: number | null
+}
+
+export interface StudentAttendanceSummary {
+  overall: AttendanceSummaryTally
+  courses: Array<{
+    course: CourseSummary | null
+  } & AttendanceSummaryTally>
+}
+
 /** The academic record the approver judges a registration against. */
 export interface AcademicProfile {
   status?: string
@@ -206,6 +347,45 @@ export interface PendingStudent {
   /** `registeredAt`, not `createdAt` — reading the wrong one renders "Invalid Date". */
   registeredAt: string
   profile?: AcademicProfile | null
+}
+
+export interface AssignmentOfferingOption {
+  id: string
+  displayName?: string | null
+  course: CourseSummary
+  term: { id: string; name: string }
+  cohorts: Array<{
+    cohort: {
+      id: string
+      name: string
+      academicYear?: string
+      level?: number
+      section?: string | null
+      groupName?: string | null
+    }
+  }>
+}
+
+export interface AssignmentGradebook {
+  assignment: {
+    id: string
+    title: string
+    maxScore: string | number
+  }
+  rows: Array<{
+    student: {
+      id: string
+      universityId: string
+      fullName: string
+      email: string
+    }
+    grade: {
+      score: string | number
+      feedback?: string | null
+      gradedAt?: string
+      publishedAt?: string | null
+    } | null
+  }>
 }
 
 export type CampusRole = 'UNIVERSITY_ADMIN' | 'INSTRUCTOR' | 'STUDENT'

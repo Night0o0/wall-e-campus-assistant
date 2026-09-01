@@ -12,7 +12,11 @@ import { useToast } from '../../components/ui/Toast'
 import { campusAdminApi, coursesApi, materialsApi } from '../../api/campus'
 import { getErrorMessage } from '../../lib/api'
 import { useAuth } from '../../context/AuthContext'
-import type { CourseMaterial, LectureSchedule } from '../../types/campus'
+import type {
+  CourseMaterial,
+  LectureSchedule,
+  StudentMaterials,
+} from '../../types/campus'
 
 /**
  * Google Drive links, addressed to a cohort.
@@ -47,7 +51,9 @@ export function Materials() {
   const toast = useToast()
   const queryClient = useQueryClient()
 
+  const isStudent = user?.role === 'STUDENT'
   const isSuperAdmin = user?.role === 'UNIVERSITY_ADMIN'
+  const canPublish = user?.role === 'INSTRUCTOR' || user?.role === 'UNIVERSITY_ADMIN'
 
   const [publishing, setPublishing] = useState(false)
   const [editing, setEditing] = useState<CourseMaterial | null>(null)
@@ -60,9 +66,16 @@ export function Materials() {
    */
   const [status, setStatus] = useState<'active' | 'withdrawn' | 'all'>('active')
 
-  const { data: materials = [], isLoading, error } = useQuery({
+  const staffMaterials = useQuery({
     queryKey: ['campus', 'materials', status],
     queryFn: () => materialsApi.list({ status }),
+    enabled: !isStudent,
+  })
+
+  const studentMaterials = useQuery({
+    queryKey: ['student', 'materials'],
+    queryFn: materialsApi.mine,
+    enabled: isStudent,
   })
 
   const invalidate = () =>
@@ -94,8 +107,31 @@ export function Materials() {
   })
 
   /** Grouped the way the page reads: a list of subjects, each with its links. */
+  const isLoading = isStudent ? studentMaterials.isLoading : staffMaterials.isLoading
+  const error = isStudent ? studentMaterials.error : staffMaterials.error
+
   const byCourse = useMemo(() => {
-    const groups = new Map<string, { label: string; rows: CourseMaterial[] }>()
+    if (isStudent) {
+      const response = studentMaterials.data as StudentMaterials | undefined
+      return (response?.courses ?? []).map((group) => ({
+        label: `${group.course.courseCode} — ${group.course.courseName}`,
+        rows: group.materials.map((material) => ({
+          ...material,
+          courseId: group.course.id,
+          course: group.course,
+          faculty: response?.cohort.faculty ?? '',
+          department: response?.cohort.department ?? '',
+          level: response?.cohort.level ?? 0,
+          semester: response?.cohort.semester ?? 0,
+          section: response?.cohort.section ?? undefined,
+          addedById: material.addedBy.id,
+          isActive: true,
+        })),
+      }))
+    }
+
+    const materials = (staffMaterials.data as CourseMaterial[] | undefined) ?? []
+    const groups = new Map<string, { label: string; rows: Array<CourseMaterial & { createdAt?: string }> }>()
 
     for (const material of materials) {
       const key = material.courseId
@@ -108,18 +144,21 @@ export function Materials() {
     }
 
     return [...groups.values()].sort((a, b) => a.label.localeCompare(b.label))
-  }, [materials])
+  }, [isStudent, staffMaterials.data, studentMaterials.data])
 
   return (
     <Page
       title="Course Material"
       subtitle={
-        isSuperAdmin
+        isStudent
+          ? 'Links published for the courses in your own cohort and enrollment scope.'
+          : isSuperAdmin
           ? 'Every link in your university, for any cohort.'
           : 'The links you publish for the subjects you teach.'
       }
       actions={
-        <div className="flex items-center gap-2">
+        canPublish ? (
+          <div className="flex items-center gap-2">
           {/*
             Withdrawn links are kept so they can be restored; without this
             control there was no way to see one, so the Withdrawn badge and the
@@ -141,7 +180,8 @@ export function Materials() {
           <Button icon={Plus} onClick={() => setPublishing(true)}>
             Publish a link
           </Button>
-        </div>
+          </div>
+        ) : undefined
       }
     >
       {isLoading && (
@@ -160,8 +200,9 @@ export function Materials() {
       {!isLoading && !error && byCourse.length === 0 && (
         <Card title="Nothing published yet">
           <p className="text-sm text-slate-600">
-            Publish a Google Drive link and every student in the cohort it is
-            addressed to will see it under that subject.
+            {isStudent
+              ? 'Your instructors have not published any visible material for your cohort yet.'
+              : 'Publish a Google Drive link and every student in the cohort it is addressed to will see it under that subject.'}
           </p>
         </Card>
       )}
@@ -207,32 +248,34 @@ export function Materials() {
                     </a>
                   </div>
 
-                  <div className="flex shrink-0 gap-1">
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      icon={Pencil}
-                      onClick={() => setEditing(material)}
-                    />
-                    {material.isActive ? (
+                  {canPublish && (
+                    <div className="flex shrink-0 gap-1">
                       <Button
                         size="sm"
                         variant="ghost"
-                        icon={EyeOff}
-                        title="Withdraw"
-                        onClick={() => setWithdrawing(material)}
+                        icon={Pencil}
+                        onClick={() => setEditing(material as CourseMaterial)}
                       />
-                    ) : (
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        icon={Eye}
-                        title="Restore this link"
-                        loading={reactivate.isPending}
-                        onClick={() => reactivate.mutate(material.id)}
-                      />
-                    )}
-                  </div>
+                      {material.isActive ? (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          icon={EyeOff}
+                          title="Withdraw"
+                          onClick={() => setWithdrawing(material as CourseMaterial)}
+                        />
+                      ) : (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          icon={Eye}
+                          title="Restore this link"
+                          loading={reactivate.isPending}
+                          onClick={() => reactivate.mutate(material.id)}
+                        />
+                      )}
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -240,35 +283,39 @@ export function Materials() {
         ))}
       </div>
 
-      <PublishModal
-        open={publishing}
-        isSuperAdmin={isSuperAdmin}
-        onClose={() => setPublishing(false)}
-        onSaved={() => {
-          invalidate()
-          setPublishing(false)
-        }}
-      />
+      {canPublish && (
+        <>
+          <PublishModal
+            open={publishing}
+            isSuperAdmin={isSuperAdmin}
+            onClose={() => setPublishing(false)}
+            onSaved={() => {
+              invalidate()
+              setPublishing(false)
+            }}
+          />
 
-      <EditModal
-        material={editing}
-        onClose={() => setEditing(null)}
-        onSaved={() => {
-          invalidate()
-          setEditing(null)
-        }}
-      />
+          <EditModal
+            material={editing}
+            onClose={() => setEditing(null)}
+            onSaved={() => {
+              invalidate()
+              setEditing(null)
+            }}
+          />
 
-      <ConfirmDialog
-        open={withdrawing !== null}
-        title="Withdraw this link?"
-        message="Students stop seeing it immediately. The row is kept rather than deleted, so it can be reactivated and so the record of what was published survives."
-        confirmLabel="Withdraw"
-        destructive
-        loading={withdraw.isPending}
-        onConfirm={() => withdrawing && withdraw.mutate(withdrawing.id)}
-        onClose={() => setWithdrawing(null)}
-      />
+          <ConfirmDialog
+            open={withdrawing !== null}
+            title="Withdraw this link?"
+            message="Students stop seeing it immediately. The row is kept rather than deleted, so it can be reactivated and so the record of what was published survives."
+            confirmLabel="Withdraw"
+            destructive
+            loading={withdraw.isPending}
+            onConfirm={() => withdrawing && withdraw.mutate(withdrawing.id)}
+            onClose={() => setWithdrawing(null)}
+          />
+        </>
+      )}
     </Page>
   )
 }

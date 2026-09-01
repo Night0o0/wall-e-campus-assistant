@@ -8,6 +8,9 @@ import { ForgotPassword, ResetPassword } from './pages/PasswordRecovery'
 import { Account } from './pages/Account'
 import { StudentDashboard } from './pages/student/StudentDashboard'
 import { StudentAssignments } from './pages/student/Assignments'
+import { StudentTimetable } from './pages/student/StudentTimetable'
+import { StudentAttendance } from './pages/student/StudentAttendance'
+import { NotFound } from './pages/NotFound'
 
 // Platform owner
 import { Dashboard } from './pages/Dashboard'
@@ -28,10 +31,19 @@ import { PendingStudents } from './pages/campus/PendingStudents'
 import { Notifications } from './pages/campus/Notifications'
 import { Timetable } from './pages/campus/Timetable'
 import { Directory } from './pages/campus/Directory'
+import { Departments } from './pages/campus/Departments'
+import { Assignments as StaffAssignments } from './pages/campus/Assignments'
 
-const STAFF = ['INSTRUCTOR', 'DEPARTMENT_ADMIN', 'UNIVERSITY_ADMIN']
+const PEOPLE = ['SYSTEM_OWNER', 'UNIVERSITY_ADMIN', 'DEPARTMENT_ADMIN', 'INSTRUCTOR', 'STUDENT']
+const SESSION_STAFF = ['INSTRUCTOR', 'UNIVERSITY_ADMIN']
 const SUPER_ADMIN = ['UNIVERSITY_ADMIN']
 const OWNER = ['SYSTEM_OWNER']
+const DEPARTMENT_READERS = ['DEPARTMENT_ADMIN', 'UNIVERSITY_ADMIN']
+const COURSE_ROLES = ['INSTRUCTOR', 'DEPARTMENT_ADMIN', 'UNIVERSITY_ADMIN']
+const APPROVAL_ROLES = ['INSTRUCTOR', 'DEPARTMENT_ADMIN', 'UNIVERSITY_ADMIN']
+const TIMETABLE_ROLES = ['STUDENT', 'DEPARTMENT_ADMIN', 'UNIVERSITY_ADMIN']
+const NOTIFICATION_ROLES = ['STUDENT', 'INSTRUCTOR', 'DEPARTMENT_ADMIN', 'UNIVERSITY_ADMIN']
+const MATERIAL_ROLES = ['STUDENT', 'INSTRUCTOR', 'UNIVERSITY_ADMIN']
 
 /**
  * What `/` resolves to.
@@ -45,11 +57,22 @@ function RoleHome() {
 
   if (user?.role === 'SYSTEM_OWNER') return <Dashboard />
   if (user?.role === 'STUDENT') return <StudentDashboard />
-  if (user?.role === 'UNIVERSITY_ADMIN' || user?.role === 'DEPARTMENT_ADMIN') {
+  if (user?.role === 'UNIVERSITY_ADMIN') {
     return <Overview />
   }
+  if (user?.role === 'DEPARTMENT_ADMIN') return <Navigate to="/departments" replace />
 
   return <Navigate to="/teaching" replace />
+}
+
+function RoleAssignments() {
+  const { user } = useAuth()
+  return user?.role === 'STUDENT' ? <StudentAssignments /> : <StaffAssignments />
+}
+
+function RoleTimetable() {
+  const { user } = useAuth()
+  return user?.role === 'STUDENT' ? <StudentTimetable /> : <Timetable />
 }
 
 /**
@@ -82,52 +105,84 @@ function App() {
         {/* Full-bleed, deliberately outside DashboardLayout: this goes on a
             projector in front of a room, where a sidebar of admin links is both
             noise and a small privacy leak. */}
-        <Route element={<ProtectedRoute roles={STAFF} />}>
+        <Route element={<ProtectedRoute roles={SESSION_STAFF} />}>
           <Route path="/sessions/:id/qr" element={<LiveQr />} />
         </Route>
 
-        <Route element={<ProtectedRoute roles={['STUDENT']} />}>
+        <Route element={<ProtectedRoute roles={PEOPLE} allowPendingStudent />}>
           <Route element={<DashboardLayout />}>
-            <Route path="/assignments" element={<StudentAssignments />} />
             <Route path="/account" element={<Account />} />
           </Route>
         </Route>
 
-        {/* ------------------------- Teaching staff ------------------------- */}
-        {/* Only an instructor has a teaching timetable of their own. */}
+        <Route element={<ProtectedRoute roles={PEOPLE} />}>
+          <Route element={<DashboardLayout />}>
+            <Route path="/assignments" element={<RoleAssignments />} />
+          </Route>
+        </Route>
+
         <Route element={<ProtectedRoute roles={['INSTRUCTOR']} />}>
           <Route element={<DashboardLayout />}>
             <Route path="/teaching" element={<TeachingSchedule />} />
           </Route>
         </Route>
 
-        {/* Shared by both staff roles: the server decides scope, not the page.
-            The approval queue belongs here and not under INSTRUCTOR — `canApprove`
-            on the server admits UNIVERSITY_ADMIN too, and vetting a
-            first-year is routine departmental work that must not bottleneck on
-            one person at the start of term. */}
-        <Route element={<ProtectedRoute roles={STAFF} />}>
+        <Route element={<ProtectedRoute roles={APPROVAL_ROLES} />}>
           <Route element={<DashboardLayout />}>
-            <Route path="/sessions" element={<Sessions />} />
-            <Route path="/sessions/:id" element={<SessionDetail />} />
-            <Route path="/courses" element={<Courses />} />
-            <Route path="/materials" element={<Materials />} />
             <Route path="/pending-students" element={<PendingStudents />} />
-            <Route path="/notifications" element={<Notifications />} />
-            <Route path="/account" element={<Account />} />
           </Route>
         </Route>
 
-        {/* --------------------- University administrator -------------------- */}
+        <Route element={<ProtectedRoute roles={SESSION_STAFF} />}>
+          <Route element={<DashboardLayout />}>
+            <Route path="/sessions" element={<Sessions />} />
+            <Route path="/sessions/:id" element={<SessionDetail />} />
+          </Route>
+        </Route>
+
+        <Route element={<ProtectedRoute roles={COURSE_ROLES} />}>
+          <Route element={<DashboardLayout />}>
+            <Route path="/courses" element={<Courses />} />
+          </Route>
+        </Route>
+
+        <Route element={<ProtectedRoute roles={MATERIAL_ROLES} />}>
+          <Route element={<DashboardLayout />}>
+            <Route path="/materials" element={<Materials />} />
+          </Route>
+        </Route>
+
+        <Route element={<ProtectedRoute roles={NOTIFICATION_ROLES} />}>
+          <Route element={<DashboardLayout />}>
+            <Route path="/notifications" element={<Notifications />} />
+          </Route>
+        </Route>
+
+        <Route element={<ProtectedRoute roles={TIMETABLE_ROLES} />}>
+          <Route element={<DashboardLayout />}>
+            <Route path="/timetable" element={<RoleTimetable />} />
+          </Route>
+        </Route>
+
+        <Route element={<ProtectedRoute roles={['STUDENT']} />}>
+          <Route element={<DashboardLayout />}>
+            <Route path="/attendance" element={<StudentAttendance />} />
+          </Route>
+        </Route>
+
+        <Route element={<ProtectedRoute roles={DEPARTMENT_READERS} />}>
+          <Route element={<DashboardLayout />}>
+            <Route path="/departments" element={<Departments />} />
+          </Route>
+        </Route>
+
         <Route element={<ProtectedRoute roles={SUPER_ADMIN} />}>
           <Route element={<DashboardLayout />}>
-            <Route path="/timetable" element={<Timetable />} />
             <Route path="/directory" element={<Directory />} />
             <Route path="/exports" element={<Exports />} />
           </Route>
         </Route>
 
-        {/* ------------------------- Platform owner -------------------------- */}
         <Route element={<ProtectedRoute roles={OWNER} />}>
           <Route element={<DashboardLayout />}>
             <Route path="/organizations" element={<Organizations />} />
@@ -137,17 +192,13 @@ function App() {
           </Route>
         </Route>
 
-        {/* `/` means a different dashboard to each role, so it is one route
-            that dispatches rather than several competing for the same path —
-            React Router resolves the first match, so duplicates would silently
-            hand every role whichever one happened to be declared first. */}
-        <Route element={<ProtectedRoute roles={[...OWNER, ...STAFF, 'STUDENT']} />}>
+        <Route element={<ProtectedRoute roles={PEOPLE} />}>
           <Route element={<DashboardLayout />}>
             <Route index element={<RoleHome />} />
           </Route>
         </Route>
 
-        <Route path="*" element={<Navigate to="/" replace />} />
+        <Route path="*" element={<NotFound />} />
       </Routes>
     </BrowserRouter>
   )

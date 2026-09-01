@@ -31,7 +31,13 @@ function BootScreen() {
  * Pending students may authenticate to finish account setup, but cannot enter
  * academic feature routes before university approval.
  */
-export function ProtectedRoute({ roles }: { roles: string[] }) {
+export function ProtectedRoute({
+  roles,
+  allowPendingStudent = false,
+}: {
+  roles: string[]
+  allowPendingStudent?: boolean
+}) {
   const { user, isLoading } = useAuth()
   const location = useLocation()
 
@@ -43,7 +49,11 @@ export function ProtectedRoute({ roles }: { roles: string[] }) {
     return <Navigate to="/login" state={{ from: location.pathname }} replace />
   }
 
-  if (user.role === 'STUDENT' && user.accountStatus !== 'ACTIVE') {
+  if (
+    user.role === 'STUDENT' &&
+    user.accountStatus !== 'ACTIVE' &&
+    !allowPendingStudent
+  ) {
     return <PendingNotice />
   }
 

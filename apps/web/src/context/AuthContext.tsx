@@ -44,6 +44,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (supabaseConfigured) {
         const { data } = await supabase!.auth.getSession()
         if (data.session) {
+          tokenStorage.set(data.session.access_token)
           // Idempotent for linked users; repairs a registration confirmed in a
           // different browser before the profile lookup below.
           await completeRegistrationForSession(data.session)
@@ -75,7 +76,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const { data } = supabase!.auth.onAuthStateChange((_event, session) => {
       if (session) tokenStorage.set(session.access_token)
-      else tokenStorage.clear()
     })
 
     return () => data.subscription.unsubscribe()
