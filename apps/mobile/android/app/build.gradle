@@ -8,7 +8,9 @@ plugins {
 android {
     namespace = "com.walle.campus.wall_e_mobile"
     compileSdk = 36
-    ndkVersion = "26.1.10909125"
+    // `jni` in the committed dependency graph requires NDK 28.2. Higher NDKs
+    // remain backward-compatible with the other Android plugins.
+    ndkVersion = "28.2.13676358"
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_1_8

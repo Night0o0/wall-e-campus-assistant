@@ -6,7 +6,7 @@ Leornian Campus Assistant is a multi-tenant university operations platform with:
 - a Flutter mobile app for student and staff workflows
 - an Express + Prisma backend on PostgreSQL
 
-As of September 1, 2026, the active product scope is:
+As of September 2, 2026, the active product scope is:
 
 - attendance by QR
 - academic structure and timetable management
@@ -43,11 +43,21 @@ What is already verified in code:
 - connected rendered web workflows pass for every seeded role, account-state
   gating, session restoration/sign-out, instructor session/QR state, and the
   responsive university-admin shell
+- Flutter 3.44.9/Dart 3.12.2 analysis, 20 widget/API tests, a 24-screen runtime
+  walk, and the configured Android debug build pass
+- live Android emulator checks pass for approved/pending/disabled students,
+  instructor authentication and connected pages, secure restart/logout, and
+  camera permission with a live QR-scanner preview
+- release-facing mobile demo pages and the out-of-scope static Exports tab were
+  removed; every remaining navigation destination uses connected data
 
 What still needs runtime finish work:
 
-- run full Flutter runtime validation against the live backend
-- complete mobile connected-client, deployment, observability, and release phases
+- complete deployment, observability, security, and release phases
+
+The September 2 mobile checkpoint uses emulator-only acceptance because a
+physical phone was unavailable. Physical-device validation remains a recommended
+pre-release check, but it does not block the current completion sequence.
 
 ## Repository structure
 

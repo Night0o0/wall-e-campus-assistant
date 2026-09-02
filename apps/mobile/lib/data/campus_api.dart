@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
+import 'package:http/http.dart' as http;
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
@@ -93,9 +95,9 @@ abstract class CampusGateway {
 class CampusApi implements CampusGateway {
   CampusApi({
     String? baseUrl,
-    HttpClient? client,
+    http.Client? client,
   })  : baseUrl = (baseUrl ?? _defaultBaseUrl).replaceFirst(RegExp(r'/$'), ''),
-        _client = client ?? HttpClient();
+        _client = client ?? http.Client();
 
   /// Android emulators reach the host through 10.0.2.2. A physical phone must
   /// be launched with --dart-define=API_BASE_URL=http://<computer-ip>:5000/api.
@@ -112,13 +114,14 @@ class CampusApi implements CampusGateway {
 
   static String get _defaultBaseUrl {
     if (_configuredBaseUrl.isNotEmpty) return _configuredBaseUrl;
+    if (kIsWeb) return 'http://localhost:5000/api';
     return Platform.isAndroid
         ? 'http://10.0.2.2:5000/api'
         : 'http://localhost:5000/api';
   }
 
   final String baseUrl;
-  final HttpClient _client;
+  final http.Client _client;
   static const _registrationStorageKey = 'leornian.pendingRegistration';
   static const _secureStorage = FlutterSecureStorage();
 
@@ -399,21 +402,22 @@ class CampusApi implements CampusGateway {
     final uri = Uri.parse('$baseUrl$path').replace(queryParameters: query);
 
     try {
-      final request = await _client.openUrl(method, uri).timeout(
-            const Duration(seconds: 15),
-          );
-      request.headers.contentType = ContentType.json;
-      request.headers.set(HttpHeaders.acceptHeader, 'application/json');
-      request.headers.set('X-Client-Platform', 'mobile');
+      final request = http.Request(method, uri);
+      request.headers[HttpHeaders.contentTypeHeader] =
+          ContentType.json.mimeType;
+      request.headers[HttpHeaders.acceptHeader] = ContentType.json.mimeType;
+      request.headers['X-Client-Platform'] = 'mobile';
       if (session != null) {
-        request.headers
-            .set(HttpHeaders.authorizationHeader, 'Bearer ${session.token}');
+        request.headers[HttpHeaders.authorizationHeader] =
+            'Bearer ${session.token}';
       }
-      if (body != null) request.write(jsonEncode(body));
+      if (body != null) request.body = jsonEncode(body);
 
       final response =
-          await request.close().timeout(const Duration(seconds: 20));
-      final raw = await utf8.decoder.bind(response).join();
+          await _client.send(request).timeout(const Duration(seconds: 15));
+      final raw = await response.stream
+          .bytesToString()
+          .timeout(const Duration(seconds: 20));
       final decoded = raw.isEmpty ? <String, dynamic>{} : jsonDecode(raw);
       final payload = decoded is Map
           ? decoded.map((key, value) => MapEntry(key.toString(), value))
@@ -436,6 +440,10 @@ class CampusApi implements CampusGateway {
         'The campus server did not respond. Check the API address and try again.',
       );
     } on SocketException {
+      throw const ApiException(
+        'Cannot reach the campus server. Check that the backend is running and the phone is on the same network.',
+      );
+    } on http.ClientException {
       throw const ApiException(
         'Cannot reach the campus server. Check that the backend is running and the phone is on the same network.',
       );

@@ -5,24 +5,16 @@ import 'package:wall_e_mobile/main.dart';
 import 'helpers/fake_campus_api.dart';
 import 'helpers/load_fonts.dart';
 
-/// Runtime verification of every mobile screen.
+/// Deterministic widget-level verification of every release-facing screen.
 ///
-/// WHY THIS EXISTS. review.txt rated 29 mobile pages across four roles and
-/// states plainly that the Flutter app was never compiled. Those ratings came
-/// from reading source that did not build. This walks every destination in
-/// every role shell and records what actually happens when it renders.
+/// This walks every destination in every role shell and records what happens
+/// when it renders at a real phone size. It complements the connected Android
+/// emulator smoke test while keeping layout and navigation regressions fast and
+/// repeatable in the normal test suite.
 ///
-/// WHY NOT AN EMULATOR. Two blockers, both recorded rather than worked around:
-///   1. The Android emulator will not start on this machine - "Android Emulator
-///      hypervisor driver is not installed", which needs an admin install.
-///   2. The only configured database is empty (0 users, 0 organizations), and
-///      seeding it is out of scope, so no real login is possible anyway.
-///
-/// So the app is driven through its real widget tree with a fake gateway. That
-/// exercises the real theme, the real shells, the real navigation and the real
-/// layout at a real phone size - which is where layout and navigation defects
-/// live. It does NOT exercise Android platform behaviour: camera permissions
-/// and mobile_scanner in particular are unverified.
+/// The fake gateway is intentionally limited to deterministic test data. Android
+/// platform behavior such as camera permission and `mobile_scanner` is covered
+/// separately on an emulator or physical device.
 
 const _surface = Size(390, 844);
 
@@ -217,7 +209,6 @@ void main() {
       'Students & Staff',
       'Pending Students',
       'Materials',
-      'Exports',
       'Inbox',
       'Account',
     ]) {

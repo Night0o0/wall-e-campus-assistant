@@ -121,21 +121,24 @@ class _RegisterPageState extends State<RegisterPage> {
                       controller: _organizationController,
                       label: 'University code',
                       hint: 'Example: CU',
-                      validator: (value) => _required(value, 'your university code', min: 2),
+                      validator: (value) =>
+                          _required(value, 'your university code', min: 2),
                     ),
                     _field(
                       key: 'register-university-id',
                       controller: _universityIdController,
                       label: 'University ID',
                       hint: 'Your official student ID',
-                      validator: (value) => _required(value, 'your university ID', min: 4),
+                      validator: (value) =>
+                          _required(value, 'your university ID', min: 4),
                     ),
                     _field(
                       key: 'register-name',
                       controller: _nameController,
                       label: 'Full name',
                       hint: 'As shown on university records',
-                      validator: (value) => _required(value, 'your full name', min: 3),
+                      validator: (value) =>
+                          _required(value, 'your full name', min: 3),
                     ),
                     _field(
                       key: 'register-email',
@@ -157,7 +160,9 @@ class _RegisterPageState extends State<RegisterPage> {
                       label: 'Password',
                       hint: 'At least 8 characters',
                       obscureText: _obscure,
-                      validator: (value) => _required(value, 'a password of at least 8 characters', min: 8),
+                      validator: (value) => _required(
+                          value, 'a password of at least 8 characters',
+                          min: 8),
                       suffixIcon: IconButton(
                         onPressed: () => setState(() => _obscure = !_obscure),
                         icon: Icon(

@@ -1,4 +1,4 @@
-# Project status — September 1, 2026
+# Project status — September 2, 2026
 
 This file is the operational source of truth for the current project state.
 
@@ -74,6 +74,33 @@ Connected web workflow verification completed:
 - department administrators now use the trusted department-scoped course API and
   server-provided per-course permissions instead of the instructor-only endpoint
 
+Connected mobile implementation and emulator verification completed:
+
+- repository lockfile runs on Flutter 3.44.9 / Dart 3.12.2
+- Flutter analysis passes with zero issues; 20 widget/API tests pass
+- deterministic runtime verification walks 24 release-facing student, instructor
+  and university-admin screens with zero findings
+- configured Android debug APK builds successfully against the emulator API URL
+- approved-student Supabase login, all six connected destinations, profile and
+  logout passed against the live backend
+- pending students remain on the approval screen and disabled students remain
+  signed out
+- instructor Supabase login, overview, teaching schedule, sessions, courses and
+  materials passed against the live backend; the deterministic walker covers the
+  remaining pending-student, inbox and account destinations
+- Android camera permission is granted and the QR scanner displayed a live
+  emulator camera preview
+- secure session restoration survived emulator restarts; logout cleanup passed
+- the mobile HTTP transport is cross-platform and regression-tested for required
+  identity/auth headers, backend validation details and retryable network errors
+- the unused static/demo role page collection and out-of-scope static Exports tab
+  were removed from the release app
+- a runtime-only, credential-free live integration harness is committed; its
+  approved-student Android case passed
+- emulator-only acceptance was explicitly approved on September 2 because no
+  physical phone was available; the physical-device run is deferred to the
+  pre-release checklist rather than blocking the mobile completion checkpoint
+
 Verified:
 
 - backend Prisma schema validates
@@ -83,12 +110,15 @@ Verified:
 - web typecheck/production build passes
 - web tests pass: 28 tests in 7 files
 - rendered browser checks pass for public auth pages and every connected seeded role workflow
-- mobile runtime walker covers 25 screens with zero reported findings
+- mobile analysis and 20 widget/API tests pass
+- mobile runtime walker covers 24 release-facing screens with zero findings
+- configured Android debug APK builds successfully
 
 Still outstanding:
 
-- full Flutter suite with the repository's committed lockfile on its matching newer Flutter/Dart SDK; this machine has Flutter 3.24.5
-- mobile connected-client, deployment, observability and release phases in `plan.txt`
+- deployment, observability, security and release phases in `plan.txt`
+- recommended pre-release physical-device verification when a phone becomes
+  available
 
 ## What “finished” means
 
@@ -103,12 +133,14 @@ The project is considered finished only when all of the following are true:
 
 ## Remaining execution direction
 
-### Next — connected mobile workflows
+### Next — deployment, observability, security and release readiness
 
-- run Flutter with the repository's committed lockfile on a matching Flutter/Dart SDK
-- connect the app to the verified live backend on a device or emulator
-- exercise student and teaching-staff authentication, navigation and academic flows
-- close any remaining mobile API-contract or platform-integration gaps and add regression coverage
+- configure production-style email and decide whether push notifications are in
+  the first release
+- complete security, reliability, monitoring and backup checks
+- add reproducible CI/CD and staging deployment
+- run final release smoke tests; include a physical Android device when one is
+  available
 
 ## Scope guardrails
 
@@ -134,6 +166,7 @@ Reason:
 
 The next best practical step is:
 
-1. run Flutter on the matching SDK and a device/emulator
-2. finish the connected mobile workflows
-3. continue deployment, observability, security and release phases in `plan.txt`
+1. create the mobile completion checkpoint
+2. begin deployment, observability, security and release readiness
+3. include physical-device validation in the final pre-release smoke test when a
+   phone becomes available

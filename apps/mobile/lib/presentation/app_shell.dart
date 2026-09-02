@@ -3,10 +3,10 @@ import 'package:flutter/material.dart';
 import '../core/app_theme.dart';
 import '../data/campus_api.dart';
 import '../models/account_role.dart';
+import 'app_destination.dart';
 import 'connected_pages.dart';
 import 'brand_logo.dart';
 import 'login_page.dart';
-import 'role_pages.dart';
 import 'student_shell.dart';
 
 class AppShell extends StatefulWidget {
@@ -151,10 +151,10 @@ class _PendingApproval extends StatelessWidget {
                       padding: const EdgeInsets.symmetric(
                           horizontal: 16, vertical: 12),
                       decoration: BoxDecoration(
-                        color: AppColors.orange.withOpacity(.1),
+                        color: AppColors.orange.withValues(alpha: .1),
                         borderRadius: BorderRadius.circular(14),
                         border: Border.all(
-                            color: AppColors.orange.withOpacity(.25)),
+                            color: AppColors.orange.withValues(alpha: .25)),
                       ),
                       child: const Row(
                         mainAxisSize: MainAxisSize.min,
@@ -210,7 +210,7 @@ class _RoleHeader extends StatelessWidget {
       decoration: BoxDecoration(
         color: const Color(0xD9080C18),
         border: Border(
-          bottom: BorderSide(color: Colors.white.withOpacity(.07)),
+          bottom: BorderSide(color: Colors.white.withValues(alpha: .07)),
         ),
       ),
       child: Row(
@@ -250,7 +250,7 @@ class _RoleHeader extends StatelessWidget {
                 width: 36,
                 height: 36,
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(.07),
+                  color: Colors.white.withValues(alpha: .07),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Center(
@@ -297,7 +297,8 @@ class _RoleBottomNav extends StatelessWidget {
       height: 79,
       decoration: BoxDecoration(
         color: const Color(0xF20A0E1C),
-        border: Border(top: BorderSide(color: Colors.white.withOpacity(.07))),
+        border:
+            Border(top: BorderSide(color: Colors.white.withValues(alpha: .07))),
       ),
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,

@@ -1,7 +1,7 @@
 LEORNIAN CAMPUS ASSISTANT - COMPLETE PROJECT EXECUTION PLAN
-Date: September 1, 2026
+Date: September 2, 2026
 
-EXECUTION STATUS (SEPTEMBER 1, 2026)
+EXECUTION STATUS (SEPTEMBER 2, 2026)
 
 - Phase 0 complete: protected Git checkpoints exist and secret/test isolation is enforced.
 - Phase 1 and live re-verification complete: all 14 migrations are applied and the Supabase public schema matches the current migration history; retired robot and billing data is absent.
@@ -13,11 +13,13 @@ EXECUTION STATUS (SEPTEMBER 1, 2026)
 - Phase 6 complete in the working checkpoint: the route-permission matrix is documented, QR issuance is permanently restricted to authorized session staff with no rollback flag, pending students are blocked from generic course/schedule reads, course access is narrowed by trusted enrollment/teaching/department scope, and negative role/tenant/department tests pass.
 - Phase 7 backend completion is implemented and live-verified: normalized academic APIs, pagination, validation, stable errors, readiness, shutdown behavior, tenant scope, and populated live academic reads all pass.
 - Connected rendered web workflows are complete: real Supabase login/restoration/logout, role routes, cross-role denial, department-scoped courses, session detail/QR terminal state, pending/disabled gates and responsive navigation passed against the live backend.
-- Outstanding before declaring the product finished: the complete committed-lock Flutter suite on its matching newer Flutter/Dart SDK; connected mobile workflows; deployment, observability, security, and release checks.
+- Phase 9 implementation and emulator verification are complete: Flutter 3.44.9 analysis, 20 widget/API tests, a 24-screen runtime walk, configured Android build, live approved/pending/disabled student flows, instructor flows, session restoration/logout, and QR camera permission/preview passed. Static/demo mobile pages and the out-of-scope Exports tab were removed.
+- Phase 9 complete with explicitly approved emulator-only acceptance: no physical phone was available, so the connected Pixel 6 checks, passing student integration case, manual instructor flows, deterministic 24-screen walker, and automated suite form this checkpoint. Physical-device validation is deferred to the final pre-release smoke test.
+- Outstanding before declaring the product finished: deployment, observability, security, final physical-device validation when available, and release checks.
 
 CURRENT POSITION
 
-The project is not yet fully finished. Database alignment, seeding, direct Supabase authentication, registration, account lifecycle, authorization hardening, backend-domain completion, live backend verification, and connected web workflows are complete. Mobile, deployment, observability, security, and release checks remain.
+The project is not yet fully finished. Database alignment, seeding, direct Supabase authentication, registration, account lifecycle, authorization hardening, backend-domain completion, live backend verification, connected web workflows, and the emulator-accepted mobile phase are complete. Deployment, observability, security, final physical-device validation when available, and release checks remain.
 
 RECOMMENDED FINAL ARCHITECTURE
 

@@ -31,18 +31,4 @@ extension AccountRoleDetails on AccountRole {
         AccountRole.instructor => Icons.school_rounded,
         AccountRole.student => Icons.person_rounded,
       };
-
-  String get demoName => switch (this) {
-        AccountRole.universityAdmin => 'Dr. Salma Hassan',
-        AccountRole.departmentAdmin => 'Dr. Mona Adel',
-        AccountRole.instructor => 'Dr. Omar Adel',
-        AccountRole.student => 'Ali Mahmoud',
-      };
-
-  String get demoEmail => switch (this) {
-        AccountRole.universityAdmin => 'university-admin@campus.edu',
-        AccountRole.departmentAdmin => 'department-admin@campus.edu',
-        AccountRole.instructor => 'instructor@campus.edu',
-        AccountRole.student => 'student@campus.edu',
-      };
 }

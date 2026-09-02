@@ -7,7 +7,7 @@ import 'package:mobile_scanner/mobile_scanner.dart';
 import '../core/app_theme.dart';
 import '../data/campus_api.dart';
 import '../models/account_role.dart';
-import 'role_pages.dart';
+import 'app_destination.dart';
 import 'shared_widgets.dart';
 import 'external_links.dart';
 
@@ -51,8 +51,6 @@ List<AppDestination> connectedDestinationsFor(
               ConnectedPeople(api: api, session: session, pendingOnly: true)),
           AppDestination('Materials', Icons.folder_copy_rounded,
               ConnectedMaterials(api: api, session: session)),
-          const AppDestination(
-              'Exports', Icons.download_rounded, ExportsPage()),
           AppDestination('Inbox', Icons.notifications_rounded,
               ConnectedInbox(api: api, session: session)),
           AppDestination('Account', Icons.person_rounded,
@@ -326,7 +324,7 @@ class _ConnectedTimetableState extends State<ConnectedTimetable> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   DropdownButtonFormField<String>(
-                    value: courseId?.isEmpty == true ? null : courseId,
+                    initialValue: courseId?.isEmpty == true ? null : courseId,
                     isExpanded: true,
                     decoration: const InputDecoration(labelText: 'Course'),
                     items: [
@@ -344,7 +342,8 @@ class _ConnectedTimetableState extends State<ConnectedTimetable> {
                   ),
                   const SizedBox(height: 12),
                   DropdownButtonFormField<String>(
-                    value: instructorId?.isEmpty == true ? null : instructorId,
+                    initialValue:
+                        instructorId?.isEmpty == true ? null : instructorId,
                     isExpanded: true,
                     decoration: const InputDecoration(labelText: 'Instructor'),
                     items: [
@@ -382,7 +381,7 @@ class _ConnectedTimetableState extends State<ConnectedTimetable> {
                       const SizedBox(width: 10),
                       Expanded(
                         child: DropdownButtonFormField<int>(
-                          value: semester,
+                          initialValue: semester,
                           decoration:
                               const InputDecoration(labelText: 'Semester'),
                           items: const [
@@ -401,7 +400,7 @@ class _ConnectedTimetableState extends State<ConnectedTimetable> {
                       decoration: const InputDecoration(labelText: 'Section')),
                   const SizedBox(height: 12),
                   DropdownButtonFormField<String>(
-                    value: days.contains(day) ? day : days.first,
+                    initialValue: days.contains(day) ? day : days.first,
                     decoration: const InputDecoration(labelText: 'Day'),
                     items: [
                       for (final value in days)
@@ -712,7 +711,7 @@ class _ConnectedCourseCard extends StatelessWidget {
             width: 48,
             height: 48,
             decoration: BoxDecoration(
-              color: color.withOpacity(.12),
+              color: color.withValues(alpha: .12),
               borderRadius: BorderRadius.circular(15),
             ),
             child: Icon(Icons.menu_book_rounded, color: color),
@@ -935,7 +934,7 @@ class _SessionCard extends StatelessWidget {
                 width: 44,
                 height: 44,
                 decoration: BoxDecoration(
-                  color: statusColor.withOpacity(.12),
+                  color: statusColor.withValues(alpha: .12),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Icon(
@@ -1223,7 +1222,7 @@ class _AttendanceRowCard extends StatelessWidget {
             width: 42,
             height: 42,
             decoration: BoxDecoration(
-              color: color.withOpacity(.12),
+              color: color.withValues(alpha: .12),
               borderRadius: BorderRadius.circular(12),
             ),
             child: Icon(Icons.school_rounded, color: color),
@@ -1353,7 +1352,8 @@ class _SessionQrDialogState extends State<_SessionQrDialog> {
                 decoration: BoxDecoration(
                   color: const Color(0xFF0C1324),
                   borderRadius: BorderRadius.circular(18),
-                  border: Border.all(color: Colors.white.withOpacity(.08)),
+                  border:
+                      Border.all(color: Colors.white.withValues(alpha: .08)),
                 ),
                 child: Column(
                   children: [
@@ -1593,7 +1593,7 @@ class _ConnectedMaterialsState extends State<ConnectedMaterials> {
                 children: [
                   if (material == null)
                     DropdownButtonFormField<String>(
-                      value: scheduleId,
+                      initialValue: scheduleId,
                       isExpanded: true,
                       decoration: const InputDecoration(
                         labelText: 'Subject and timetable group',

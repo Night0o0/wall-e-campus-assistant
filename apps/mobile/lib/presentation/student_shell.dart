@@ -118,7 +118,7 @@ class _StudentHeader extends StatelessWidget {
       decoration: BoxDecoration(
         color: const Color(0xD9080C18),
         border: Border(
-          bottom: BorderSide(color: Colors.white.withOpacity(.07)),
+          bottom: BorderSide(color: Colors.white.withValues(alpha: .07)),
         ),
       ),
       child: Row(
@@ -145,7 +145,9 @@ class _StudentHeader extends StatelessWidget {
                 height: 36,
                 decoration: BoxDecoration(
                   gradient: profileSelected ? AppColors.primaryGradient : null,
-                  color: profileSelected ? null : Colors.white.withOpacity(.07),
+                  color: profileSelected
+                      ? null
+                      : Colors.white.withValues(alpha: .07),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Center(
@@ -189,7 +191,8 @@ class _StudentBottomNav extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(0, 10, 0, 11),
       decoration: BoxDecoration(
         color: const Color(0xF20A0E1C),
-        border: Border(top: BorderSide(color: Colors.white.withOpacity(.07))),
+        border:
+            Border(top: BorderSide(color: Colors.white.withValues(alpha: .07))),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -370,7 +373,7 @@ class _AppCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: _card,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withOpacity(.06)),
+        border: Border.all(color: Colors.white.withValues(alpha: .06)),
       ),
       child: child,
     );
@@ -524,9 +527,9 @@ class _MetaChip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 6),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(.04),
+        color: Colors.white.withValues(alpha: .04),
         borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: Colors.white.withOpacity(.08)),
+        border: Border.all(color: Colors.white.withValues(alpha: .08)),
       ),
       child: Text(label,
           style: const TextStyle(color: AppColors.muted, fontSize: 10)),
@@ -557,12 +560,12 @@ class _DayPill extends StatelessWidget {
           height: 58,
           decoration: BoxDecoration(
             gradient: selected ? AppColors.primaryGradient : null,
-            color: selected ? null : Colors.white.withOpacity(.05),
+            color: selected ? null : Colors.white.withValues(alpha: .05),
             borderRadius: BorderRadius.circular(18),
             border: Border.all(
               color: selected
-                  ? AppColors.blue.withOpacity(.8)
-                  : Colors.white.withOpacity(.06),
+                  ? AppColors.blue.withValues(alpha: .8)
+                  : Colors.white.withValues(alpha: .06),
             ),
             boxShadow: selected
                 ? const [
@@ -630,7 +633,7 @@ class _LectureCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: _card,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withOpacity(.06)),
+        border: Border.all(color: Colors.white.withValues(alpha: .06)),
       ),
       child: IntrinsicHeight(
         child: Row(
@@ -681,7 +684,7 @@ class _LectureCard extends StatelessWidget {
                           height: 30,
                           alignment: Alignment.center,
                           decoration: BoxDecoration(
-                            color: color.withOpacity(.12),
+                            color: color.withValues(alpha: .12),
                             borderRadius: BorderRadius.circular(9),
                           ),
                           child: Text(
@@ -739,7 +742,7 @@ class _CourseBadge extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
       decoration: BoxDecoration(
-        color: color.withOpacity(.22),
+        color: color.withValues(alpha: .22),
         borderRadius: BorderRadius.circular(6),
       ),
       child: Text(
@@ -890,7 +893,7 @@ class _AttendancePageState extends State<_AttendancePage> {
                 height: 44,
                 padding: const EdgeInsets.all(3),
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(.04),
+                  color: Colors.white.withValues(alpha: .04),
                   borderRadius: BorderRadius.circular(999),
                 ),
                 child: Row(
@@ -945,12 +948,12 @@ class _SummaryPill extends StatelessWidget {
       margin: const EdgeInsets.only(right: 8),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: active ? AppColors.blue.withOpacity(.22) : _card,
+        color: active ? AppColors.blue.withValues(alpha: .22) : _card,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
           color: active
-              ? AppColors.blue.withOpacity(.5)
-              : Colors.white.withOpacity(.06),
+              ? AppColors.blue.withValues(alpha: .5)
+              : Colors.white.withValues(alpha: .06),
         ),
       ),
       child: Column(
@@ -1075,7 +1078,7 @@ class _AttendanceCourseCard extends StatelessWidget {
               value: percent / 100,
               minHeight: 6,
               color: color,
-              backgroundColor: Colors.white.withOpacity(.06),
+              backgroundColor: Colors.white.withValues(alpha: .06),
             ),
           ),
           const SizedBox(height: 12),
@@ -1158,7 +1161,7 @@ class _HistoryCard extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
                 decoration: BoxDecoration(
-                  color: statusColor.withOpacity(.14),
+                  color: statusColor.withValues(alpha: .14),
                   borderRadius: BorderRadius.circular(999),
                 ),
                 child: Text(status,
@@ -1244,7 +1247,7 @@ class _ScanQrPageState extends State<_ScanQrPage> {
             decoration: BoxDecoration(
               color: const Color(0xFF070B16),
               borderRadius: BorderRadius.circular(22),
-              border: Border.all(color: Colors.white.withOpacity(.07)),
+              border: Border.all(color: Colors.white.withValues(alpha: .07)),
             ),
             child: Stack(
               children: [
@@ -1381,7 +1384,7 @@ class _ScanState extends StatelessWidget {
           width: 60,
           height: 60,
           decoration: BoxDecoration(
-              color: color.withOpacity(.16), shape: BoxShape.circle),
+              color: color.withValues(alpha: .16), shape: BoxShape.circle),
           child: Icon(icon, color: color, size: 32),
         ),
         const SizedBox(height: 14),
@@ -1408,8 +1411,8 @@ class _ScanButton extends StatelessWidget {
       style: OutlinedButton.styleFrom(
         foregroundColor: color,
         minimumSize: const Size(double.infinity, 54),
-        backgroundColor: color.withOpacity(.09),
-        side: BorderSide(color: color.withOpacity(.35)),
+        backgroundColor: color.withValues(alpha: .09),
+        side: BorderSide(color: color.withValues(alpha: .35)),
         textStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
       ),
       child: Text(label),
@@ -1507,7 +1510,7 @@ class _MaterialGroup extends StatelessWidget {
                 width: 40,
                 height: 40,
                 decoration: BoxDecoration(
-                  color: color.withOpacity(.12),
+                  color: color.withValues(alpha: .12),
                   borderRadius: BorderRadius.circular(11),
                 ),
                 child: Icon(Icons.menu_book_outlined, color: color, size: 21),
@@ -1571,9 +1574,9 @@ class _MaterialFile extends StatelessWidget {
         child: Ink(
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: Colors.white.withOpacity(.035),
+            color: Colors.white.withValues(alpha: .035),
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: Colors.white.withOpacity(.05)),
+            border: Border.all(color: Colors.white.withValues(alpha: .05)),
           ),
           child: Row(
             children: [
@@ -1581,7 +1584,7 @@ class _MaterialFile extends StatelessWidget {
                 width: 34,
                 height: 34,
                 decoration: BoxDecoration(
-                  color: color.withOpacity(.1),
+                  color: color.withValues(alpha: .1),
                   borderRadius: BorderRadius.circular(9),
                 ),
                 child: Icon(Icons.open_in_new_rounded, color: color, size: 18),
@@ -1698,7 +1701,9 @@ class _AssignmentCard extends StatelessWidget {
               _CourseBadge(code: code, color: color),
               const Spacer(),
               Text(
-                deadline == null ? 'No deadline' : _shortDate(deadline.toIso8601String()),
+                deadline == null
+                    ? 'No deadline'
+                    : _shortDate(deadline.toIso8601String()),
                 style: const TextStyle(color: AppColors.muted, fontSize: 11),
               ),
             ],
@@ -1722,7 +1727,7 @@ class _AssignmentCard extends StatelessWidget {
             width: double.infinity,
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: color.withOpacity(.08),
+              color: color.withValues(alpha: .08),
               borderRadius: BorderRadius.circular(12),
             ),
             child: Text(
@@ -1836,7 +1841,7 @@ class _InboxPageState extends State<_InboxPage> {
                     height: 28,
                     alignment: Alignment.center,
                     decoration: BoxDecoration(
-                      color: AppColors.blue.withOpacity(.16),
+                      color: AppColors.blue.withValues(alpha: .16),
                       shape: BoxShape.circle,
                     ),
                     child: Text('$unread',
@@ -1889,12 +1894,12 @@ class _NotificationCard extends StatelessWidget {
         child: Ink(
           padding: const EdgeInsets.all(18),
           decoration: BoxDecoration(
-            color: unread ? AppColors.blue.withOpacity(.07) : _card,
+            color: unread ? AppColors.blue.withValues(alpha: .07) : _card,
             borderRadius: BorderRadius.circular(16),
             border: Border.all(
               color: unread
-                  ? AppColors.blue.withOpacity(.22)
-                  : Colors.white.withOpacity(.06),
+                  ? AppColors.blue.withValues(alpha: .22)
+                  : Colors.white.withValues(alpha: .06),
             ),
           ),
           child: Row(
@@ -1904,7 +1909,7 @@ class _NotificationCard extends StatelessWidget {
                 width: 42,
                 height: 42,
                 decoration: BoxDecoration(
-                  color: color.withOpacity(.14),
+                  color: color.withValues(alpha: .14),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Icon(icon, color: color, size: 21),
@@ -2215,7 +2220,7 @@ class _ProfilePageState extends State<_ProfilePage> {
                     icon: const Icon(Icons.edit_rounded),
                     color: AppColors.blue,
                     style: IconButton.styleFrom(
-                      backgroundColor: AppColors.blue.withOpacity(.12),
+                      backgroundColor: AppColors.blue.withValues(alpha: .12),
                     ),
                   ),
                 ],
@@ -2236,7 +2241,9 @@ class _ProfilePageState extends State<_ProfilePage> {
                     _ProfileField(
                         label: fields[index].$1, value: fields[index].$2),
                     if (index != fields.length - 1)
-                      Divider(color: Colors.white.withOpacity(.06), height: 24),
+                      Divider(
+                          color: Colors.white.withValues(alpha: .06),
+                          height: 24),
                   ],
                 ],
               ),
@@ -2327,7 +2334,7 @@ class _CompletedPill extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
       decoration: BoxDecoration(
         color: (completed ? const Color(0xFF4ADE80) : AppColors.orange)
-            .withOpacity(.12),
+            .withValues(alpha: .12),
         borderRadius: BorderRadius.circular(999),
       ),
       child: Text(completed ? 'COMPLETED' : 'INCOMPLETE',

@@ -8,7 +8,8 @@ Flutter client for four campus account types:
 - `STUDENT`
 
 `SYSTEM_OWNER` is intentionally web-only. The backend enforces that policy on
-`POST /api/auth/mobile-login`; it is not just a Flutter navigation rule.
+every request carrying the mobile client header; it is not just a Flutter
+navigation rule.
 
 ## Run locally
 
@@ -19,25 +20,32 @@ cd backend
 npm run dev
 ```
 
-For the Android emulator, the default API URL is already
+Copy `mobile.env.example.json` to the ignored `mobile.env.json`, then replace
+the two Supabase placeholders with the development project's URL and
+publishable key. Direct Supabase configuration is required because seeded
+accounts do not have legacy backend password hashes.
+
+For the Android emulator, keep the example API URL at
 `http://10.0.2.2:5000/api`:
 
 ```powershell
 cd apps/mobile
-flutter pub get
-flutter run
+flutter pub get --enforce-lockfile
+flutter run --dart-define-from-file=mobile.env.json
 ```
 
 For a physical Android phone, use the computer's LAN address and keep the phone
 on the same network:
 
 ```powershell
-flutter run --dart-define=API_BASE_URL=http://192.168.1.10:5000/api
+flutter run --dart-define-from-file=mobile.env.json
 ```
 
-Replace `192.168.1.10` with the computer's actual address. The development
-Android manifest permits local HTTP. A production build should use HTTPS and
-remove `android:usesCleartextTraffic="true"`.
+Before the physical-device command, change `API_BASE_URL` in `mobile.env.json`
+to the computer's LAN address, such as `http://192.168.1.10:5000/api`, and keep
+the phone on the same network. The development Android manifest permits local
+HTTP. A production build should use HTTPS and remove
+`android:usesCleartextTraffic="true"`.
 
 ## Development accounts
 
@@ -71,7 +79,15 @@ Run checks with:
 ```powershell
 flutter analyze
 flutter test
+flutter build apk --debug --dart-define-from-file=mobile.env.json
 ```
 
-Use the Flutter/Dart version that resolves the committed `pubspec.lock`. Flutter
-3.24.5 is too old for its current native-assets dependencies.
+The deterministic suite walks all 24 release-facing student, instructor, and
+university-admin destinations. The live Android integration harness is
+`integration_test/live_mobile_smoke_test.dart`; pass seeded student/instructor
+emails and their password only through the runtime defines
+`MOBILE_E2E_STUDENT_EMAIL`, `MOBILE_E2E_INSTRUCTOR_EMAIL`, and
+`MOBILE_E2E_PASSWORD`. Never commit those values.
+
+Use Flutter 3.44 or newer with Dart 3.12 or newer, as recorded by the committed
+`pubspec.lock`. Flutter 3.24.5 is too old for its native-assets dependencies.

@@ -80,7 +80,8 @@ class _LoginPageState extends State<LoginPage> {
               builder: (context, constraints) {
                 return SingleChildScrollView(
                   child: ConstrainedBox(
-                    constraints: BoxConstraints(minHeight: constraints.maxHeight),
+                    constraints:
+                        BoxConstraints(minHeight: constraints.maxHeight),
                     child: Center(
                       child: ConstrainedBox(
                         constraints: const BoxConstraints(maxWidth: 430),
@@ -98,7 +99,7 @@ class _LoginPageState extends State<LoginPage> {
                                   color: const Color(0xD9111827),
                                   borderRadius: BorderRadius.circular(16),
                                   border: Border.all(
-                                    color: Colors.white.withOpacity(.06),
+                                    color: Colors.white.withValues(alpha: .06),
                                   ),
                                 ),
                                 child: Column(
@@ -205,7 +206,7 @@ class _LoginPageState extends State<LoginPage> {
                               ),
                               const SizedBox(height: 24),
                               const Text(
-                                'Leornian v2.0 · Semester 2 · 2025/2026',
+                                'Leornian Campus Assistant',
                                 style: TextStyle(
                                   color: AppColors.muted,
                                   fontSize: 11,
@@ -357,12 +358,14 @@ class _FigmaBackground extends StatelessWidget {
           Positioned(
             left: -170,
             top: -120,
-            child: _Glow(size: 430, color: AppColors.blue.withOpacity(.07)),
+            child:
+                _Glow(size: 430, color: AppColors.blue.withValues(alpha: .07)),
           ),
           Positioned(
             right: -190,
             bottom: -180,
-            child: _Glow(size: 520, color: AppColors.violet.withOpacity(.07)),
+            child: _Glow(
+                size: 520, color: AppColors.violet.withValues(alpha: .07)),
           ),
         ],
       ),
