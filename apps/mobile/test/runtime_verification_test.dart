@@ -7,7 +7,7 @@ import 'helpers/load_fonts.dart';
 
 /// Deterministic widget-level verification of every release-facing screen.
 ///
-/// This walks every destination in every role shell and records what happens
+/// This walks every destination in the student shell and records what happens
 /// when it renders at a real phone size. It complements the connected Android
 /// emulator smoke test while keeping layout and navigation regressions fast and
 /// repeatable in the normal test suite.
@@ -143,7 +143,7 @@ void main() {
   tearDownAll(() {
     // ignore: avoid_print
     print('\n=== MOBILE RUNTIME VERIFICATION ===');
-    for (final role in ['STUDENT', 'INSTRUCTOR', 'SUPER_ADMIN']) {
+    for (final role in ['STUDENT']) {
       final rows = reports.where((r) => r.role == role);
       if (rows.isEmpty) continue;
       // ignore: avoid_print
@@ -177,42 +177,5 @@ void main() {
       'Profile',
       tapTarget: find.byKey(const ValueKey('student-profile')),
     );
-  });
-
-  testWidgets('INSTRUCTOR: every destination', (tester) async {
-    await _pumpApp(tester);
-    await signIn(tester, 'admin@campus.edu');
-
-    await _visit(tester, 'INSTRUCTOR', 'Overview', alreadyOpen: true);
-    for (final label in [
-      'My Teaching',
-      'Sessions',
-      'Courses',
-      'Materials',
-      'Pending Students',
-      'Inbox',
-      'Account',
-    ]) {
-      await _visit(tester, 'INSTRUCTOR', label);
-    }
-  });
-
-  testWidgets('SUPER_ADMIN: every destination', (tester) async {
-    await _pumpApp(tester);
-    await signIn(tester, 'super@campus.edu');
-
-    await _visit(tester, 'SUPER_ADMIN', 'Dashboard', alreadyOpen: true);
-    for (final label in [
-      'Timetable',
-      'Courses',
-      'Sessions',
-      'Students & Staff',
-      'Pending Students',
-      'Materials',
-      'Inbox',
-      'Account',
-    ]) {
-      await _visit(tester, 'SUPER_ADMIN', label);
-    }
   });
 }

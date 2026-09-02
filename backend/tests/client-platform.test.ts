@@ -1,29 +1,23 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   CLIENT_PLATFORM_HEADER,
+  MOBILE_ONLY_MESSAGE,
   WEB_ONLY_MESSAGE,
   assertClientAllowed,
   declaredPlatform,
+  isMobileOnlyRole,
   isWebOnlyRole,
+  requireMobileClient,
 } from "../src/utils/client-platform.js";
-import { AppError } from "../src/utils/AppError.js";
-
-/**
- * The platform owner is web-only.
- *
- * The rule used to live on POST /api/auth/mobile-login, which mobile stopped
- * calling when it moved to Supabase — so it silently stopped being enforced.
- * These tests pin it to authentication instead, where every mobile request
- * passes.
- *
- * Note what is deliberately NOT asserted: that this cannot be bypassed. It is a
- * product rule, not a security boundary. An owner who forges the header gains
- * nothing they did not already have, because they already hold the highest
- * privilege in the system. Real boundaries come from the database record.
- */
 
 const mobile = { [CLIENT_PLATFORM_HEADER]: "mobile" };
 const web = { [CLIENT_PLATFORM_HEADER]: "web" };
+const staffRoles = [
+  "SYSTEM_OWNER",
+  "UNIVERSITY_ADMIN",
+  "DEPARTMENT_ADMIN",
+  "INSTRUCTOR",
+] as const;
 
 describe("reading the declared platform", () => {
   it("recognises mobile and web", () => {
@@ -31,61 +25,69 @@ describe("reading the declared platform", () => {
     expect(declaredPlatform(web)).toBe("web");
   });
 
-  it("is case- and whitespace-insensitive", () => {
+  it("normalises values and leaves absent or unrecognised values unknown", () => {
     expect(declaredPlatform({ [CLIENT_PLATFORM_HEADER]: "  MOBILE " })).toBe("mobile");
-  });
-
-  it("treats an absent header as unknown", () => {
     expect(declaredPlatform({})).toBe("unknown");
-  });
-
-  it("treats an unrecognised value as unknown rather than guessing", () => {
     expect(declaredPlatform({ [CLIENT_PLATFORM_HEADER]: "tablet" })).toBe("unknown");
-  });
-
-  it("takes the first value when a header is repeated", () => {
     expect(declaredPlatform({ [CLIENT_PLATFORM_HEADER]: ["mobile", "web"] })).toBe("mobile");
   });
 });
 
-describe("which roles are web-only", () => {
-  it("is the platform owner, and only the platform owner", () => {
-    expect(isWebOnlyRole("SYSTEM_OWNER")).toBe(true);
-    for (const role of ["UNIVERSITY_ADMIN", "DEPARTMENT_ADMIN", "INSTRUCTOR", "STUDENT"] as const) {
-      expect(isWebOnlyRole(role)).toBe(false);
+describe("role/platform boundary", () => {
+  it("classifies students as mobile-only and every staff role as web-only", () => {
+    expect(isMobileOnlyRole("STUDENT")).toBe(true);
+    expect(isWebOnlyRole("STUDENT")).toBe(false);
+    for (const role of staffRoles) {
+      expect(isWebOnlyRole(role)).toBe(true);
+      expect(isMobileOnlyRole(role)).toBe(false);
     }
+  });
+
+  it.each(staffRoles)("refuses %s on mobile", (role) => {
+    expect(() => assertClientAllowed(role, mobile)).toThrow(
+      expect.objectContaining({
+        statusCode: 403,
+        code: "WEB_ONLY_ACCOUNT",
+        message: WEB_ONLY_MESSAGE,
+      })
+    );
+  });
+
+  it("refuses students on web", () => {
+    expect(() => assertClientAllowed("STUDENT", web)).toThrow(
+      expect.objectContaining({
+        statusCode: 403,
+        code: "MOBILE_ONLY_ACCOUNT",
+        message: MOBILE_ONLY_MESSAGE,
+      })
+    );
+  });
+
+  it("allows each role on its intended client and keeps unknown clients compatible", () => {
+    expect(() => assertClientAllowed("STUDENT", mobile)).not.toThrow();
+    for (const role of staffRoles) {
+      expect(() => assertClientAllowed(role, web)).not.toThrow();
+    }
+    expect(() => assertClientAllowed("STUDENT", {})).not.toThrow();
+    expect(() => assertClientAllowed("SYSTEM_OWNER", {})).not.toThrow();
   });
 });
 
-describe("refusing a web-only role on mobile", () => {
-  it("refuses the owner when the client declares mobile", () => {
-    expect(() => assertClientAllowed("SYSTEM_OWNER", mobile)).toThrow(AppError);
+describe("student registration client", () => {
+  it("accepts mobile registration", () => {
+    const next = vi.fn();
+    requireMobileClient({ headers: mobile } as never, {} as never, next);
+    expect(next).toHaveBeenCalledWith();
   });
 
-  it("refuses with 403 and a code the client can branch on", () => {
-    try {
-      assertClientAllowed("SYSTEM_OWNER", mobile);
-      expect.unreachable("should have thrown");
-    } catch (error) {
-      const appError = error as AppError;
-      expect(appError.statusCode).toBe(403);
-      expect(appError.code).toBe("WEB_ONLY_ACCOUNT");
-      expect(appError.message).toBe(WEB_ONLY_MESSAGE);
-    }
-  });
-
-  it("allows the owner on web", () => {
-    expect(() => assertClientAllowed("SYSTEM_OWNER", web)).not.toThrow();
-  });
-
-  it("allows the owner when no platform is declared", () => {
-    // An absent header must not lock out curl, tests, or an older client.
-    expect(() => assertClientAllowed("SYSTEM_OWNER", {})).not.toThrow();
-  });
-
-  it("allows every other role on mobile", () => {
-    for (const role of ["UNIVERSITY_ADMIN", "DEPARTMENT_ADMIN", "INSTRUCTOR", "STUDENT"] as const) {
-      expect(() => assertClientAllowed(role, mobile)).not.toThrow();
-    }
+  it.each([web, {}])("rejects registration outside the mobile client", (headers) => {
+    const next = vi.fn();
+    requireMobileClient({ headers } as never, {} as never, next);
+    expect(next).toHaveBeenCalledWith(
+      expect.objectContaining({
+        statusCode: 403,
+        code: "MOBILE_REGISTRATION_ONLY",
+      })
+    );
   });
 });

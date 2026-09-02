@@ -73,24 +73,4 @@ void main() {
       matchesGoldenFile('goldens/baseline_student_shell.png'),
     );
   });
-
-  testWidgets('golden: admin shell', (tester) async {
-    await _pumpAt(tester, WallEApp(api: FakeCampusApi()));
-    await signIn(tester, 'admin@campus.edu');
-    await tester.pumpAndSettle();
-    await expectLater(
-      find.byType(WallEApp),
-      matchesGoldenFile('goldens/baseline_admin_shell.png'),
-    );
-  });
-
-  testWidgets('golden: super admin shell', (tester) async {
-    await _pumpAt(tester, WallEApp(api: FakeCampusApi()));
-    await signIn(tester, 'super@campus.edu');
-    await tester.pumpAndSettle();
-    await expectLater(
-      find.byType(WallEApp),
-      matchesGoldenFile('goldens/baseline_super_admin_shell.png'),
-    );
-  });
 }

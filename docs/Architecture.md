@@ -19,13 +19,13 @@ apps/mobile┘          │
 - React
 - Vite
 - role-aware routing
-- owner, university admin, instructor, and student-facing web flows
+- owner, university admin, department admin, and instructor web flows
 
 ### Mobile
 
 - Flutter client
 - connects to the same backend API
-- still needs full runtime validation in the current environment
+- student registration, approval status, and academic workflows only
 
 ### Backend
 
@@ -52,3 +52,4 @@ Legacy references may still exist in historical documents, but they are not part
 2. tenant isolation is enforced server-side
 3. web and mobile are clients of the same API
 4. current finish work should stabilize the existing auth approach, not replace it
+5. students use mobile only; every staff and administrator role uses web only

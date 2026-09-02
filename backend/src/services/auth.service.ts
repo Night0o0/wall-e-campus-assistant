@@ -20,6 +20,10 @@ import {
   studentRegistrationDetailsSchema,
   type CompleteSupabaseRegistrationInput,
 } from "../types/auth.types.js";
+import {
+  MOBILE_ONLY_MESSAGE,
+  WEB_ONLY_MESSAGE,
+} from "../utils/client-platform.js";
 
 const SALT_ROUNDS = 10;
 
@@ -415,19 +419,35 @@ export class AuthService {
     };
   }
 
-  /** Native-app login. The platform system owner is intentionally web-only. */
+  /** Native-app login. Only students are permitted in the mobile app. */
   async loginForMobile(data: { email: string; password: string }) {
     const result = await this.login({
       email: data.email.trim().toLowerCase(),
       password: data.password,
     });
 
-    if (result.user.role === "SYSTEM_OWNER") {
+    if (result.user.role !== "STUDENT") {
       throw new AppError(
-        "System owner accounts are available on the web console only",
+        WEB_ONLY_MESSAGE,
         403,
         undefined,
         "WEB_ONLY_ACCOUNT"
+      );
+    }
+
+    return result;
+  }
+
+  /** Browser login. Student identities belong exclusively to the mobile app. */
+  async loginForWeb(data: { email: string; password: string }) {
+    const result = await this.login(data);
+
+    if (result.user.role === "STUDENT") {
+      throw new AppError(
+        MOBILE_ONLY_MESSAGE,
+        403,
+        undefined,
+        "MOBILE_ONLY_ACCOUNT"
       );
     }
 

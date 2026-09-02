@@ -3,13 +3,8 @@ import { useAuth } from './context/AuthContext'
 import { DashboardLayout } from './components/layout/DashboardLayout'
 import { ProtectedRoute } from './components/auth/ProtectedRoute'
 import { Login } from './pages/Login'
-import { CompleteRegistration, Register } from './pages/Register'
 import { ForgotPassword, ResetPassword } from './pages/PasswordRecovery'
 import { Account } from './pages/Account'
-import { StudentDashboard } from './pages/student/StudentDashboard'
-import { StudentAssignments } from './pages/student/Assignments'
-import { StudentTimetable } from './pages/student/StudentTimetable'
-import { StudentAttendance } from './pages/student/StudentAttendance'
 import { NotFound } from './pages/NotFound'
 
 // Platform owner
@@ -34,16 +29,16 @@ import { Directory } from './pages/campus/Directory'
 import { Departments } from './pages/campus/Departments'
 import { Assignments as StaffAssignments } from './pages/campus/Assignments'
 
-const PEOPLE = ['SYSTEM_OWNER', 'UNIVERSITY_ADMIN', 'DEPARTMENT_ADMIN', 'INSTRUCTOR', 'STUDENT']
+const PEOPLE = ['SYSTEM_OWNER', 'UNIVERSITY_ADMIN', 'DEPARTMENT_ADMIN', 'INSTRUCTOR']
 const SESSION_STAFF = ['INSTRUCTOR', 'UNIVERSITY_ADMIN']
 const SUPER_ADMIN = ['UNIVERSITY_ADMIN']
 const OWNER = ['SYSTEM_OWNER']
 const DEPARTMENT_READERS = ['DEPARTMENT_ADMIN', 'UNIVERSITY_ADMIN']
 const COURSE_ROLES = ['INSTRUCTOR', 'DEPARTMENT_ADMIN', 'UNIVERSITY_ADMIN']
 const APPROVAL_ROLES = ['INSTRUCTOR', 'DEPARTMENT_ADMIN', 'UNIVERSITY_ADMIN']
-const TIMETABLE_ROLES = ['STUDENT', 'DEPARTMENT_ADMIN', 'UNIVERSITY_ADMIN']
-const NOTIFICATION_ROLES = ['STUDENT', 'INSTRUCTOR', 'DEPARTMENT_ADMIN', 'UNIVERSITY_ADMIN']
-const MATERIAL_ROLES = ['STUDENT', 'INSTRUCTOR', 'UNIVERSITY_ADMIN']
+const TIMETABLE_ROLES = ['DEPARTMENT_ADMIN', 'UNIVERSITY_ADMIN']
+const NOTIFICATION_ROLES = ['INSTRUCTOR', 'DEPARTMENT_ADMIN', 'UNIVERSITY_ADMIN']
+const MATERIAL_ROLES = ['INSTRUCTOR', 'UNIVERSITY_ADMIN']
 
 /**
  * What `/` resolves to.
@@ -56,23 +51,12 @@ function RoleHome() {
   const { user } = useAuth()
 
   if (user?.role === 'SYSTEM_OWNER') return <Dashboard />
-  if (user?.role === 'STUDENT') return <StudentDashboard />
   if (user?.role === 'UNIVERSITY_ADMIN') {
     return <Overview />
   }
   if (user?.role === 'DEPARTMENT_ADMIN') return <Navigate to="/departments" replace />
 
   return <Navigate to="/teaching" replace />
-}
-
-function RoleAssignments() {
-  const { user } = useAuth()
-  return user?.role === 'STUDENT' ? <StudentAssignments /> : <StaffAssignments />
-}
-
-function RoleTimetable() {
-  const { user } = useAuth()
-  return user?.role === 'STUDENT' ? <StudentTimetable /> : <Timetable />
 }
 
 /**
@@ -97,8 +81,6 @@ function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/login" element={<Login />} />
-        <Route path="/register" element={<Register />} />
-        <Route path="/register/complete" element={<CompleteRegistration />} />
         <Route path="/forgot-password" element={<ForgotPassword />} />
         <Route path="/reset-password" element={<ResetPassword />} />
 
@@ -109,7 +91,7 @@ function App() {
           <Route path="/sessions/:id/qr" element={<LiveQr />} />
         </Route>
 
-        <Route element={<ProtectedRoute roles={PEOPLE} allowPendingStudent />}>
+        <Route element={<ProtectedRoute roles={PEOPLE} />}>
           <Route element={<DashboardLayout />}>
             <Route path="/account" element={<Account />} />
           </Route>
@@ -117,7 +99,7 @@ function App() {
 
         <Route element={<ProtectedRoute roles={PEOPLE} />}>
           <Route element={<DashboardLayout />}>
-            <Route path="/assignments" element={<RoleAssignments />} />
+            <Route path="/assignments" element={<StaffAssignments />} />
           </Route>
         </Route>
 
@@ -160,13 +142,7 @@ function App() {
 
         <Route element={<ProtectedRoute roles={TIMETABLE_ROLES} />}>
           <Route element={<DashboardLayout />}>
-            <Route path="/timetable" element={<RoleTimetable />} />
-          </Route>
-        </Route>
-
-        <Route element={<ProtectedRoute roles={['STUDENT']} />}>
-          <Route element={<DashboardLayout />}>
-            <Route path="/attendance" element={<StudentAttendance />} />
+            <Route path="/timetable" element={<Timetable />} />
           </Route>
         </Route>
 

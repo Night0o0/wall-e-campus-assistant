@@ -7,14 +7,11 @@ import 'package:http/http.dart' as http;
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
-import '../models/account_role.dart';
-
-/// A signed-in university user. Authentication comes from Supabase when it is
+/// A signed-in student. Authentication comes from Supabase when it is
 /// configured; the legacy endpoint remains a local migration fallback.
 class AuthSession {
   const AuthSession({
     required this.token,
-    required this.role,
     required this.id,
     required this.name,
     required this.identifier,
@@ -23,7 +20,6 @@ class AuthSession {
   });
 
   final String token;
-  final AccountRole role;
   final String id;
   final String name;
   final String identifier;
@@ -139,12 +135,17 @@ class CampusApi implements CampusGateway {
         throw const ApiException('Sign in did not create a session.');
       }
 
-      await _completePendingRegistration(accessToken);
-      return _sessionFromSupabaseToken(
-        accessToken,
-        fallbackIdentifier: normalized,
-        fallbackUserId: response.user?.id ?? '',
-      );
+      try {
+        await _completePendingRegistration(accessToken);
+        return await _sessionFromSupabaseToken(
+          accessToken,
+          fallbackIdentifier: normalized,
+          fallbackUserId: response.user?.id ?? '',
+        );
+      } catch (_) {
+        await Supabase.instance.client.auth.signOut();
+        rethrow;
+      }
     }
 
     final response = await _send(
@@ -153,17 +154,18 @@ class CampusApi implements CampusGateway {
       body: {'email': normalized, 'password': password},
     );
     final user = _map(response['user']);
-    final role = AccountRoleDetails.fromApi(user['role']?.toString());
-
-    if (role == null) {
-      throw const ApiException('This account type cannot use the mobile app.');
+    if (user['role']?.toString() != 'STUDENT') {
+      throw const ApiException(
+        'Only student accounts can use the mobile app. Staff sign in on the web console.',
+        statusCode: 403,
+        code: 'WEB_ONLY_ACCOUNT',
+      );
     }
 
     return AuthSession(
       token: response['token'] as String,
-      role: role,
       id: user['id']?.toString() ?? '',
-      name: user['fullName']?.toString() ?? role.label,
+      name: user['fullName']?.toString() ?? 'Student',
       identifier: user['email']?.toString() ?? normalized,
       organizationId: user['organizationId']?.toString() ?? '',
       isVerified: user['isVerified'] == true,
@@ -256,7 +258,6 @@ class CampusApi implements CampusGateway {
 
     final provisional = AuthSession(
       token: accessToken,
-      role: AccountRole.student,
       id: '',
       name: '',
       identifier: '',
@@ -278,7 +279,6 @@ class CampusApi implements CampusGateway {
   }) async {
     final provisional = AuthSession(
       token: accessToken,
-      role: AccountRole.student,
       id: fallbackUserId,
       name: '',
       identifier: fallbackIdentifier,
@@ -290,16 +290,18 @@ class CampusApi implements CampusGateway {
       session: provisional,
     );
     final user = _map(profileResponse['user']);
-    final role = AccountRoleDetails.fromApi(user['role']?.toString());
-    if (role == null) {
-      throw const ApiException('This account type cannot use the mobile app.');
+    if (user['role']?.toString() != 'STUDENT') {
+      throw const ApiException(
+        'Only student accounts can use the mobile app. Staff sign in on the web console.',
+        statusCode: 403,
+        code: 'WEB_ONLY_ACCOUNT',
+      );
     }
 
     return AuthSession(
       token: accessToken,
-      role: role,
       id: user['id']?.toString() ?? fallbackUserId,
-      name: user['fullName']?.toString() ?? role.label,
+      name: user['fullName']?.toString() ?? 'Student',
       identifier: user['email']?.toString() ?? fallbackIdentifier,
       organizationId: user['organizationId']?.toString() ?? '',
       isVerified: user['isVerified'] == true,

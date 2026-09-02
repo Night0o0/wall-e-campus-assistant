@@ -60,7 +60,7 @@ describe('role route guard', () => {
     expect(screen.getByText('You cannot open this page')).toBeTruthy()
   })
 
-  it('keeps pending students outside academic routes', () => {
+  it('treats a student identity as a role mismatch on the staff web app', () => {
     auth.user = {
       id: 'student-1',
       email: 'student@example.edu',
@@ -70,20 +70,7 @@ describe('role route guard', () => {
 
     renderGate(['INSTRUCTOR'])
 
-    expect(screen.getByText('Waiting for university approval')).toBeTruthy()
-  })
-
-  it('admits an approved student to student routes', () => {
-    auth.user = {
-      id: 'student-1',
-      email: 'student@example.edu',
-      role: 'STUDENT',
-      accountStatus: 'ACTIVE',
-    }
-
-    renderGate(['STUDENT'])
-
-    expect(screen.getByText('Protected page')).toBeTruthy()
+    expect(screen.getByText('You cannot open this page')).toBeTruthy()
   })
 
   it('redirects an anonymous visitor to login', () => {

@@ -70,6 +70,7 @@ const main = async () => {
         headers: {
           authorization: `Bearer ${signedIn.data.session!.access_token}`,
           "content-type": "application/json",
+          "X-Client-Platform": "mobile",
         },
         body: "{}",
       });

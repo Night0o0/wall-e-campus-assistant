@@ -1,31 +1,25 @@
 # Leornian web app
 
-This is the React + Vite web client for the current Leornian Campus Assistant product.
+React + Vite console for staff and administrators only.
 
-## Current scope
-
-Implemented role experiences:
+Supported web roles:
 
 - `SYSTEM_OWNER`
 - `UNIVERSITY_ADMIN`
+- `DEPARTMENT_ADMIN`
 - `INSTRUCTOR`
-- `STUDENT`
 
-The active web product does not include:
-
-- robot/device console
-- billing/payment pages
+Student registration and student sign-in belong exclusively to the mobile app.
+The web client declares `X-Client-Platform: web`, and the backend refuses a
+student profile even if a student obtains or reuses an identity token.
 
 ## Main areas
 
-- authentication and registration
-- cross-device registration completion
-- password recovery, reset callback and signed-in password changes
-- account/profile pages
+- staff authentication and account management
 - owner console for organizations and users
-- university admin console for timetable, directory, sessions, exports
-- instructor console for teaching, sessions, materials, notifications
-- student-facing web routes currently present in this app
+- university administration for timetable, directory, sessions, and exports
+- instructor teaching, sessions, materials, assignments, and notifications
+- student approval and academic record administration
 
 ## Commands
 
@@ -37,12 +31,4 @@ npm test -- --run
 npx tsc -b
 ```
 
-## Backend dependency
-
-The web app expects the backend API to be running and aligned with the latest Prisma schema and migrations.
-
-## Source of truth
-
-For overall product status and remaining work, see:
-
-- [../../docs/PROJECT_STATUS.md](../../docs/PROJECT_STATUS.md)
+For overall product status, see [../../docs/PROJECT_STATUS.md](../../docs/PROJECT_STATUS.md).

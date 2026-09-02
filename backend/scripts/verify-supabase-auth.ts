@@ -211,7 +211,7 @@ const main = async () => {
   check("no profile is returned for a legacy token", profileOf(legacyResult.body) === null);
 
   /* ------------------------------------------------------------------- 12 */
-  section("Stage 12 — the system owner is web-only");
+  section("Stage 12 — students are mobile-only and staff are web-only");
 
   const ownerSession = await signIn(ACCOUNTS.owner);
   const asMobile = { headers: { "X-Client-Platform": "mobile" } };
@@ -241,12 +241,34 @@ const main = async () => {
   for (const [label, email] of [
     ["university admin", ACCOUNTS.universityAdmin],
     ["instructor", ACCOUNTS.instructorA],
-    ["student", ACCOUNTS.studentApproved],
   ] as const) {
     const session = await signIn(email);
     const result = await callApi("/api/auth/profile", session.accessToken, asMobile);
-    check(`${label} is allowed on mobile`, result.status === 200, `status ${result.status}`);
+    check(
+      `${label} is refused from mobile`,
+      result.status === 403 && result.code === "WEB_ONLY_ACCOUNT",
+      `status ${result.status} code ${result.code ?? "none"}`
+    );
   }
+
+  const studentSession = await signIn(ACCOUNTS.studentApproved);
+  const studentOnMobile = await callApi(
+    "/api/auth/profile",
+    studentSession.accessToken,
+    asMobile
+  );
+  check("student works on mobile", studentOnMobile.status === 200);
+
+  const studentOnWeb = await callApi(
+    "/api/auth/profile",
+    studentSession.accessToken,
+    asWeb
+  );
+  check(
+    "student is refused from web with MOBILE_ONLY_ACCOUNT",
+    studentOnWeb.status === 403 && studentOnWeb.code === "MOBILE_ONLY_ACCOUNT",
+    `status ${studentOnWeb.status} code ${studentOnWeb.code ?? "none"}`
+  );
 
   finish();
 };

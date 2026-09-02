@@ -2,8 +2,8 @@
 
 Leornian Campus Assistant is a multi-tenant university operations platform with:
 
-- a React web app for platform owner, university admin, instructor, and student views
-- a Flutter mobile app for student and staff workflows
+- a React web app for platform owner, university admin, department admin, and instructor views
+- a Flutter mobile app exclusively for student registration and student workflows
 - an Express + Prisma backend on PostgreSQL
 
 As of September 2, 2026, the active product scope is:
@@ -28,9 +28,9 @@ What is already verified in code:
 
 - backend schema validates
 - backend source and test typechecks pass
-- backend tests pass: 500 tests in 39 files
+- backend tests pass: 504 tests in 39 files
 - web typecheck/build passes
-- web tests pass: 28 tests in 7 files
+- web tests pass: 24 tests in 6 files
 - payment and robot code paths were removed from the active app
 - Supabase registration/account lifecycle is implemented
 - the Phase 6 authorization matrix and negative scope tests pass
@@ -40,13 +40,13 @@ What is already verified in code:
   readiness and graceful worker shutdown are verified
 - the live Supabase/PostgreSQL environment has all 14 migrations applied and
   passes database, authentication, registration, session and academic API checks
-- connected rendered web workflows pass for every seeded role, account-state
+- connected rendered web workflows pass for every staff role, account-state
   gating, session restoration/sign-out, instructor session/QR state, and the
   responsive university-admin shell
-- Flutter 3.44.9/Dart 3.12.2 analysis, 20 widget/API tests, a 24-screen runtime
+- Flutter 3.44.9/Dart 3.12.2 analysis, 13 widget/API tests, a 7-screen runtime
   walk, and the configured Android debug build pass
 - live Android emulator checks pass for approved/pending/disabled students,
-  instructor authentication and connected pages, secure restart/logout, and
+  secure restart/logout, and
   camera permission with a live QR-scanner preview
 - release-facing mobile demo pages and the out-of-scope static Exports tab were
   removed; every remaining navigation destination uses connected data
@@ -109,7 +109,9 @@ Current direction:
 - backend-enforced authentication and authorization
 - role checks are enforced on the backend
 - tenant isolation is enforced on the backend
-- web and mobile clients are consumers of the same API
+- students register and sign in only on mobile
+- staff and administrators sign in only on web
+- the backend enforces this first-party client boundary on authenticated requests
 
 Important implementation note:
 

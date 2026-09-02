@@ -14,7 +14,7 @@ Legend: `OWNER` = `SYSTEM_OWNER`, `UA` = `UNIVERSITY_ADMIN`, `DA` =
 |---|---|---|---|
 | Health | `GET /api/health` | Public | No account data |
 | Readiness | `GET /api/health/ready` | Public | Reports database availability only; no account data |
-| Registration/login | `/api/auth/register*`, `/login`, `/mobile-login` | Public or verified Supabase identity, per route | Registration completion derives identity/email from verified token and always creates `STUDENT/PENDING` |
+| Registration/login | `/api/auth/register*`, `/login`, `/mobile-login` | Mobile student registration/login; web staff login | Registration requires the mobile client declaration and always creates `STUDENT/PENDING`; authenticated student profiles are refused on web and staff profiles are refused on mobile |
 | Recovery | `/api/auth/forgot-password`, `/reset-password` | Public recovery flow | Non-enumerating, rate-limited; Supabase owns current password reset |
 | Own account | `GET/PATCH /api/auth/profile`, `PATCH /api/auth/password` | Authenticated self | User id from authenticated record; Supabase reauthentication/change rules apply |
 | Student profile | `GET/PATCH /api/students/me/profile` | S, including pending | Self only; academic profile authority is never accepted from another user id |

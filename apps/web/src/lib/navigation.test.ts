@@ -24,7 +24,6 @@ describe('role navigation', () => {
     ['UNIVERSITY_ADMIN', '/'],
     ['DEPARTMENT_ADMIN', '/departments'],
     ['INSTRUCTOR', '/teaching'],
-    ['STUDENT', '/'],
   ] as const)('sends %s to %s after login', (role, path) => {
     expect(homeRouteFor(role)).toBe(path)
   })
@@ -38,19 +37,6 @@ describe('role navigation', () => {
     expect(paths).not.toContain('/organizations')
   })
 
-  it('gives students only their portal links', () => {
-    const paths = navigationFor(account('STUDENT')).map((item) => item.href)
-    expect(paths).toEqual([
-      '/',
-      '/timetable',
-      '/assignments',
-      '/materials',
-      '/attendance',
-      '/notifications',
-      '/account',
-    ])
-  })
-
   it('returns a user to a route their role can open', () => {
     expect(routeAfterLogin('INSTRUCTOR', '/sessions/session-1')).toBe('/sessions/session-1')
     expect(routeAfterLogin('SYSTEM_OWNER', '/organizations/org-1')).toBe('/organizations/org-1')
@@ -58,7 +44,6 @@ describe('role navigation', () => {
 
   it('falls back to the role home when the requested route is forbidden', () => {
     expect(routeAfterLogin('UNIVERSITY_ADMIN', '/settings')).toBe('/')
-    expect(routeAfterLogin('STUDENT', '/sessions/session-1')).toBe('/')
   })
 
   it('rejects external redirect targets', () => {

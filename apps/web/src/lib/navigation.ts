@@ -109,16 +109,6 @@ const SUPER_ADMIN_NAV: NavItem[] = [
   { name: 'Account', href: '/account', icon: Settings },
 ]
 
-const STUDENT_NAV: NavItem[] = [
-  { name: 'Dashboard', href: '/', icon: LayoutDashboard, end: true, mobile: true },
-  { name: 'Timetable', href: '/timetable', icon: CalendarDays, mobile: true },
-  { name: 'Assignments', href: '/assignments', icon: FileText, mobile: true },
-  { name: 'Materials', href: '/materials', icon: FolderOpen },
-  { name: 'Attendance', href: '/attendance', icon: MonitorPlay, mobile: true },
-  { name: 'Notifications', href: '/notifications', icon: Bell },
-  { name: 'Account', href: '/account', icon: Settings, mobile: true },
-]
-
 const DEPARTMENT_ADMIN_NAV: NavItem[] = [
   { name: 'Departments', href: '/departments', icon: Building2, end: true, mobile: true },
   { name: 'Timetable', href: '/timetable', icon: CalendarDays },
@@ -134,7 +124,6 @@ const NAV_BY_ROLE: Record<string, NavItem[]> = {
   INSTRUCTOR: ADMIN_NAV,
   UNIVERSITY_ADMIN: SUPER_ADMIN_NAV,
   DEPARTMENT_ADMIN: DEPARTMENT_ADMIN_NAV,
-  STUDENT: STUDENT_NAV,
 }
 
 /** What this user's menu contains. */
@@ -164,8 +153,6 @@ export function consoleNameFor(user: AuthUser | null): string {
       return 'Department Admin'
     case 'INSTRUCTOR':
       return 'Teaching Console'
-    case 'STUDENT':
-      return 'Student Portal'
     default:
       return 'Campus Assistant'
   }

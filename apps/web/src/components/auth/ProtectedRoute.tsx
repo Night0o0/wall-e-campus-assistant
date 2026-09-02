@@ -1,5 +1,5 @@
 import { Navigate, Outlet, useLocation } from 'react-router-dom'
-import { Bot, Clock3, ShieldAlert } from 'lucide-react'
+import { Bot, ShieldAlert } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 import { homeRouteFor } from '../../lib/navigation'
 
@@ -31,13 +31,7 @@ function BootScreen() {
  * Pending students may authenticate to finish account setup, but cannot enter
  * academic feature routes before university approval.
  */
-export function ProtectedRoute({
-  roles,
-  allowPendingStudent = false,
-}: {
-  roles: string[]
-  allowPendingStudent?: boolean
-}) {
+export function ProtectedRoute({ roles }: { roles: string[] }) {
   const { user, isLoading } = useAuth()
   const location = useLocation()
 
@@ -47,14 +41,6 @@ export function ProtectedRoute({
 
   if (!user) {
     return <Navigate to="/login" state={{ from: location.pathname }} replace />
-  }
-
-  if (
-    user.role === 'STUDENT' &&
-    user.accountStatus !== 'ACTIVE' &&
-    !allowPendingStudent
-  ) {
-    return <PendingNotice />
   }
 
   if (!roles.includes(user.role)) {
@@ -89,25 +75,6 @@ function Shell({
         </button>
       </div>
     </div>
-  )
-}
-
-function PendingNotice() {
-  return (
-    <Shell
-      icon={
-        <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-primary-50">
-          <Clock3 className="h-7 w-7 text-primary-600" />
-        </div>
-      }
-      title="Waiting for university approval"
-    >
-      <p>
-        Your email identity is ready, but academic access remains locked until
-        authorized staff verify your university record. You can sign out and
-        return later; no new registration is needed.
-      </p>
-    </Shell>
   )
 }
 

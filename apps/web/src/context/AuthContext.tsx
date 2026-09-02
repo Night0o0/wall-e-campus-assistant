@@ -12,7 +12,6 @@ import { authApi } from '../api/endpoints'
 import { tokenStorage, UNAUTHORIZED_EVENT } from '../lib/api'
 import type { AuthUser } from '../types/api'
 import { supabase, supabaseConfigured } from '../lib/supabase'
-import { completeRegistrationForSession } from '../lib/registration'
 
 interface AuthContextValue {
   user: AuthUser | null
@@ -45,9 +44,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const { data } = await supabase!.auth.getSession()
         if (data.session) {
           tokenStorage.set(data.session.access_token)
-          // Idempotent for linked users; repairs a registration confirmed in a
-          // different browser before the profile lookup below.
-          await completeRegistrationForSession(data.session)
         }
       }
 
@@ -60,6 +56,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (!cancelled && profile) setUser(profile)
       })
       .catch(() => {
+        if (supabaseConfigured) void supabase?.auth.signOut()
         if (!cancelled) tokenStorage.clear()
       })
       .finally(() => {
@@ -103,20 +100,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!data.session) throw new Error('Sign in did not create a session')
 
       tokenStorage.set(data.session.access_token)
-      await completeRegistrationForSession(data.session)
-      const profile = await authApi.profile()
-      setUser(profile)
-      return profile
+      try {
+        const profile = await authApi.profile()
+        setUser(profile)
+        return profile
+      } catch (error) {
+        tokenStorage.clear()
+        await supabase!.auth.signOut()
+        throw error
+      }
     }
 
     const result = await authApi.login(email, password)
     tokenStorage.set(result.token)
 
-    // The login payload omits the organization, so read the full profile.
-    const profile = await authApi.profile().catch(() => result.user)
-
-    setUser(profile)
-    return profile
+    try {
+      // The profile request enforces that student accounts cannot use web.
+      const profile = await authApi.profile()
+      setUser(profile)
+      return profile
+    } catch (error) {
+      tokenStorage.clear()
+      throw error
+    }
   }, [])
 
   const value = useMemo(

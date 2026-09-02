@@ -4,11 +4,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:wall_e_mobile/data/campus_api.dart';
-import 'package:wall_e_mobile/models/account_role.dart';
 
 const _session = AuthSession(
   token: 'test-token',
-  role: AccountRole.student,
   id: 'student-1',
   name: 'Test Student',
   identifier: 'student@example.edu',
@@ -52,7 +50,7 @@ void main() {
         CampusApi(baseUrl: 'https://campus.example/api', client: client);
 
     await expectLater(
-      api.post('/sessions', _session, const {}),
+      api.post('/attendance/scan', _session, const {}),
       throwsA(isA<ApiException>()
           .having((error) => error.statusCode, 'statusCode', 400)
           .having((error) => error.code, 'code', 'VALIDATION_ERROR')

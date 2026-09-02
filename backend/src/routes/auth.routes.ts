@@ -30,12 +30,14 @@ import {
   updateProfileSchema,
 } from "../types/user.types.js";
 import { otpLimiter } from "../utils/rate-limit.js";
+import { requireMobileClient } from "../utils/client-platform.js";
 
 const router = Router();
 
-router.post("/register", validate(registerSchema), register);
+router.post("/register", requireMobileClient, validate(registerSchema), register);
 router.post(
   "/register/supabase",
+  requireMobileClient,
   authenticateSupabaseIdentity,
   validate(completeSupabaseRegistrationSchema),
   completeSupabaseRegistration

@@ -55,9 +55,9 @@ Every pull request and main-branch push must pass `.github/workflows/ci.yml`:
 
 - tracked-secret scan;
 - all migrations replayed from an empty PostgreSQL database;
-- Prisma validation, backend source/test typechecks, 500 backend tests, and build;
-- web lint, 28 tests, and production build;
-- Flutter formatting, analysis, 20 tests, and Android debug build;
+- Prisma validation, backend source/test typechecks, 504 backend tests, and build;
+- web lint, 24 tests, and production build;
+- Flutter formatting, analysis, 13 tests, and Android debug build;
 - production dependency audits at high severity;
 - API runtime, migration, and web container builds.
 
@@ -112,6 +112,8 @@ pg_restore --clean --if-exists --no-owner --no-acl --dbname $env:SCRATCH_DATABAS
 11. Run the authenticated web role flows and Android integration harness using
     dedicated staging accounts; test approved, pending, rejected, and disabled
     states, QR issuance/scan/replay rejection, materials, approvals, and logout.
+    Explicitly prove that every staff role is refused on mobile and an approved
+    student is refused on web.
 12. Enable each in-process worker on one API replica only. Confirm a generation,
     delivery, stale-session close, and absence sweep in staging.
 13. Observe errors, latency, database connections, mail failure rate, and worker

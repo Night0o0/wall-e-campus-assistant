@@ -64,10 +64,10 @@ Live database and authentication verification completed:
 Connected web workflow verification completed:
 
 - real Supabase sign-in, session restoration and sign-out passed in the rendered app
-- owner, university-admin, department-admin, instructor and student routes loaded
-  against the live backend with role-safe denial for cross-role pages
-- pending students reached approval status/account completion only, and disabled
-  accounts remained at sign-in with the expected deactivation error
+- owner, university-admin, department-admin and instructor routes loaded against
+  the live backend with role-safe denial for cross-role pages
+- the student registration and portal routes were removed from web; web requests
+  declare their platform and the backend refuses student sessions
 - instructor session detail and closed-session projector/QR state passed
 - responsive university-admin navigation passed at a 390 × 844 viewport
 - login return paths are now validated against the authenticated role
@@ -77,24 +77,23 @@ Connected web workflow verification completed:
 Connected mobile implementation and emulator verification completed:
 
 - repository lockfile runs on Flutter 3.44.9 / Dart 3.12.2
-- Flutter analysis passes with zero issues; 20 widget/API tests pass
-- deterministic runtime verification walks 24 release-facing student, instructor
-  and university-admin screens with zero findings
+- Flutter analysis passes with zero issues; 13 widget/API tests pass
+- deterministic runtime verification walks all 7 release-facing student screens
+  with zero findings
 - configured Android debug APK builds successfully against the emulator API URL
 - approved-student Supabase login, all six connected destinations, profile and
   logout passed against the live backend
 - pending students remain on the approval screen and disabled students remain
   signed out
-- instructor Supabase login, overview, teaching schedule, sessions, courses and
-  materials passed against the live backend; the deterministic walker covers the
-  remaining pending-student, inbox and account destinations
+- all mobile staff/admin shells, destinations, role data models, tests and golden
+  assets were deleted; staff sessions are rejected and signed out
 - Android camera permission is granted and the QR scanner displayed a live
   emulator camera preview
 - secure session restoration survived emulator restarts; logout cleanup passed
 - the mobile HTTP transport is cross-platform and regression-tested for required
   identity/auth headers, backend validation details and retryable network errors
-- the unused static/demo role page collection and out-of-scope static Exports tab
-  were removed from the release app
+- the mobile app now contains only the student shell and student registration,
+  approval, timetable, attendance, material, work, inbox, QR and profile flows
 - a runtime-only, credential-free live integration harness is committed; its
   approved-student Android case passed
 - emulator-only acceptance was explicitly approved on September 2 because no
@@ -128,12 +127,12 @@ Verified:
 - backend Prisma schema validates
 - backend typecheck passes
 - backend source and test typechecks pass
-- backend tests pass: 500 tests in 39 files
+- backend tests pass: 504 tests in 39 files
 - web typecheck/production build passes
-- web tests pass: 28 tests in 7 files
+- web tests pass: 24 tests in 6 files
 - rendered browser checks pass for public auth pages and every connected seeded role workflow
-- mobile analysis and 20 widget/API tests pass
-- mobile runtime walker covers 24 release-facing screens with zero findings
+- mobile analysis and 13 widget/API tests pass
+- mobile runtime walker covers all 7 release-facing student screens with zero findings
 - configured Android debug APK builds successfully
 
 Release gates still requiring the target environment:

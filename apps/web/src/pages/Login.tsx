@@ -65,7 +65,8 @@ export function Login() {
           </h1>
           <p className="mt-4 text-white/80">
             Timetables, attendance sessions and course material for teaching
-            staff, university administrators, and students on web and mobile.
+            staff and university administrators in the web console. Students
+            use the mobile application.
           </p>
         </div>
 
@@ -93,11 +94,9 @@ export function Login() {
           </p>
 
           <form onSubmit={handleSubmit} className="mt-8 space-y-4">
-            {(searchParams.get('registered') === '1' || searchParams.get('password-reset') === '1') && (
+            {searchParams.get('password-reset') === '1' && (
               <div className="rounded-lg bg-success-50 p-3 text-sm text-success-700">
-                {searchParams.get('registered') === '1'
-                  ? 'Registration completed. Sign in to finish your profile and view approval status.'
-                  : 'Password updated. Sign in with your new password.'}
+                Password updated. Sign in with your new password.
               </div>
             )}
             {error && (
@@ -153,13 +152,7 @@ export function Login() {
               Sign in
             </Button>
           </form>
-          <p className="mt-5 text-center text-sm text-slate-500">
-            Student without an account?{' '}
-            <Link className="font-semibold text-primary-600" to="/register">
-              Register
-            </Link>
-          </p>
-          <p className="mt-2 text-center text-sm">
+          <p className="mt-5 text-center text-sm">
             <Link className="font-semibold text-primary-600" to="/forgot-password">
               Forgot your password?
             </Link>

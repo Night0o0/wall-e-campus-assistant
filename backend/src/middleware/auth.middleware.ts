@@ -143,9 +143,9 @@ export const authenticate = async (
       return;
     }
 
-    // The platform owner is web-only. This sits here rather than on a login
-    // route because mobile authenticates against Supabase directly and never
-    // calls one — see src/utils/client-platform.ts.
+    // Students are mobile-only and every staff role is web-only. This sits
+    // here because Supabase clients authenticate directly and then reach the
+    // API with their identity token — see src/utils/client-platform.ts.
     assertClientAllowed(user.role, req.headers);
 
     req.user = user;

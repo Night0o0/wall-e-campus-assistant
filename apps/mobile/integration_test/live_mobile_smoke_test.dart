@@ -7,7 +7,6 @@ import 'package:wall_e_mobile/data/campus_api.dart';
 import 'package:wall_e_mobile/presentation/app_shell.dart';
 
 const _studentEmail = String.fromEnvironment('MOBILE_E2E_STUDENT_EMAIL');
-const _instructorEmail = String.fromEnvironment('MOBILE_E2E_INSTRUCTOR_EMAIL');
 const _password = String.fromEnvironment('MOBILE_E2E_PASSWORD');
 
 Future<void> _pumpUntil(
@@ -54,8 +53,6 @@ void main() {
     expect(CampusApi.supabaseConfigured, isTrue,
         reason: 'Pass SUPABASE_URL and SUPABASE_PUBLISHABLE_KEY.');
     expect(_studentEmail, isNotEmpty, reason: 'Pass MOBILE_E2E_STUDENT_EMAIL.');
-    expect(_instructorEmail, isNotEmpty,
-        reason: 'Pass MOBILE_E2E_INSTRUCTOR_EMAIL.');
     expect(_password, isNotEmpty, reason: 'Pass MOBILE_E2E_PASSWORD.');
 
     await Supabase.initialize(
@@ -87,31 +84,5 @@ void main() {
 
     await tester.tap(find.byKey(const ValueKey('student-profile')));
     await _pumpUntil(tester, find.text('My Profile'));
-  });
-
-  testWidgets('instructor reaches every connected teaching area',
-      (tester) async {
-    await _openAuthenticatedShell(
-      tester,
-      api,
-      _instructorEmail,
-      find.textContaining('Good morning'),
-    );
-
-    for (final label in [
-      'My Teaching',
-      'Sessions',
-      'Courses',
-      'Materials',
-      'Pending Students',
-      'Inbox',
-      'Account',
-    ]) {
-      final target = find.text(label).last;
-      await tester.ensureVisible(target);
-      await tester.tap(target, warnIfMissed: false);
-      await tester.pumpAndSettle();
-      expect(find.text(label), findsWidgets);
-    }
   });
 }

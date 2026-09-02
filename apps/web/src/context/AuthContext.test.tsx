@@ -9,7 +9,6 @@ const auth = vi.hoisted(() => ({
   onAuthStateChange: vi.fn(),
 }))
 const profile = vi.hoisted(() => vi.fn())
-const complete = vi.hoisted(() => vi.fn())
 const tokenStorage = vi.hoisted(() => ({
   get: vi.fn(),
   set: vi.fn(),
@@ -25,10 +24,6 @@ vi.mock('../api/endpoints', () => ({
   authApi: { profile, login: vi.fn() },
 }))
 
-vi.mock('../lib/registration', () => ({
-  completeRegistrationForSession: complete,
-}))
-
 vi.mock('../lib/api', () => ({
   tokenStorage,
   UNAUTHORIZED_EVENT: 'leornian:unauthorized',
@@ -41,13 +36,13 @@ const session = {
   user: { user_metadata: {} },
 }
 const user = {
-  id: 'student-1',
-  universityId: 'STU-1001',
-  fullName: 'Student One',
-  email: 'student@example.edu',
-  role: 'STUDENT',
-  accountStatus: 'PENDING',
-  isVerified: false,
+  id: 'staff-1',
+  universityId: 'STAFF-1001',
+  fullName: 'Staff One',
+  email: 'staff@example.edu',
+  role: 'INSTRUCTOR',
+  accountStatus: 'ACTIVE',
+  isVerified: true,
   isActive: true,
   organizationId: 'org-1',
 }
@@ -57,7 +52,7 @@ function Harness() {
   return (
     <div>
       <span>{value.isLoading ? 'loading' : value.user?.email ?? 'anonymous'}</span>
-      <button onClick={() => void value.login('student@example.edu', 'password')}>
+      <button onClick={() => void value.login('staff@example.edu', 'password').catch(() => undefined)}>
         login
       </button>
       <button onClick={value.logout}>logout</button>
@@ -80,7 +75,6 @@ beforeEach(() => {
   for (const mock of Object.values(auth)) mock.mockReset()
   for (const mock of Object.values(tokenStorage)) mock.mockReset()
   profile.mockReset().mockResolvedValue(user)
-  complete.mockReset().mockResolvedValue({})
   auth.getSession.mockResolvedValue({ data: { session: null } })
   auth.signInWithPassword.mockResolvedValue({ data: { session }, error: null })
   auth.signOut.mockResolvedValue({ error: null })
@@ -92,40 +86,48 @@ beforeEach(() => {
 afterEach(cleanup)
 
 describe('Supabase web session lifecycle', () => {
-  it('restores a session and idempotently repairs registration before profile', async () => {
+  it('restores and validates a staff session', async () => {
     auth.getSession.mockResolvedValue({ data: { session } })
     tokenStorage.get.mockImplementation(() => 'access-token')
     renderProvider()
 
-    await waitFor(() => expect(screen.getByText('student@example.edu')).toBeTruthy())
+    await waitFor(() => expect(screen.getByText('staff@example.edu')).toBeTruthy())
     expect(tokenStorage.set).toHaveBeenCalledWith('access-token')
-    expect(complete).toHaveBeenCalledWith(session)
     expect(profile).toHaveBeenCalledTimes(1)
   })
 
-  it('completes cross-device registration during login before loading profile', async () => {
+  it('validates the backend profile during login', async () => {
     renderProvider()
     await waitFor(() => expect(screen.getByText('anonymous')).toBeTruthy())
 
     fireEvent.click(screen.getByRole('button', { name: 'login' }))
 
-    await waitFor(() => expect(screen.getByText('student@example.edu')).toBeTruthy())
+    await waitFor(() => expect(screen.getByText('staff@example.edu')).toBeTruthy())
     expect(auth.signInWithPassword).toHaveBeenCalledWith({
-      email: 'student@example.edu',
+      email: 'staff@example.edu',
       password: 'password',
     })
-    expect(complete).toHaveBeenCalledWith(session)
   })
 
   it('logs out of Supabase and clears local application state', async () => {
     auth.getSession.mockResolvedValue({ data: { session } })
     tokenStorage.get.mockReturnValue('access-token')
     renderProvider()
-    await waitFor(() => expect(screen.getByText('student@example.edu')).toBeTruthy())
+    await waitFor(() => expect(screen.getByText('staff@example.edu')).toBeTruthy())
 
     fireEvent.click(screen.getByRole('button', { name: 'logout' }))
 
     expect(auth.signOut).toHaveBeenCalledTimes(1)
+    expect(tokenStorage.clear).toHaveBeenCalled()
+    expect(screen.getByText('anonymous')).toBeTruthy()
+  })
+
+  it('signs out an identity that the backend refuses for web', async () => {
+    profile.mockRejectedValueOnce(new Error('Student accounts are mobile-only'))
+    renderProvider()
+    await waitFor(() => expect(screen.getByText('anonymous')).toBeTruthy())
+    fireEvent.click(screen.getByRole('button', { name: 'login' }))
+    await waitFor(() => expect(auth.signOut).toHaveBeenCalledTimes(1))
     expect(tokenStorage.clear).toHaveBeenCalled()
     expect(screen.getByText('anonymous')).toBeTruthy()
   })
