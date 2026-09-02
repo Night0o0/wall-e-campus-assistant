@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from "express";
 import { ZodError } from "zod";
 import { Prisma } from "@prisma/client";
 import { AppError } from "../utils/AppError.js";
+import { logger } from "../utils/logger.js";
 
 interface ErrorResponse {
   message: string;
@@ -120,14 +121,20 @@ export const resolveError = (err: unknown): { status: number; body: ErrorRespons
 
 export const errorHandler = (
   err: unknown,
-  _req: Request,
+  req: Request,
   res: Response,
   _next: NextFunction
 ) => {
   const { status, body } = resolveError(err);
 
   if (status >= 500) {
-    console.error("[error]", err);
+    logger.error("http.error", {
+      requestId: req.requestId,
+      method: req.method,
+      path: req.originalUrl.split("?")[0],
+      status,
+      error: err,
+    });
   }
 
   if (body.errors === undefined) {

@@ -28,7 +28,7 @@ What is already verified in code:
 
 - backend schema validates
 - backend source and test typechecks pass
-- backend tests pass: 495 tests in 39 files
+- backend tests pass: 500 tests in 39 files
 - web typecheck/build passes
 - web tests pass: 28 tests in 7 files
 - payment and robot code paths were removed from the active app
@@ -50,10 +50,18 @@ What is already verified in code:
   camera permission with a live QR-scanner preview
 - release-facing mobile demo pages and the out-of-scope static Exports tab were
   removed; every remaining navigation destination uses connected data
+- production configuration hardening, SMTP/TLS preflight, structured/redacted
+  logs, correlation IDs and release-aware health endpoints are implemented
+- CI now scans secrets, replays migrations, verifies backend/web/mobile,
+  audits production dependencies and builds deployment containers
+- release containers, public smoke tests and the backup/deployment/monitoring/
+  rollback runbook are complete
 
-What still needs runtime finish work:
+What still needs target-environment acceptance:
 
-- complete deployment, observability, security, and release phases
+- provision staging/production services and secrets, execute CI/container
+  deployment, verify real SMTP, monitoring/alerts and a backup restore, run the
+  authenticated staging matrix, and complete the final physical-device check
 
 The September 2 mobile checkpoint uses emulator-only acceptance because a
 physical phone was unavailable. Physical-device validation remains a recommended
@@ -180,6 +188,7 @@ That file is the operational checklist for “where we are now” and “what re
 - [docs/AUTHORIZATION_MATRIX.md](docs/AUTHORIZATION_MATRIX.md) — backend role and scope policy
 - [docs/Architecture.md](docs/Architecture.md) — current system architecture
 - [docs/MIGRATION_RUNBOOK.md](docs/MIGRATION_RUNBOOK.md) — safe migration workflow
+- [docs/RELEASE_RUNBOOK.md](docs/RELEASE_RUNBOOK.md) — CI, deployment, monitoring, backup, smoke and rollback gates
 - [apps/web/README.md](apps/web/README.md) — current web app scope
 - [apps/mobile/README.md](apps/mobile/README.md) — current mobile app scope
 

@@ -5,9 +5,10 @@ import { stopAttendanceWorker } from "./workers/attendance.worker.js";
 import { startNotificationWorker } from "./workers/notification.worker.js";
 import { stopNotificationWorker } from "./workers/notification.worker.js";
 import prisma from "./lib/prisma.js";
+import { logger } from "./utils/logger.js";
 
 const server = app.listen(env.PORT, () => {
-  console.log(`🚀 Server running on http://localhost:${env.PORT}`);
+  logger.info("server.started", { port: env.PORT });
 
   // Lecture reminders. Runs in this process; see notification.worker.ts for
   // why that is enough for the pilot, and how to move it out later.
@@ -25,12 +26,12 @@ const shutdown = (signal: string) => {
   if (shuttingDown) return;
   shuttingDown = true;
 
-  console.log(`[shutdown] ${signal} received; draining requests`);
+  logger.info("server.shutdown_started", { signal });
   stopAttendanceWorker();
   stopNotificationWorker();
 
   const forceTimer = setTimeout(() => {
-    console.error("[shutdown] timed out while draining requests");
+    logger.error("server.shutdown_timeout");
     process.exitCode = 1;
     server.closeAllConnections();
   }, 10_000);
@@ -40,11 +41,11 @@ const shutdown = (signal: string) => {
     clearTimeout(forceTimer);
     await prisma.$disconnect();
     if (error) {
-      console.error("[shutdown] server close failed", error);
+      logger.error("server.shutdown_failed", { error });
       process.exitCode = 1;
       return;
     }
-    console.log("[shutdown] complete");
+    logger.info("server.shutdown_complete");
   });
 };
 

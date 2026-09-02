@@ -2,6 +2,10 @@ import { Request } from "express";
 import jwt from "jsonwebtoken";
 import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 import { env } from "../config/env.js";
+import {
+  looksLikeSupabaseToken,
+  verifySupabaseAccessToken,
+} from "../lib/supabase-auth.js";
 
 /**
  * Rate limiting keyed by who is calling, not by where they are calling from.
@@ -43,7 +47,15 @@ const bearerToken = (req: Request): string | null => {
  * Returns null when the caller cannot be identified — an absent, malformed,
  * expired or forged token all land here, and all fall back to the IP bucket.
  */
-export const principalKey = (req: Request): string | null => {
+declare global {
+  namespace Express {
+    interface Request {
+      rateLimitPrincipal?: Promise<string | null>;
+    }
+  }
+}
+
+const findPrincipalKey = async (req: Request): Promise<string | null> => {
   // Populated when this runs after an auth middleware. Cheaper and more
   // authoritative than re-verifying, so it wins when it is available.
   if (req.user) {
@@ -56,12 +68,30 @@ export const principalKey = (req: Request): string | null => {
     return null;
   }
 
+  if (looksLikeSupabaseToken(token)) {
+    if (env.AUTH_PROVIDER === "legacy") return null;
+
+    try {
+      return `user:${await verifySupabaseAccessToken(token)}`;
+    } catch {
+      return null;
+    }
+  }
+
+  if (env.AUTH_PROVIDER === "supabase") return null;
+
   try {
     const payload = jwt.verify(token, env.JWT_SECRET) as { id?: string };
     return payload.id ? `user:${payload.id}` : null;
   } catch {
     return null;
   }
+};
+
+/** Resolve at most once per request; limit and keyGenerator share the result. */
+export const principalKey = (req: Request): Promise<string | null> => {
+  req.rateLimitPrincipal ??= findPrincipalKey(req);
+  return req.rateLimitPrincipal;
 };
 
 /**
@@ -73,11 +103,12 @@ export const principalKey = (req: Request): string | null => {
  */
 export const apiLimiter = rateLimit({
   windowMs: WINDOW_MS,
-  limit: (req) =>
-    principalKey(req) === null
+  limit: async (req) =>
+    (await principalKey(req)) === null
       ? env.RATE_LIMIT_ANONYMOUS
       : env.RATE_LIMIT_AUTHENTICATED,
-  keyGenerator: (req) => principalKey(req) ?? ipKeyGenerator(req.ip ?? ""),
+  keyGenerator: async (req) =>
+    (await principalKey(req)) ?? ipKeyGenerator(req.ip ?? ""),
   standardHeaders: "draft-7",
   legacyHeaders: false,
   message: { message: "Too many requests, please try again later", code: "RATE_LIMITED" },

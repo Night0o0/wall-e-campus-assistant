@@ -2,6 +2,7 @@ import { env } from "../config/env.js";
 import { notificationConfig } from "../config/notification.config.js";
 import { LectureNotificationService } from "../services/lecture-notification.service.js";
 import { NotificationDispatcher } from "../services/notification.dispatcher.js";
+import { logger } from "../utils/logger.js";
 
 /**
  * The reminder worker: two timers in the API process.
@@ -37,14 +38,12 @@ const generate = async () => {
     const result = await generator.generateUpcoming();
 
     if (result.created > 0) {
-      console.log(
-        `[notification-worker] generated ${result.created} reminder(s) from ${result.occurrences} upcoming occurrence(s)`
-      );
+      logger.info("notification_worker.generated", { ...result });
     }
   } catch (error) {
     // A failed pass is not fatal: the next one covers the same window, because
     // generation is driven by the horizon rather than by what it last did.
-    console.error("[notification-worker] generation failed", error);
+    logger.error("notification_worker.generation_failed", { error });
   } finally {
     generating = false;
   }
@@ -61,12 +60,10 @@ const deliver = async () => {
     const result = await dispatcher.tick();
 
     if (result.claimed > 0 || result.cancelled > 0) {
-      console.log(
-        `[notification-worker] sent ${result.sent}, failed ${result.failed}, retrying ${result.retrying}, cancelled ${result.cancelled}`
-      );
+      logger.info("notification_worker.dispatched", { ...result });
     }
   } catch (error) {
-    console.error("[notification-worker] delivery failed", error);
+    logger.error("notification_worker.delivery_failed", { error });
   } finally {
     delivering = false;
   }
@@ -74,7 +71,7 @@ const deliver = async () => {
 
 export const startNotificationWorker = () => {
   if (!env.NOTIFICATION_WORKER_ENABLED) {
-    console.log("[notification-worker] disabled (NOTIFICATION_WORKER_ENABLED=false)");
+    logger.info("notification_worker.disabled");
     return;
   }
 
@@ -89,13 +86,12 @@ export const startNotificationWorker = () => {
   deliveryTimer = setInterval(deliver, notificationConfig.pollIntervalMs);
   deliveryTimer.unref();
 
-  console.log(
-    `[notification-worker] started — generating every ${Math.round(
-      notificationConfig.generationIntervalMs / 1000
-    )}s over a ${notificationConfig.horizonMinutes}-minute horizon, delivering every ${Math.round(
-      notificationConfig.pollIntervalMs / 1000
-    )}s (${notificationConfig.timeZone})`
-  );
+  logger.info("notification_worker.started", {
+    generationIntervalMs: notificationConfig.generationIntervalMs,
+    deliveryIntervalMs: notificationConfig.pollIntervalMs,
+    horizonMinutes: notificationConfig.horizonMinutes,
+    timeZone: notificationConfig.timeZone,
+  });
 
   // A first pass on boot, so a restart does not leave a gap the length of the
   // interval. Errors are already contained inside both functions.

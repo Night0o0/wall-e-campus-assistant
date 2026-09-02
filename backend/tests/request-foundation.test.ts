@@ -8,6 +8,7 @@ import { materialQuerySchema } from "../src/types/material.types.js";
 import { metricsQuerySchema } from "../src/types/metrics.types.js";
 import { scheduleAttendanceLogQuerySchema } from "../src/types/schedule.types.js";
 import { AppError } from "../src/utils/AppError.js";
+import { sanitizeLogFields } from "../src/utils/logger.js";
 
 describe("request validation and stable errors", () => {
   it("rejects malformed UUID route parameters", () => {
@@ -45,6 +46,20 @@ describe("request validation and stable errors", () => {
       body: { code: "FORBIDDEN" },
     });
   });
+
+  it("redacts credentials from structured log fields", () => {
+    expect(
+      sanitizeLogFields({
+        requestId: "safe-id",
+        authorization: "Bearer secret",
+        password: "do-not-log",
+      })
+    ).toEqual({
+      requestId: "safe-id",
+      authorization: "[REDACTED]",
+      password: "[REDACTED]",
+    });
+  });
 });
 
 describe("public HTTP contract", () => {
@@ -67,6 +82,20 @@ describe("public HTTP contract", () => {
     const response = await fetch(`${baseUrl}/api/health`);
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toMatchObject({ status: "OK" });
+  });
+
+  it("returns and accepts safe request correlation ids", async () => {
+    const response = await fetch(`${baseUrl}/api/health`, {
+      headers: { "x-request-id": "release-smoke-42" },
+    });
+    expect(response.headers.get("x-request-id")).toBe("release-smoke-42");
+  });
+
+  it("replaces unsafe request correlation ids", async () => {
+    const response = await fetch(`${baseUrl}/api/health`, {
+      headers: { "x-request-id": "unsafe id with spaces" },
+    });
+    expect(response.headers.get("x-request-id")).toMatch(/^[0-9a-f-]{36}$/);
   });
 
   it("returns a stable 404 contract", async () => {

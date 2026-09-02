@@ -1,4 +1,10 @@
 {
+  "private": true,
+  "scripts": {
+    "check:secrets": "node scripts/check-secrets.mjs",
+    "check:production-env": "node scripts/validate-production-env.mjs",
+    "smoke:release": "node scripts/smoke-release.mjs"
+  },
   "devDependencies": {
     "typescript": "^5.8.3"
   }

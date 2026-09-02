@@ -2,3 +2,15 @@ node_modules/
 .claude/
 apps/web/test-results/
 apps/web/playwright-report/
+
+# Credentials and signing material must stay in the deployment secret store.
+**/.env
+**/.env.*
+!**/.env.example
+!**/.env.*.example
+**/google-services.json
+**/*.jks
+**/*.keystore
+**/*.p12
+**/*.pfx
+**/*.pem

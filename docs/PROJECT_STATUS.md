@@ -101,12 +101,34 @@ Connected mobile implementation and emulator verification completed:
   physical phone was available; the physical-device run is deferred to the
   pre-release checklist rather than blocking the mobile completion checkpoint
 
+Step 6 release-readiness implementation completed:
+
+- production boot refuses legacy/dual auth, placeholder release identity,
+  unsafe HTTP/localhost CORS, missing Supabase service credentials, logging
+  email, local sender domains and plaintext SMTP
+- SMTP uses pooled TLS connections and has a deployment-network preflight
+- push is explicitly deferred for the first release; notifications remain
+  available in-app with `PUSH_PROVIDER=none`
+- structured JSON request, error, worker, startup and shutdown logs include
+  release identity and correlation IDs; credential-shaped fields are redacted
+- the broad API limiter verifies Supabase sessions and allocates authenticated
+  users independent buckets, preserving lecture-hall traffic behind campus NAT
+- GitHub CI scans secrets, replays all migrations on empty PostgreSQL, checks
+  backend/web/mobile, audits production dependencies and builds all containers
+- Dependabot covers npm, Flutter/Dart and GitHub Actions weekly
+- separate immutable API runtime/migration images and a non-root SPA web image
+  are defined with health checks and an example release composition
+- production-environment validation and public API/database/web/CORS smoke tools
+  are implemented and pass locally
+- backup/restore, monitoring/alerts, worker ownership, deployment order,
+  rollback and final acceptance evidence are defined in `RELEASE_RUNBOOK.md`
+
 Verified:
 
 - backend Prisma schema validates
 - backend typecheck passes
 - backend source and test typechecks pass
-- backend tests pass: 495 tests in 39 files
+- backend tests pass: 500 tests in 39 files
 - web typecheck/production build passes
 - web tests pass: 28 tests in 7 files
 - rendered browser checks pass for public auth pages and every connected seeded role workflow
@@ -114,10 +136,16 @@ Verified:
 - mobile runtime walker covers 24 release-facing screens with zero findings
 - configured Android debug APK builds successfully
 
-Still outstanding:
+Release gates still requiring the target environment:
 
-- deployment, observability, security and release phases in `plan.txt`
-- recommended pre-release physical-device verification when a phone becomes
+- provision staging/production HTTPS, database/Supabase and SMTP credentials
+- run the new CI/container jobs on a Docker-enabled runner (Docker is not
+  installed on the current workstation)
+- receive a real SMTP test message and exercise registration/recovery delivery
+- connect the selected log/uptime service and prove alert delivery
+- create a real encrypted backup and pass an isolated restore rehearsal
+- run the authenticated staging role/account-state/QR matrix
+- complete the physical Android-device camera/QR smoke test when a phone is
   available
 
 ## What “finished” means
@@ -133,14 +161,12 @@ The project is considered finished only when all of the following are true:
 
 ## Remaining execution direction
 
-### Next — deployment, observability, security and release readiness
+### Next — target-environment staging and final release acceptance
 
-- configure production-style email and decide whether push notifications are in
-  the first release
-- complete security, reliability, monitoring and backup checks
-- add reproducible CI/CD and staging deployment
-- run final release smoke tests; include a physical Android device when one is
-  available
+- provision the external services and secrets listed in `RELEASE_RUNBOOK.md`
+- execute CI, migration, container deployment, SMTP and backup/restore gates
+- run authenticated staging and monitoring/alert checks
+- run the final physical-device smoke check, then record release evidence
 
 ## Scope guardrails
 
@@ -166,7 +192,6 @@ Reason:
 
 The next best practical step is:
 
-1. create the mobile completion checkpoint
-2. begin deployment, observability, security and release readiness
-3. include physical-device validation in the final pre-release smoke test when a
-   phone becomes available
+1. create the Step 6 release-readiness checkpoint
+2. provision and deploy the target staging environment using the runbook
+3. complete target-environment and physical-device acceptance before production

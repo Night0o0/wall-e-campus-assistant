@@ -11,6 +11,11 @@ const envSchema = z.object({
     .enum(["development", "test", "production"])
     .default("development"),
 
+  APP_VERSION: z.string().min(1).default("1.0.0"),
+  RELEASE_SHA: z.string().min(1).default("development"),
+  LOG_LEVEL: z.enum(["debug", "info", "warn", "error"]).default("info"),
+  TRUST_PROXY_HOPS: z.coerce.number().int().min(0).max(10).default(1),
+
   // No fallback: an empty signing key silently makes every token forgeable.
   JWT_SECRET: z.string().min(32, "JWT_SECRET must be at least 32 characters"),
 
@@ -28,6 +33,7 @@ const envSchema = z.object({
   SUPABASE_JWT_AUDIENCE: z.string().min(1).default("authenticated"),
 
   DATABASE_URL: z.string().min(1, "DATABASE_URL is required"),
+  DIRECT_URL: z.string().min(1, "DIRECT_URL is required"),
 
   /**
    * Whether a student may scan into a session with no lecture behind it.
@@ -192,6 +198,11 @@ const envSchema = z.object({
     .transform((value) => value === "true"),
   SMTP_USER: z.string().min(1).optional(),
   SMTP_PASSWORD: z.string().min(1).optional(),
+  /** Require STARTTLS when SMTP_SECURE=false. Keep true in production. */
+  SMTP_REQUIRE_TLS: z
+    .enum(["true", "false"])
+    .default("true")
+    .transform((value) => value === "true"),
 
   /* --------------------------- Email challenges --------------------------- */
 
@@ -303,6 +314,13 @@ if (parsed.data.MAIL_PROVIDER === "smtp" && !parsed.data.SMTP_HOST) {
   process.exit(1);
 }
 
+if (Boolean(parsed.data.SMTP_USER) !== Boolean(parsed.data.SMTP_PASSWORD)) {
+  console.error(
+    "\n❌ SMTP_USER and SMTP_PASSWORD must be configured together.\n"
+  );
+  process.exit(1);
+}
+
 /**
  * The logging provider is a development convenience. In production it would
  * print one-time codes into the server log and tell the caller they were sent,
@@ -314,6 +332,67 @@ if (isProduction && parsed.data.MAIL_PROVIDER === "log") {
     "\n❌ MAIL_PROVIDER=log is not permitted in production.\n" +
       "   Student email verification and password reset both depend on real\n" +
       "   delivery. Configure SMTP_HOST and set MAIL_PROVIDER=smtp.\n"
+  );
+  process.exit(1);
+}
+
+const productionIssues: string[] = [];
+
+if (isProduction) {
+  if (parsed.data.AUTH_PROVIDER !== "supabase") {
+    productionIssues.push("AUTH_PROVIDER must be supabase");
+  }
+  if (
+    !parsed.data.SUPABASE_SERVICE_ROLE_KEY ||
+    /^SET_/i.test(parsed.data.SUPABASE_SERVICE_ROLE_KEY)
+  ) {
+    productionIssues.push("SUPABASE_SERVICE_ROLE_KEY is required");
+  }
+  if (/^(?:development|SET_)/i.test(parsed.data.RELEASE_SHA)) {
+    productionIssues.push("RELEASE_SHA must identify the deployed revision");
+  }
+  if (/^(?:SET_|replace-me)/i.test(parsed.data.JWT_SECRET)) {
+    productionIssues.push("JWT_SECRET must not use the example placeholder");
+  }
+  if (
+    /^SET_/i.test(parsed.data.SUPABASE_PUBLISHABLE_KEY ?? "") ||
+    /\/\/PROJECT\./i.test(parsed.data.SUPABASE_URL ?? "")
+  ) {
+    productionIssues.push("Supabase settings must not use example placeholders");
+  }
+  if (
+    /^SET_/i.test(parsed.data.DATABASE_URL) ||
+    /^SET_/i.test(parsed.data.DIRECT_URL)
+  ) {
+    productionIssues.push("database URLs must not use example placeholders");
+  }
+  const unsafeOrigins = parsed.data.CORS_ORIGINS.split(",")
+    .map((origin) => origin.trim())
+    .filter(
+      (origin) =>
+        !origin.startsWith("https://") ||
+        origin.includes("localhost") ||
+        origin.includes("127.0.0.1")
+    );
+  if (unsafeOrigins.length > 0) {
+    productionIssues.push("CORS_ORIGINS must contain only deployed HTTPS origins");
+  }
+  if (/\.local(?:>|$)/i.test(parsed.data.MAIL_FROM)) {
+    productionIssues.push("MAIL_FROM must use a deliverable domain");
+  }
+  if (/^SET_/i.test(parsed.data.SMTP_HOST ?? "")) {
+    productionIssues.push("SMTP_HOST must not use the example placeholder");
+  }
+  if (!parsed.data.SMTP_REQUIRE_TLS && !parsed.data.SMTP_SECURE) {
+    productionIssues.push("SMTP must use implicit TLS or require STARTTLS");
+  }
+}
+
+if (productionIssues.length > 0) {
+  console.error(
+    `\n❌ Unsafe production configuration:\n${productionIssues
+      .map((issue) => `  - ${issue}`)
+      .join("\n")}\n`
   );
   process.exit(1);
 }

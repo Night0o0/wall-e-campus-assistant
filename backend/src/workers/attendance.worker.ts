@@ -1,6 +1,7 @@
 import { env } from "../config/env.js";
 import { attendanceConfig } from "../config/attendance.config.js";
 import { AttendanceLifecycleService } from "../services/attendance-lifecycle.service.js";
+import { logger } from "../utils/logger.js";
 
 /**
  * The attendance sweep: one timer in the API process.
@@ -32,17 +33,18 @@ const sweep = async () => {
     const { stale, absences } = await lifecycle.runSweep();
 
     if (stale.closed > 0 || absences.swept > 0) {
-      console.log(
-        `[attendance-worker] auto-closed ${stale.closed} stale session(s); ` +
-          `called the roll on ${absences.swept} (${absences.absencesCreated} absence(s), ` +
-          `${absences.unlinked} with no lecture behind them)`
-      );
+      logger.info("attendance_worker.swept", {
+        sessionsClosed: stale.closed,
+        sessionsSwept: absences.swept,
+        absencesCreated: absences.absencesCreated,
+        unlinkedSessions: absences.unlinked,
+      });
     }
   } catch (error) {
     // A failed pass is not fatal. Nothing is lost: the next pass selects on the
     // same two conditions, so whatever this one did not finish is simply still
     // outstanding.
-    console.error("[attendance-worker] sweep failed", error);
+    logger.error("attendance_worker.sweep_failed", { error });
   } finally {
     sweeping = false;
   }
@@ -50,10 +52,7 @@ const sweep = async () => {
 
 export const startAttendanceWorker = () => {
   if (!env.ATTENDANCE_WORKER_ENABLED) {
-    console.log(
-      "[attendance-worker] disabled (ATTENDANCE_WORKER_ENABLED=false) — " +
-        "no session will be auto-closed and no ABSENT row will be written"
-    );
+    logger.info("attendance_worker.disabled");
     return;
   }
 
@@ -65,11 +64,10 @@ export const startAttendanceWorker = () => {
   sweepTimer = setInterval(sweep, env.ATTENDANCE_SWEEP_INTERVAL_MS);
   sweepTimer.unref();
 
-  console.log(
-    `[attendance-worker] started — sweeping every ${Math.round(
-      env.ATTENDANCE_SWEEP_INTERVAL_MS / 1000
-    )}s, closing sessions ${attendanceConfig.staleGraceMinutes} minutes past their lecture`
-  );
+  logger.info("attendance_worker.started", {
+    sweepIntervalMs: env.ATTENDANCE_SWEEP_INTERVAL_MS,
+    staleGraceMinutes: attendanceConfig.staleGraceMinutes,
+  });
 
   // A first pass on boot, so a restart does not leave a gap the length of the
   // interval. Errors are already contained inside `sweep`.

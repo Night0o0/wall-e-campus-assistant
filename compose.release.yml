@@ -1,0 +1,32 @@
+services:
+  migrate:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+      target: migrate
+    env_file: backend/.env.production
+    restart: "no"
+
+  api:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+      target: runtime
+    env_file: backend/.env.production
+    ports:
+      - "5000:5000"
+    restart: unless-stopped
+    init: true
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        VITE_API_URL: ${VITE_API_URL:?Set VITE_API_URL}
+        VITE_SUPABASE_URL: ${VITE_SUPABASE_URL:?Set VITE_SUPABASE_URL}
+        VITE_SUPABASE_PUBLISHABLE_KEY: ${VITE_SUPABASE_PUBLISHABLE_KEY:?Set VITE_SUPABASE_PUBLISHABLE_KEY}
+    ports:
+      - "3000:8080"
+    restart: unless-stopped
+    init: true

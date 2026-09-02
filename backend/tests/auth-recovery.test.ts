@@ -234,7 +234,7 @@ describe("starting email verification", () => {
 
     expect(mail.sent).toHaveLength(1);
     expect(codeFrom(mail.sent[0])).toBeNull();
-    expect(mail.sent[0].subject).toContain("your Wall-E account");
+    expect(mail.sent[0].subject).toContain("your Leornian account");
   });
 
   it("treats the address case-insensitively", async () => {

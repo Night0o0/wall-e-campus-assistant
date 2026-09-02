@@ -22,12 +22,14 @@ import userRoutes from "./routes/user.routes.js";
 import metricsRoutes from "./routes/metrics.routes.js";
 import academicRoutes from "./routes/academic.routes.js";
 import { errorHandler, notFoundHandler } from "./middleware/error.middleware.js";
+import { requestObservability } from "./middleware/observability.middleware.js";
 
 const app = express();
 
-app.set("trust proxy", 1);
+app.set("trust proxy", env.TRUST_PROXY_HOPS);
 
 app.use(helmet());
+app.use(requestObservability);
 
 app.use(
   cors({

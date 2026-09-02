@@ -29,10 +29,10 @@ export const verificationEmail = (
   code: string,
   ttlMinutes: number
 ): Omit<MailMessage, "to"> => ({
-  subject: `${code} is your Wall-E verification code`,
+  subject: `${code} is your Leornian verification code`,
 
   text: [
-    "Your Wall-E verification code is:",
+    "Your Leornian verification code is:",
     "",
     `    ${code}`,
     "",
@@ -45,7 +45,7 @@ export const verificationEmail = (
   ].join("\n"),
 
   html: [
-    "<p>Your Wall-E verification code is:</p>",
+    "<p>Your Leornian verification code is:</p>",
     `<p style="font-size:28px;font-weight:700;letter-spacing:4px;margin:16px 0">${code}</p>`,
     `<p>It expires in ${ttlMinutes} ${plural(ttlMinutes)} and can be used once.</p>`,
     "<p>Enter it on the registration screen to confirm this address.</p>",
@@ -65,10 +65,10 @@ export const verificationEmail = (
  * inbox.
  */
 export const accountExistsEmail = (): Omit<MailMessage, "to"> => ({
-  subject: "About your Wall-E account",
+  subject: "About your Leornian account",
 
   text: [
-    "Somebody just started creating a Wall-E account with this email address.",
+    "Somebody just started creating a Leornian account with this email address.",
     "",
     "An account already exists here, so nothing was created and no code was",
     "issued. If it was you, sign in instead — or use \"Forgot password\" if you",
@@ -79,7 +79,7 @@ export const accountExistsEmail = (): Omit<MailMessage, "to"> => ({
   ].join("\n"),
 
   html: [
-    "<p>Somebody just started creating a Wall-E account with this email address.</p>",
+    "<p>Somebody just started creating a Leornian account with this email address.</p>",
     "<p>An account already exists here, so nothing was created and no code was issued. If it was you, sign in instead — or use &ldquo;Forgot password&rdquo; if you cannot remember your password.</p>",
     "<hr>",
     "<p style=\"color:#64748b;font-size:13px\">If it was not you, no action is needed. Nobody has gained access to your account, and this message is the only thing that happened.</p>",
@@ -96,12 +96,12 @@ export const accountExistsEmail = (): Omit<MailMessage, "to"> => ({
  * while still telling the person what to actually do.
  */
 export const staffResetUnavailableEmail = (): Omit<MailMessage, "to"> => ({
-  subject: "Resetting your Wall-E staff password",
+  subject: "Resetting your Leornian staff password",
 
   text: [
-    "A password reset was requested for this Wall-E staff account.",
+    "A password reset was requested for this Leornian staff account.",
     "",
-    "Staff passwords are not reset by email. Contact your university's Wall-E",
+    "Staff passwords are not reset by email. Contact your university's Leornian",
     "administrator, who can set a new password for you directly.",
     "",
     "If you did not ask for this, nothing has changed and your current password",
@@ -109,8 +109,8 @@ export const staffResetUnavailableEmail = (): Omit<MailMessage, "to"> => ({
   ].join("\n"),
 
   html: [
-    "<p>A password reset was requested for this Wall-E staff account.</p>",
-    "<p>Staff passwords are not reset by email. Contact your university&rsquo;s Wall-E administrator, who can set a new password for you directly.</p>",
+    "<p>A password reset was requested for this Leornian staff account.</p>",
+    "<p>Staff passwords are not reset by email. Contact your university&rsquo;s Leornian administrator, who can set a new password for you directly.</p>",
     "<hr>",
     "<p style=\"color:#64748b;font-size:13px\">If you did not ask for this, nothing has changed and your current password still works.</p>",
   ].join("\n"),
@@ -125,10 +125,10 @@ export const passwordResetEmail = (
   code: string,
   ttlMinutes: number
 ): Omit<MailMessage, "to"> => ({
-  subject: `${code} is your Wall-E password reset code`,
+  subject: `${code} is your Leornian password reset code`,
 
   text: [
-    "Your Wall-E password reset code is:",
+    "Your Leornian password reset code is:",
     "",
     `    ${code}`,
     "",
@@ -141,7 +141,7 @@ export const passwordResetEmail = (
   ].join("\n"),
 
   html: [
-    "<p>Your Wall-E password reset code is:</p>",
+    "<p>Your Leornian password reset code is:</p>",
     `<p style="font-size:28px;font-weight:700;letter-spacing:4px;margin:16px 0">${code}</p>`,
     `<p>It expires in ${ttlMinutes} ${plural(ttlMinutes)} and can be used once.</p>`,
     "<p>Enter it in the app to choose a new password.</p>",

@@ -9,6 +9,7 @@ import {
   PushNotificationProvider,
   getPushProvider,
 } from "./push/push.provider.js";
+import { logger } from "../utils/logger.js";
 
 const MINUTE_MS = 60_000;
 
@@ -123,13 +124,17 @@ export class NotificationDispatcher {
       await this.notifications.markFailed(notification.id, reason, lastChance);
 
       if (!lastChance) {
-        console.warn(
-          `[notification] delivery attempt ${notification.attempts} failed for ${notification.id}: ${reason}`
-        );
+        logger.warn("notification_worker.delivery_retry", {
+          notificationId: notification.id,
+          attempt: notification.attempts,
+          error,
+        });
       } else {
-        console.error(
-          `[notification] giving up on ${notification.id}: ${reason}`
-        );
+        logger.error("notification_worker.delivery_abandoned", {
+          notificationId: notification.id,
+          attempt: notification.attempts,
+          error,
+        });
       }
 
       return lastChance ? "failed" : "retrying";

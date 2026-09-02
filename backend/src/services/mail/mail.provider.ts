@@ -34,6 +34,7 @@ export interface MailResult {
 export interface MailProvider {
   readonly name: string;
   send(message: MailMessage): Promise<MailResult>;
+  verify?(): Promise<void>;
 }
 
 /**
@@ -70,9 +71,11 @@ export class SmtpMailProvider implements MailProvider {
   private transport(): Transporter {
     if (!this.transporter) {
       this.transporter = nodemailer.createTransport({
+        pool: true,
         host: env.SMTP_HOST,
         port: env.SMTP_PORT,
         secure: env.SMTP_SECURE,
+        requireTLS: env.SMTP_REQUIRE_TLS,
         auth: env.SMTP_USER
           ? { user: env.SMTP_USER, pass: env.SMTP_PASSWORD }
           : undefined,
@@ -98,6 +101,10 @@ export class SmtpMailProvider implements MailProvider {
     });
 
     return { delivered: true, detail: info.messageId };
+  }
+
+  async verify(): Promise<void> {
+    await this.transport().verify();
   }
 }
 

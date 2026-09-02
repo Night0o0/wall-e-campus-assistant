@@ -38,6 +38,7 @@ import {
   verifySupabaseAccessToken,
   verifySupabaseIdentity,
 } from "../src/lib/supabase-auth.js";
+import { principalKey } from "../src/utils/rate-limit.js";
 
 const ISSUER = `${env.SUPABASE_URL!.replace(/\/$/, "")}/auth/v1`;
 const AUDIENCE = env.SUPABASE_JWT_AUDIENCE;
@@ -250,5 +251,47 @@ describe("routing a token to the right verifier", () => {
   it("does not throw on garbage", () => {
     expect(looksLikeSupabaseToken("not-a-token")).toBe(false);
     expect(looksLikeSupabaseToken("")).toBe(false);
+  });
+});
+
+
+describe("production rate-limit identity", () => {
+  it("gives a verified Supabase user a principal bucket", async () => {
+    const previous = env.AUTH_PROVIDER;
+    env.AUTH_PROVIDER = "supabase";
+
+    try {
+      await expect(
+        principalKey({
+          headers: { authorization: `Bearer ${await makeToken()}` },
+        } as never)
+      ).resolves.toBe(`user:${SUBJECT}`);
+    } finally {
+      env.AUTH_PROVIDER = previous;
+    }
+  });
+
+  it("keeps a forged Supabase token in the anonymous IP bucket", async () => {
+    const previous = env.AUTH_PROVIDER;
+    env.AUTH_PROVIDER = "supabase";
+
+    try {
+      const other = await generateKeyPair("ES256");
+      const now = Math.floor(Date.now() / 1000);
+      const forged = await new SignJWT({})
+        .setProtectedHeader({ alg: "ES256" })
+        .setIssuer(ISSUER)
+        .setAudience(AUDIENCE)
+        .setSubject("attacker")
+        .setIssuedAt(now)
+        .setExpirationTime(now + 3600)
+        .sign(other.privateKey);
+
+      await expect(
+        principalKey({ headers: { authorization: `Bearer ${forged}` } } as never)
+      ).resolves.toBeNull();
+    } finally {
+      env.AUTH_PROVIDER = previous;
+    }
   });
 });

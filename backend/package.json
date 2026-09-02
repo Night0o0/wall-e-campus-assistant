@@ -23,7 +23,8 @@
     "verify:academic-api": "tsx scripts/verify-academic-api.ts",
     "verify:database": "tsx scripts/verify-live-database.ts",
     "verify:registration": "tsx scripts/verify-registration.ts",
-    "verify:web-session": "tsx scripts/verify-web-session.ts"
+    "verify:web-session": "tsx scripts/verify-web-session.ts",
+    "verify:mail": "tsx scripts/verify-mail.ts"
   },
   "keywords": [],
   "author": "",

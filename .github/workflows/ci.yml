@@ -1,0 +1,135 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  repository-security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+      - name: Scan tracked files for credentials
+        run: node scripts/check-secrets.mjs
+
+  backend:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: leornian_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d leornian_ci"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      NODE_ENV: test
+      JWT_SECRET: ci-only-signing-key-at-least-32-characters-long
+      AUTH_PROVIDER: legacy
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/leornian_ci
+      DIRECT_URL: postgresql://postgres:postgres@localhost:5432/leornian_ci
+      MAIL_PROVIDER: log
+      NOTIFICATION_WORKER_ENABLED: "false"
+      ATTENDANCE_WORKER_ENABLED: "false"
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - run: npm ci
+      - run: npx prisma generate
+      - name: Replay every migration on an empty database
+        run: npx prisma migrate deploy
+      - run: npx prisma validate
+      - run: npm run typecheck
+      - run: npm run typecheck:tests
+      - run: npm test
+      - run: npm run build
+      - name: Audit production dependencies
+        run: npm audit --omit=dev --omit=optional --audit-level=high
+
+  web:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/web
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm test
+      - run: npm run build
+      - name: Audit production dependencies
+        run: npm audit --omit=dev --audit-level=high
+
+  mobile:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/mobile
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.44.9
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - run: dart format --output=none --set-exit-if-changed lib test integration_test
+      - run: flutter analyze
+      - run: flutter test
+      - run: flutter build apk --debug
+
+  container-builds:
+    runs-on: ubuntu-latest
+    needs: [repository-security, backend, web, mobile]
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Build API runtime image
+        run: docker build --target runtime -f backend/Dockerfile -t leornian-api:ci .
+      - name: Build API migration image
+        run: docker build --target migrate -f backend/Dockerfile -t leornian-migrate:ci .
+      - name: Build web image
+        run: >-
+          docker build -f apps/web/Dockerfile
+          --build-arg VITE_API_URL=https://api.example.edu/api
+          --build-arg VITE_SUPABASE_URL=https://example.supabase.co
+          --build-arg VITE_SUPABASE_PUBLISHABLE_KEY=ci-public-placeholder
+          -t leornian-web:ci .
