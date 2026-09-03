@@ -48,6 +48,10 @@ jobs:
       NODE_ENV: test
       JWT_SECRET: ci-only-signing-key-at-least-32-characters-long
       AUTH_PROVIDER: legacy
+      # Unit tests exercise the guarded Supabase client without reaching a service.
+      SUPABASE_URL: https://ci.supabase.invalid
+      SUPABASE_PUBLISHABLE_KEY: ci-publishable-key
+      SUPABASE_SERVICE_ROLE_KEY: ci-service-role-key
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/leornian_ci
       DIRECT_URL: postgresql://postgres:postgres@localhost:5432/leornian_ci
       MAIL_PROVIDER: log
