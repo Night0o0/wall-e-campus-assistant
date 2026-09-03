@@ -215,9 +215,11 @@ class CampusApi implements CampusGateway {
     final response = await Supabase.instance.client.auth.signUp(
       email: normalizedEmail,
       password: password,
-      emailRedirectTo:
-          Uri(scheme: _deepLinkScheme, host: _registrationDeepLinkHost, path: '/complete')
-              .toString(),
+      emailRedirectTo: Uri(
+        scheme: _deepLinkScheme,
+        host: _registrationDeepLinkHost,
+        path: '/complete',
+      ).toString(),
       data: {
         'registration': jsonDecode(registration) as Map<String, dynamic>,
       },
