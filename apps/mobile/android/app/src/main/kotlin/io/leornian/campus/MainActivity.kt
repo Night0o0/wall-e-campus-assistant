@@ -1,4 +1,4 @@
-package com.walle.campus.wall_e_mobile
+package io.leornian.campus
 
 import io.flutter.embedding.android.FlutterActivity
 

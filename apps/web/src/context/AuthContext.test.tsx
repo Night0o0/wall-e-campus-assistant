@@ -131,4 +131,17 @@ describe('Supabase web session lifecycle', () => {
     expect(tokenStorage.clear).toHaveBeenCalled()
     expect(screen.getByText('anonymous')).toBeTruthy()
   })
+
+  it('clears a restored Supabase session that the backend rejects', async () => {
+    auth.getSession.mockResolvedValue({ data: { session } })
+    tokenStorage.get.mockReturnValue('access-token')
+    profile.mockRejectedValueOnce(new Error('This account registration was rejected'))
+
+    renderProvider()
+
+    await waitFor(() => expect(auth.signOut).toHaveBeenCalledTimes(1))
+    expect(tokenStorage.set).toHaveBeenCalledWith('access-token')
+    expect(tokenStorage.clear).toHaveBeenCalled()
+    expect(screen.getByText('anonymous')).toBeTruthy()
+  })
 })

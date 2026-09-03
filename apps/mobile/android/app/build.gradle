@@ -5,8 +5,48 @@ plugins {
     id "dev.flutter.flutter-gradle-plugin"
 }
 
+def releaseValue = { String name, String fallback = null ->
+    def envValue = System.getenv(name)
+    if (envValue != null && !envValue.trim().isEmpty()) return envValue.trim()
+
+    if (project.hasProperty(name)) {
+        def propertyValue = project.property(name)?.toString()?.trim()
+        if (propertyValue) return propertyValue
+    }
+
+    return fallback
+}
+
+def isReleaseTask = gradle.startParameter.taskNames.any { it.toLowerCase().contains("release") }
+def releaseStoreFile = releaseValue("LEORNIAN_UPLOAD_STORE_FILE")
+def releaseStorePassword = releaseValue("LEORNIAN_UPLOAD_STORE_PASSWORD")
+def releaseKeyAlias = releaseValue("LEORNIAN_UPLOAD_KEY_ALIAS")
+def releaseKeyPassword = releaseValue("LEORNIAN_UPLOAD_KEY_PASSWORD")
+def releaseWebDeepLinkHost = releaseValue("LEORNIAN_WEB_DEEP_LINK_HOST")
+def releaseSigningReady = [
+    releaseStoreFile,
+    releaseStorePassword,
+    releaseKeyAlias,
+    releaseKeyPassword,
+].every { it != null && !it.isBlank() }
+
+if (isReleaseTask && !releaseSigningReady) {
+    throw new GradleException(
+        "Release signing is not configured. Set LEORNIAN_UPLOAD_STORE_FILE, " +
+        "LEORNIAN_UPLOAD_STORE_PASSWORD, LEORNIAN_UPLOAD_KEY_ALIAS, and " +
+        "LEORNIAN_UPLOAD_KEY_PASSWORD through CI secrets or Gradle properties."
+    )
+}
+
+if (isReleaseTask && !releaseWebDeepLinkHost) {
+    throw new GradleException(
+        "Release HTTPS app links are not configured. Set LEORNIAN_WEB_DEEP_LINK_HOST " +
+        "to the production web hostname through CI secrets or Gradle properties."
+    )
+}
+
 android {
-    namespace = "com.walle.campus.wall_e_mobile"
+    namespace = "io.leornian.campus"
     compileSdk = 36
     // `jni` in the committed dependency graph requires NDK 28.2. Higher NDKs
     // remain backward-compatible with the other Android plugins.
@@ -22,21 +62,45 @@ android {
     }
 
     defaultConfig {
-        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = "com.walle.campus.wall_e_mobile"
-        // You can update the following values to match your application needs.
-        // For more information, see: https://flutter.dev/to/review-gradle-config.
+        applicationId = "io.leornian.campus"
         minSdkVersion = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        manifestPlaceholders = [
+            appLabel: "Leornian",
+            usesCleartextTraffic: "false",
+            deepLinkScheme: releaseValue("LEORNIAN_DEEP_LINK_SCHEME", "io.leornian.campus"),
+            registrationDeepLinkHost: releaseValue("LEORNIAN_REGISTRATION_DEEP_LINK_HOST", "register"),
+            recoveryDeepLinkHost: releaseValue("LEORNIAN_RECOVERY_DEEP_LINK_HOST", "reset-password"),
+            webDeepLinkHost: releaseWebDeepLinkHost ?: "invalid.example",
+        ]
+    }
+
+    signingConfigs {
+        if (releaseSigningReady) {
+            release {
+                storeFile file(releaseStoreFile)
+                storePassword releaseStorePassword
+                keyAlias releaseKeyAlias
+                keyPassword releaseKeyPassword
+            }
+        }
     }
 
     buildTypes {
+        debug {
+            manifestPlaceholders += [
+                usesCleartextTraffic: "true",
+            ]
+        }
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.debug
+            manifestPlaceholders += [
+                usesCleartextTraffic: "false",
+            ]
+            if (releaseSigningReady) {
+                signingConfig = signingConfigs.release
+            }
         }
     }
 }

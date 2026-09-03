@@ -64,12 +64,31 @@ Every pull request and main-branch push must pass `.github/workflows/ci.yml`:
 Dependabot checks npm, Dart/Flutter, and GitHub Actions dependencies weekly.
 Branch protection should require every CI job and at least one reviewer.
 
-The current backend audit has no high/critical runtime finding. It reports one
-moderate advisory in ExcelJS's transitive `uuid` package. The vulnerable UUID
-buffer API is not called by Leornian's export path, and the audit's proposed
-"fix" is a breaking downgrade of ExcelJS, so this is documented and monitored
-through Dependabot rather than forced into the release. Optional Prisma CLI
-dependencies are excluded from the runtime image and its production audit.
+The current backend audit has no high/critical runtime finding. As of
+September 3, 2026, the `qs` dependency is pinned to the patched `6.16.0`
+release through `backend/package.json` overrides. One moderate advisory remains
+in ExcelJS's transitive `uuid` package. The vulnerable UUID buffer API is not
+called by Leornian's export path, and the audit's proposed "fix" is a breaking
+downgrade of ExcelJS, so this residual risk is accepted with explicit review:
+
+- owner: backend maintainers
+- review date: October 3, 2026
+- control: keep Dependabot enabled, rerun `npm audit --omit=dev --omit=optional --audit-level=high` in CI, and revisit immediately if ExcelJS publishes a compatible fix
+
+Optional Prisma CLI dependencies are excluded from the runtime image and its
+production audit.
+
+## Platform boundary decision
+
+Decision recorded on September 3, 2026:
+
+- release 1 accepts `X-Client-Platform` as a first-party product boundary only
+- it is not treated as device attestation or a security-grade control
+- authorization, tenant scope, approval state, and resource permissions still
+  derive only from the verified database identity
+
+This expectation is tested in `backend/tests/client-platform.test.ts` and in
+the browser/mobile authentication suites.
 
 ## Backup and restore gate
 

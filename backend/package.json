@@ -46,6 +46,9 @@
     "nodemailer": "^9.0.5",
     "zod": "^3.25.67"
   },
+  "overrides": {
+    "qs": "6.16.0"
+  },
   "devDependencies": {
     "@types/bcrypt": "^5.0.2",
     "@types/cors": "^2.8.19",

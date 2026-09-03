@@ -3,16 +3,19 @@ import { loadEnv } from 'vite'
 
 const viteEnv = loadEnv('', process.cwd(), '')
 const baseURL = process.env.E2E_BASE_URL ?? 'http://127.0.0.1:4173'
-const supabaseUrl = process.env.E2E_SUPABASE_URL ?? viteEnv.VITE_SUPABASE_URL ?? ''
-const supabasePublishableKey =
-  process.env.E2E_SUPABASE_PUBLISHABLE_KEY ??
-  viteEnv.VITE_SUPABASE_PUBLISHABLE_KEY ??
-  ''
+const useSupabase = process.env.E2E_ENABLE_SUPABASE === '1'
+const supabaseUrl = useSupabase
+  ? process.env.E2E_SUPABASE_URL ?? viteEnv.VITE_SUPABASE_URL ?? ''
+  : ''
+const supabasePublishableKey = useSupabase
+  ? process.env.E2E_SUPABASE_PUBLISHABLE_KEY ??
+    viteEnv.VITE_SUPABASE_PUBLISHABLE_KEY ??
+    ''
+  : ''
 
 process.env.E2E_SUPABASE_URL = supabaseUrl
 process.env.E2E_SUPABASE_PUBLISHABLE_KEY = supabasePublishableKey
-process.env.E2E_AUTH_MODE =
-  process.env.E2E_AUTH_MODE ?? (supabaseUrl && supabasePublishableKey ? 'supabase' : 'legacy')
+process.env.E2E_AUTH_MODE = process.env.E2E_AUTH_MODE ?? 'legacy'
 
 export default defineConfig({
   testDir: './tests/e2e',

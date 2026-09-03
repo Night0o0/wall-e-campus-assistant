@@ -47,8 +47,8 @@ void main() {
       (tester) async {
     for (final email in [
       'owner@campus.edu',
-      'super@campus.edu',
-      'department@campus.edu',
+      'university-admin@campus.edu',
+      'department-admin@campus.edu',
       'instructor@campus.edu',
     ]) {
       await tester.pumpWidget(WallEApp(api: FakeCampusApi()));

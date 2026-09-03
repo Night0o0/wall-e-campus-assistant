@@ -105,6 +105,18 @@ class CampusApi implements CampusGateway {
   static const supabaseUrl = String.fromEnvironment('SUPABASE_URL');
   static const supabasePublishableKey =
       String.fromEnvironment('SUPABASE_PUBLISHABLE_KEY');
+  static const _deepLinkScheme = String.fromEnvironment(
+    'DEEP_LINK_SCHEME',
+    defaultValue: 'io.leornian.campus',
+  );
+  static const _registrationDeepLinkHost = String.fromEnvironment(
+    'REGISTRATION_DEEP_LINK_HOST',
+    defaultValue: 'register',
+  );
+  static const _recoveryDeepLinkHost = String.fromEnvironment(
+    'RECOVERY_DEEP_LINK_HOST',
+    defaultValue: 'reset-password',
+  );
   static bool get supabaseConfigured =>
       supabaseUrl.isNotEmpty && supabasePublishableKey.isNotEmpty;
 
@@ -203,7 +215,9 @@ class CampusApi implements CampusGateway {
     final response = await Supabase.instance.client.auth.signUp(
       email: normalizedEmail,
       password: password,
-      emailRedirectTo: 'io.leornian.campus://register/complete',
+      emailRedirectTo:
+          Uri(scheme: _deepLinkScheme, host: _registrationDeepLinkHost, path: '/complete')
+              .toString(),
       data: {
         'registration': jsonDecode(registration) as Map<String, dynamic>,
       },
@@ -340,7 +354,10 @@ class CampusApi implements CampusGateway {
     if (supabaseConfigured) {
       await Supabase.instance.client.auth.resetPasswordForEmail(
         email.trim().toLowerCase(),
-        redirectTo: 'io.leornian.campus://reset-password',
+        redirectTo: Uri(
+          scheme: _deepLinkScheme,
+          host: _recoveryDeepLinkHost,
+        ).toString(),
       );
       return;
     }

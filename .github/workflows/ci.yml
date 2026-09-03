@@ -89,8 +89,10 @@ jobs:
           cache: npm
           cache-dependency-path: apps/web/package-lock.json
       - run: npm ci
+      - run: npx playwright install --with-deps chromium
       - run: npm run lint
       - run: npm test
+      - run: npm run test:e2e
       - run: npm run build
       - name: Audit production dependencies
         run: npm audit --omit=dev --audit-level=high

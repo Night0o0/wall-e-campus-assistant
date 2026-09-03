@@ -1,4 +1,4 @@
-# Project status — September 2, 2026
+# Project status — September 3, 2026
 
 This file is the operational source of truth for the current project state.
 
@@ -122,6 +122,27 @@ Step 6 release-readiness implementation completed:
 - backup/restore, monitoring/alerts, worker ownership, deployment order,
   rollback and final acceptance evidence are defined in `RELEASE_RUNBOOK.md`
 
+Step 7 repository-controlled release-gap remediation completed on September 3, 2026. The final signed-artifact checks remain intentionally deferred until production configuration and owner-controlled signing material are available:
+
+- Playwright auth-boundary coverage now removes the obsolete student-web success
+  checks and instead verifies student-web rejection, rejected-session cleanup,
+  and direct requests to removed `/register` and `/attendance` web routes
+- the Playwright suite is deterministic, desktop-plus-responsive, and now runs
+  in `.github/workflows/ci.yml`
+- mobile widget coverage explicitly exercises all four staff roles as rejected
+  clients: system owner, university admin, department admin, and instructor
+- Android release config now reads application id, label, deep-link hosts and
+  signing material from CI/Gradle properties instead of the template defaults
+- release builds are HTTPS-only by default; local cleartext HTTP remains
+  debug-only
+- Android registration and recovery deep links are configurable for production
+- backend `qs` is pinned to patched `6.15.3` through npm overrides
+- the remaining ExcelJS transitive `uuid` advisory is documented with an owner
+  and October 3, 2026 review date
+- the platform-boundary decision is now explicit: release 1 accepts the
+  first-party client header as a product boundary, not security-grade device
+  attestation
+
 Verified:
 
 - backend Prisma schema validates
@@ -134,6 +155,13 @@ Verified:
 - mobile analysis and 13 widget/API tests pass
 - mobile runtime walker covers all 7 release-facing student screens with zero findings
 - configured Android debug APK builds successfully
+
+Still blocked on user-supplied release decisions before Step 7 can be fully closed end-to-end:
+
+- production API and Supabase URLs
+- production HTTPS web hostname for Android app links
+- signing-key generation, CI secret-manager storage, and owner-controlled encrypted backup
+- a real signed release AAB/APK build and signature verification using those values
 
 Release gates still requiring the target environment:
 
