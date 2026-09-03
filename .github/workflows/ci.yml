@@ -119,6 +119,13 @@ jobs:
       - run: dart format --output=none --set-exit-if-changed lib test integration_test
       - run: flutter analyze
       - run: flutter test
+      - name: Upload golden test failures
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mobile-golden-failures
+          path: apps/mobile/test/failures/
+          if-no-files-found: warn
       - run: flutter build apk --debug
 
   container-builds:
