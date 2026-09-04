@@ -68,6 +68,7 @@ android {
         versionCode = flutter.versionCode
         versionName = flutter.versionName
         manifestPlaceholders = [
+            applicationName: "android.app.Application",
             appLabel: "Leornian",
             usesCleartextTraffic: "false",
             deepLinkScheme: releaseValue("LEORNIAN_DEEP_LINK_SCHEME", "io.leornian.campus"),
