@@ -10,9 +10,43 @@ datasource db {
 
 enum UserRole {
   SYSTEM_OWNER
-  UNIVERSITY_SUPER_ADMIN
-  ADMIN
+  UNIVERSITY_ADMIN
+  DEPARTMENT_ADMIN
+  INSTRUCTOR
   STUDENT
+}
+
+enum AccountStatus {
+  PENDING
+  ACTIVE
+  REJECTED
+  DISABLED
+}
+
+enum TeachingRole {
+  LECTURER
+  TEACHING_ASSISTANT
+}
+
+enum GradeCategory {
+  ASSIGNMENT
+  QUIZ
+  COURSEWORK
+  MIDTERM
+  FINAL
+  OTHER
+}
+
+enum AuditAction {
+  CREATE
+  UPDATE
+  APPROVE
+  REJECT
+  DISABLE
+  ENABLE
+  DELETE
+  PUBLISH
+  UNPUBLISH
 }
 
 enum SessionStatus {
@@ -20,38 +54,39 @@ enum SessionStatus {
   CLOSED
 }
 
+/**
+ * Why a session stopped accepting scans. Null while it is still open.
+ * MANUAL is the instructor pressing close. AUTO_STALE is the sweep closing a
+ * session that outlived its lecture by more than the configured grace period —
+ * an instructor who walked out without closing. The two are recorded distinctly
+ * because they mean different things about the data: a manually closed session
+ * was watched to the end, an AUTO_STALE one was not, and anyone auditing a
+ * student's absence is entitled to know which.
+ */
+enum SessionCloseReason {
+  MANUAL
+  AUTO_STALE
+}
+
+/**
+ * What an Attendance row records.
+ * PRESENT and LATE are both written by a student scanning; the two are split by
+ * how long after attendance opened the scan arrived. ABSENT is different in
+ * kind: nobody scans to produce it, and it is written by the absence sweep and
+ * by nothing else — see AttendanceLifecycleService.
+ * Note what is NOT in this enum, and why it must never be added: "not recorded"
+ * and "pending". Neither is a fact about a student, so neither can be a row
+ * about one. They are states of a lecture occurrence — no session was ever
+ * opened, or one was opened and is still open past its end — and they are
+ * derived from the presence and status of a Session, never stored. Putting them
+ * here would make "we have no idea whether this student attended" and "this
+ * student did not attend" the same shape of claim, which is the one confusion
+ * the whole lifecycle exists to prevent.
+ */
 enum AttendanceStatus {
   PRESENT
   LATE
   ABSENT
-}
-
-enum SubscriptionStatus {
-  TRIAL
-  ACTIVE
-  PAST_DUE
-  CANCELLED
-  EXPIRED
-}
-
-enum BillingCycle {
-  MONTHLY
-  YEARLY
-}
-
-enum PaymentStatus {
-  PENDING
-  COMPLETED
-  FAILED
-  REFUNDED
-}
-
-enum InvoiceStatus {
-  DRAFT
-  SENT
-  PAID
-  OVERDUE
-  CANCELLED
 }
 
 enum ProfileStatus {
@@ -78,11 +113,37 @@ enum DayOfWeek {
  * What a notification is about. The lecture reminders are named after the lead
  * time they carry so a row is self-describing in the database; the lead times
  * themselves live in one place only — src/config/notification.config.ts.
+ * The ACCOUNT_* values carry no lecture: they are about the account itself, so
+ * `lectureScheduleId` and `occurrenceStartsAt` are null on those rows. That is
+ * what the nullable columns on Notification were declared for.
+ * One consequence worth stating, because it is a property of PostgreSQL rather
+ * than of this schema: the `notification_occurrence_identity` unique index
+ * cannot deduplicate them, since NULLs compare distinct in a unique index. The
+ * lecture generator relies on that index for idempotency; account notices rely
+ * instead on the fact that they are written inside the same transaction as the
+ * decision that causes them, and that decision is itself idempotent — an
+ * already-approved student is rejected before any write happens.
  */
 enum NotificationType {
-  LECTURE_ADMIN_24H
-  LECTURE_ADMIN_30M
+  LECTURE_INSTRUCTOR_24H
+  LECTURE_INSTRUCTOR_30M
   LECTURE_STUDENT_10M
+  ACCOUNT_APPROVED
+  ACCOUNT_REJECTED
+  ASSIGNMENT_PUBLISHED
+  ASSIGNMENT_DUE_SOON
+  GRADE_PUBLISHED
+}
+
+/**
+ * What a one-time code entitles its holder to do. Kept as two values rather
+ * than one flag because they are not interchangeable: a code mailed to prove an
+ * address must never be spendable to reset a password, and a reset code must
+ * never stand in for proof of a new address.
+ */
+enum EmailChallengePurpose {
+  EMAIL_VERIFICATION
+  PASSWORD_RESET
 }
 
 /**
@@ -114,139 +175,185 @@ enum ProfileDataSource {
 }
 
 model User {
-  id             String       @id @default(uuid())
-  universityId   String       @unique
-  fullName       String
-  email          String       @unique
-  passwordHash   String
-  role           UserRole     @default(STUDENT)
-  isVerified     Boolean      @default(false)
+  id            String        @id @default(uuid())
+  /// Identity in Supabase Auth. Nullable only during the custom-JWT cutover.
+  authUserId    String?       @unique
+  universityId  String        @unique
+  fullName      String
+  email         String        @unique
+  /// Transitional: removed after every account has moved to Supabase Auth.
+  passwordHash  String?
+  role          UserRole      @default(STUDENT)
+  accountStatus AccountStatus @default(ACTIVE)
+
+  /**
+   * Whether this account has been let in.
+   * A student registers themselves and lands here false — the default has
+   * always been false, and AuthService.register has never set it. What makes
+   * that mean something is `requireApproved` in auth.middleware.ts: an
+   * unapproved student can sign in and fill in their profile, and can do
+   * nothing else. Staff accounts are created by an administrator who has
+   * already decided, so they are written true at creation.
+   */
+  isVerified Boolean @default(false)
+
+  /// Who let them in, and when. Null on an account that was never pending —
+  /// staff — and on one still waiting. An approval is a decision somebody made
+  /// about somebody else, and a bare boolean cannot say who made it.
+  verifiedAt   DateTime?
+  verifiedById String?
+  verifiedBy   User?     @relation("StudentApprover", fields: [verifiedById], references: [id])
+
+  /// Students this user has approved. A back-relation only.
+  approvedStudents User[] @relation("StudentApprover")
+
   isActive       Boolean      @default(true)
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id])
+  departmentId   String?
+  department     Department?  @relation("DepartmentMembers", fields: [departmentId], references: [id])
 
-  studentProfile   StudentProfile?
-  adminProfile     AdminProfile?
-  createdSessions  Session[]         @relation("SessionCreator")
-  createdCourses   Course[]          @relation("CourseCreator")
-  attendances      Attendance[]      @relation("StudentAttendance")
-  lectureSchedules LectureSchedule[] @relation("ScheduleInstructor")
-  notifications    Notification[]
-  deviceTokens     DeviceToken[]
+  studentProfile      StudentProfile?
+  adminProfile        AdminProfile?
+  createdSessions     Session[]            @relation("SessionCreator")
+  createdCourses      Course[]             @relation("CourseCreator")
+  attendances         Attendance[]         @relation("StudentAttendance")
+  lectureSchedules    LectureSchedule[]    @relation("ScheduleInstructor")
+  teachingAssignments TeachingAssignment[] @relation("AssignedInstructor")
+  enrollments         Enrollment[]         @relation("StudentEnrollments")
+  notifications       Notification[]
+  deviceTokens        DeviceToken[]
+
+  createdAssignments Assignment[]      @relation("AssignmentCreator")
+  assignmentGrades   AssignmentGrade[] @relation("AssignmentGradeStudent")
+  gradedAssignments  AssignmentGrade[] @relation("AssignmentGrader")
+  studentGrades      StudentGrade[]    @relation("StudentGradeStudent")
+  gradedItems        StudentGrade[]    @relation("GradeItemGrader")
+  createdGradeItems  GradeItem[]       @relation("GradeItemCreator")
+  uploadedFiles      FileAsset[]       @relation("FileUploader")
+  auditEvents        AuditLog[]        @relation("AuditActor")
+
+  /// Course material links this user published. A back-relation only.
+  courseMaterials CourseMaterial[] @relation("MaterialAuthor")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([organizationId])
+  @@index([departmentId])
   @@index([role])
+  @@index([accountStatus])
   @@index([createdAt])
-}
-
-model SubscriptionPlan {
-  id           String   @id @default(uuid())
-  name         String   @unique
-  description  String?
-  monthlyPrice Decimal  @db.Decimal(10, 2)
-  yearlyPrice  Decimal  @db.Decimal(10, 2)
-  maxUsers     Int
-  maxRobots    Int
-  maxCourses   Int
-  features     Json?
-  isActive     Boolean  @default(true)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-
-  subscriptions Subscription[]
+  @@index([verifiedById])
 }
 
 model Organization {
-  id             String        @id @default(uuid())
-  name           String
-  code           String        @unique
-  email          String?
-  phone          String?
-  website        String?
-  logo           String?
-  address        String?
-  subscriptionId String?       @unique
-  subscription   Subscription? @relation(fields: [subscriptionId], references: [id])
-  createdAt      DateTime      @default(now())
-  updatedAt      DateTime      @updatedAt
+  id        String   @id @default(uuid())
+  name      String
+  code      String   @unique
+  email     String?
+  phone     String?
+  website   String?
+  logo      String?
+  address   String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  users            User[]
-  sessions         Session[]
-  courses          Course[]
-  payments         Payment[]
-  invoices         Invoice[]
-  lectureSchedules LectureSchedule[]
-  notifications    Notification[]
-  deviceTokens     DeviceToken[]
+  users               User[]
+  sessions            Session[]
+  courses             Course[]
+  lectureSchedules    LectureSchedule[]
+  notifications       Notification[]
+  deviceTokens        DeviceToken[]
+  courseMaterials     CourseMaterial[]
+  departments         Department[]
+  academicTerms       AcademicTerm[]
+  cohorts             Cohort[]
+  courseOfferings     CourseOffering[]
+  teachingAssignments TeachingAssignment[]
+  enrollments         Enrollment[]
+  assignments         Assignment[]
+  gradeItems          GradeItem[]
+  files               FileAsset[]
+  auditLogs           AuditLog[]
 
   @@index([createdAt])
 }
 
-model Subscription {
-  id                 String             @id @default(uuid())
-  planId             String
-  plan               SubscriptionPlan   @relation(fields: [planId], references: [id])
-  status             SubscriptionStatus @default(TRIAL)
-  billingCycle       BillingCycle       @default(MONTHLY)
-  currentPeriodStart DateTime           @default(now())
-  currentPeriodEnd   DateTime
-  trialEndsAt        DateTime?
-  cancelledAt        DateTime?
-  createdAt          DateTime           @default(now())
-  updatedAt          DateTime           @updatedAt
+/// A real authorization boundary. Department names are no longer relied on as
+/// free text when deciding which students, staff, courses, or grades a user may
+/// access.
+model Department {
+  id             String       @id @default(uuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  code           String
+  name           String
+  isActive       Boolean      @default(true)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
 
-  organization Organization?
+  members          User[]            @relation("DepartmentMembers")
+  courses          Course[]
+  cohorts          Cohort[]
+  courseOfferings  CourseOffering[]
+  lectureSchedules LectureSchedule[]
+  courseMaterials  CourseMaterial[]
+  assignments      Assignment[]
+  gradeItems       GradeItem[]
 
-  @@index([planId])
-  @@index([status])
+  @@unique([organizationId, code])
+  @@unique([organizationId, name])
+  @@index([organizationId, isActive])
 }
 
-model Payment {
-  id             String        @id @default(uuid())
+model AcademicTerm {
+  id             String       @id @default(uuid())
   organizationId String
-  organization   Organization  @relation(fields: [organizationId], references: [id])
-  amount         Decimal       @db.Decimal(10, 2)
-  currency       String        @default("USD")
-  status         PaymentStatus @default(PENDING)
-  paymentMethod  String?
-  transactionId  String?       @unique
-  description    String?
-  paidAt         DateTime?
-  createdAt      DateTime      @default(now())
-  updatedAt      DateTime      @updatedAt
-  invoice        Invoice?      @relation(fields: [invoiceId], references: [id])
-  invoiceId      String?
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  name           String
+  academicYear   String
+  semester       Int
+  startsOn       DateTime     @db.Date
+  endsOn         DateTime     @db.Date
+  isCurrent      Boolean      @default(false)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
 
-  @@index([organizationId])
-  @@index([status])
-  @@index([paidAt])
-  @@index([invoiceId])
+  offerings CourseOffering[]
+
+  @@unique([organizationId, academicYear, semester])
+  @@index([organizationId, isCurrent])
 }
 
-model Invoice {
-  id             String        @id @default(uuid())
+/// A stable student group inside one department and academic year. Enrollments
+/// connect a student to concrete course offerings; this model supplies the
+/// timetable/material targeting address shared by a section or group.
+model Cohort {
+  id             String       @id @default(uuid())
   organizationId String
-  organization   Organization  @relation(fields: [organizationId], references: [id])
-  invoiceNumber  String        @unique
-  amount         Decimal       @db.Decimal(10, 2)
-  tax            Decimal       @default(0) @db.Decimal(10, 2)
-  total          Decimal       @db.Decimal(10, 2)
-  currency       String        @default("USD")
-  status         InvoiceStatus @default(DRAFT)
-  dueDate        DateTime
-  paidAt         DateTime?
-  notes          String?
-  createdAt      DateTime      @default(now())
-  updatedAt      DateTime      @updatedAt
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  departmentId   String
+  department     Department   @relation(fields: [departmentId], references: [id], onDelete: Restrict)
+  name           String
+  academicYear   String
+  level          Int
+  section        String?
+  groupName      String?
+  isActive       Boolean      @default(true)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
 
-  payments Payment[]
+  students            StudentProfile[]
+  offeringTargets     CourseOfferingCohort[]
+  teachingAssignments TeachingAssignment[]
+  lectureSchedules    LectureSchedule[]
+  courseMaterials     CourseMaterial[]
+  assignmentTargets   AssignmentCohort[]
 
-  @@index([organizationId])
-  @@index([status])
-  @@index([dueDate])
+  @@unique([departmentId, academicYear, level, section, groupName])
+  @@index([organizationId, isActive])
+  @@index([departmentId, level])
 }
 
 /**
@@ -270,6 +377,8 @@ model StudentProfile {
   section      String?
   groupName    String?
   academicYear String?
+  cohortId     String?
+  cohort       Cohort? @relation(fields: [cohortId], references: [id], onDelete: SetNull)
 
   // Personal
   phoneNumber String?
@@ -291,6 +400,7 @@ model StudentProfile {
   updatedAt DateTime @updatedAt
 
   @@index([status])
+  @@index([cohortId])
   @@index([nationalId])
   @@index([externalStudentId])
 }
@@ -311,6 +421,8 @@ model Course {
   description      String?
   semester         String
   department       String?
+  departmentId     String?
+  departmentRecord Department?       @relation(fields: [departmentId], references: [id], onDelete: Restrict)
   credits          Int?
   createdById      String
   createdBy        User              @relation("CourseCreator", fields: [createdById], references: [id])
@@ -318,35 +430,168 @@ model Course {
   organization     Organization      @relation(fields: [organizationId], references: [id])
   sessions         Session[]
   lectureSchedules LectureSchedule[]
+  materials        CourseMaterial[]
+  offerings        CourseOffering[]
   createdAt        DateTime          @default(now())
   updatedAt        DateTime          @updatedAt
 
   @@unique([courseCode, organizationId])
   @@index([organizationId])
+  @@index([departmentId])
   @@index([createdById])
 }
 
+/// A catalog course delivered in one concrete term by a department. Teaching,
+/// enrollment, assignments, materials, grades, and timetable rows attach here
+/// instead of treating a recurring timetable row as the assignment itself.
+model CourseOffering {
+  id             String       @id @default(uuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  departmentId   String
+  department     Department   @relation(fields: [departmentId], references: [id], onDelete: Restrict)
+  courseId       String
+  course         Course       @relation(fields: [courseId], references: [id], onDelete: Restrict)
+  termId         String
+  term           AcademicTerm @relation(fields: [termId], references: [id], onDelete: Restrict)
+  displayName    String?
+  isActive       Boolean      @default(true)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  cohorts             CourseOfferingCohort[]
+  teachingAssignments TeachingAssignment[]
+  enrollments         Enrollment[]
+  lectureSchedules    LectureSchedule[]
+  materials           CourseMaterial[]
+  assignments         Assignment[]
+  gradeItems          GradeItem[]
+
+  @@unique([courseId, termId, departmentId])
+  @@index([organizationId, isActive])
+  @@index([departmentId, termId])
+}
+
+model CourseOfferingCohort {
+  offeringId String
+  offering   CourseOffering @relation(fields: [offeringId], references: [id], onDelete: Cascade)
+  cohortId   String
+  cohort     Cohort         @relation(fields: [cohortId], references: [id], onDelete: Cascade)
+
+  @@id([offeringId, cohortId])
+  @@index([cohortId])
+}
+
+model TeachingAssignment {
+  id             String         @id @default(uuid())
+  organizationId String
+  organization   Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  offeringId     String
+  offering       CourseOffering @relation(fields: [offeringId], references: [id], onDelete: Cascade)
+  instructorId   String
+  instructor     User           @relation("AssignedInstructor", fields: [instructorId], references: [id], onDelete: Restrict)
+  cohortId       String?
+  cohort         Cohort?        @relation(fields: [cohortId], references: [id], onDelete: SetNull)
+  teachingRole   TeachingRole   @default(LECTURER)
+  isActive       Boolean        @default(true)
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  schedules LectureSchedule[]
+
+  @@unique([offeringId, instructorId, cohortId, teachingRole])
+  @@index([organizationId, instructorId, isActive])
+  @@index([offeringId, isActive])
+}
+
+model Enrollment {
+  id             String         @id @default(uuid())
+  organizationId String
+  organization   Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  offeringId     String
+  offering       CourseOffering @relation(fields: [offeringId], references: [id], onDelete: Cascade)
+  studentId      String
+  student        User           @relation("StudentEnrollments", fields: [studentId], references: [id], onDelete: Cascade)
+  enrolledAt     DateTime       @default(now())
+  isActive       Boolean        @default(true)
+
+  @@unique([offeringId, studentId])
+  @@index([organizationId, studentId, isActive])
+  @@index([offeringId, isActive])
+}
+
+/**
+ * One attendance-taking occurrence: an admin opens it, students scan into it,
+ * it closes. Not to be confused with LectureSchedule, which is the standing
+ * weekly plan behind it.
+ * `lectureScheduleId` is the link between the two, and it is nullable in both
+ * directions of meaning: a session may be opened ad hoc for something that has
+ * no timetable entry at all, and every session that existed before this column
+ * did carries null. Nothing may assume it is set.
+ * `room` is where attendance was actually taken. It is copied from the linked
+ * schedule when the session is opened and never re-read afterwards — the same
+ * reasoning as Notification.title/body: this is a record of an occurrence, and
+ * moving next term's lecture to another room must not rewrite where last
+ * week's attendance happened. It is a column here rather than a join through
+ * the schedule because an ad-hoc session in B-204 has a room but no timetable
+ * entry.
+ */
 model Session {
-  id             String        @id @default(uuid())
+  id             String       @id @default(uuid())
   title          String
   createdById    String
-  createdBy      User          @relation("SessionCreator", fields: [createdById], references: [id])
+  createdBy      User         @relation("SessionCreator", fields: [createdById], references: [id])
   courseId       String?
-  course         Course?       @relation(fields: [courseId], references: [id])
+  course         Course?      @relation(fields: [courseId], references: [id])
   organizationId String
-  organization   Organization  @relation(fields: [organizationId], references: [id])
-  qrSecret       String        @default(uuid())
-  status         SessionStatus @default(ACTIVE)
-  startTime      DateTime      @default(now())
-  endTime        DateTime?
-  attendances    Attendance[]
-  createdAt      DateTime      @default(now())
+  organization   Organization @relation(fields: [organizationId], references: [id])
+
+  /// The timetable entry this occurrence belongs to, when it has one.
+  /// SET NULL rather than CASCADE on delete: schedules are soft-deleted and
+  /// never removed, but if one ever were, taking historical attendance records
+  /// down with it would be data loss. The session survives, merely unlinked.
+  lectureScheduleId String?
+  lectureSchedule   LectureSchedule? @relation(fields: [lectureScheduleId], references: [id], onDelete: SetNull)
+
+  /// Where attendance was taken. Stamped at open time; compared
+  /// case-insensitively, like every other free-text room in this schema.
+  room String?
+
+  qrSecret  String        @default(uuid())
+  status    SessionStatus @default(ACTIVE)
+  startTime DateTime      @default(now())
+  endTime   DateTime?
+
+  /// Set when `status` becomes CLOSED, and never afterwards. Null on an open
+  /// session, which is what makes "closed" and "closed by whom" one fact.
+  closeReason SessionCloseReason?
+
+  /**
+   * When the absence sweep finished calling the roll for this session.
+   * This column is the idempotency key of the ABSENT sweep. The unique
+   * constraint on Attendance already makes a duplicate row impossible, but this
+   * is what stops the sweep re-resolving a cohort it has already resolved, and
+   * it is the auditable record that the roll was called at all — an absence is
+   * a claim about somebody, and "we never checked" must be distinguishable from
+   * "we checked and they were there".
+   * Null on every open session, and on every closed one whose roll is still
+   * outstanding. Never cleared once set.
+   */
+  absencesSweptAt DateTime?
+
+  attendances Attendance[]
+  createdAt   DateTime     @default(now())
 
   @@index([organizationId])
   @@index([createdById])
   @@index([courseId])
   @@index([status])
   @@index([createdAt])
+  @@index([lectureScheduleId])
+  /// Fast lookup for the open sessions of one university.
+  @@index([organizationId, status])
+  /// The sweep's two queries: sessions still open, and closed rolls not yet called.
+  @@index([status, absencesSweptAt])
 }
 
 model Attendance {
@@ -387,6 +632,17 @@ model LectureSchedule {
   instructorId String
   instructor   User   @relation("ScheduleInstructor", fields: [instructorId], references: [id])
 
+  /// Normalized links used by the new authorization model. Nullable during
+  /// cutover while legacy timetable rows are backfilled.
+  departmentId         String?
+  departmentRecord     Department?         @relation(fields: [departmentId], references: [id], onDelete: Restrict)
+  cohortId             String?
+  cohort               Cohort?             @relation(fields: [cohortId], references: [id], onDelete: SetNull)
+  offeringId           String?
+  offering             CourseOffering?     @relation(fields: [offeringId], references: [id], onDelete: SetNull)
+  teachingAssignmentId String?
+  teachingAssignment   TeachingAssignment? @relation(fields: [teachingAssignmentId], references: [id], onDelete: SetNull)
+
   // Academic address. Mirrors StudentProfile's fields, including its
   // free-text faculty/department/section.
   faculty    String
@@ -409,10 +665,18 @@ model LectureSchedule {
 
   notifications Notification[]
 
+  /// The attendance-taking occurrences opened against this weekly slot.
+  /// A back-relation only — the column lives on Session.
+  sessions Session[]
+
   @@index([organizationId])
   @@index([courseId])
   @@index([instructorId])
   @@index([department])
+  @@index([departmentId])
+  @@index([cohortId])
+  @@index([offeringId])
+  @@index([teachingAssignmentId])
   @@index([level])
   @@index([semester])
   @@index([section])
@@ -427,18 +691,15 @@ model LectureSchedule {
 
 /**
  * One reminder aimed at one person for one lecture occurrence.
- *
  * There is no LectureOccurrence table: a LectureSchedule is a recurring weekly
  * slot, and the concrete "Sunday 12 October, 12:00" instant it produces is
  * carried here as `occurrenceStartsAt`. That single column is what turns a
  * repeating lecture into something a reminder can be deduplicated against —
  * see the unique constraint below — without a second scheduling model.
- *
  * `scheduledFor` is when the reminder should go out (occurrence start minus the
  * rule's lead time); `occurrenceStartsAt` is when the lecture itself begins.
  * The pair is kept separate so a lead time can be changed later without losing
  * the identity of the occurrence already notified about.
- *
  * `title`/`body` are rendered once, at generation time, and stored — a reminder
  * has to read the same in the notification tray as it did when it was sent,
  * even if the room or the course name is edited afterwards.
@@ -521,4 +782,308 @@ model DeviceToken {
 
   @@index([userId, isActive])
   @@index([organizationId])
+}
+
+/**
+ * A link to where a course's material actually lives — in practice a Google
+ * Drive folder the instructor maintains.
+ * The file is not stored here and is not proxied through this API. The value of
+ * this table is the *addressing*: answering "which folder is this student's
+ * second-year Data Structures material in" without the student having to be
+ * told, and without every instructor emailing a link round at the start of term.
+ * ── Why the cohort is copied rather than pointed at ──────────────────────────
+ * A material belongs to a course AND to an audience, because the same subject
+ * is taught to more than one year, and each year gets its own folder. That
+ * audience is the academic address, stored as plain columns exactly as
+ * LectureSchedule and StudentProfile store it — the three have to be comparable
+ * field for field, and there is still no normalized Faculty/Department model to
+ * point at.
+ * It deliberately does NOT hang off a lectureScheduleId. A course is often
+ * taught to one cohort across several timetable rows — a lecture and a lab, two
+ * different days — and a link attached to one of those rows would be invisible
+ * from the other. The student's question is "where is the material for this
+ * subject", not "for this Tuesday slot". Instructors still choose the cohort by
+ * picking one of their own lectures in the UI; the service copies the address
+ * off it, and it is the address that is stored.
+ * ── section ──────────────────────────────────────────────────────────────────
+ * Nullable, and the only nullable part of the address. Null means "every
+ * section of this faculty/department/level/semester", which is the common case:
+ * an instructor teaching sections A, B and C from one folder adds one row, not
+ * three. A non-null section narrows the link to that section alone, for the
+ * occasional per-section folder. See CourseMaterialService for the matching.
+ * ── driveUrl ─────────────────────────────────────────────────────────────────
+ * An untrusted string typed by a member of staff, validated at the edge to be
+ * https and to point at Google Drive — see types/material.types.ts. Note what
+ * this system cannot enforce: the folder's own sharing permissions live in
+ * Google, not here. A folder set to "anyone with the link" is readable by anyone
+ * who obtains the link, whatever this table says about who may read the row.
+ */
+model CourseMaterial {
+  id             String       @id @default(uuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+
+  courseId String
+  course   Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  departmentId     String?
+  departmentRecord Department?     @relation(fields: [departmentId], references: [id], onDelete: Restrict)
+  cohortId         String?
+  cohort           Cohort?         @relation(fields: [cohortId], references: [id], onDelete: SetNull)
+  offeringId       String?
+  offering         CourseOffering? @relation(fields: [offeringId], references: [id], onDelete: SetNull)
+
+  // The audience. Mirrors LectureSchedule's academic address, minus the
+  // day/time — material is not tied to a slot.
+  faculty    String
+  department String
+  level      Int
+  /// 1 = First Semester, 2 = Second Semester.
+  semester   Int
+  /// Null = every section of the cohort above.
+  section    String?
+
+  /// What the link is called in the list: "Lectures", "Labs", "Past papers".
+  title    String
+  driveUrl String
+  fileId   String?
+  file     FileAsset? @relation(fields: [fileId], references: [id], onDelete: SetNull)
+
+  addedById String
+  addedBy   User   @relation("MaterialAuthor", fields: [addedById], references: [id])
+
+  /// Soft delete, like LectureSchedule. A link removed mid-term should stop
+  /// appearing without erasing the record that it was published.
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([organizationId])
+  @@index([courseId])
+  @@index([departmentId])
+  @@index([cohortId])
+  @@index([offeringId])
+  @@index([fileId])
+  @@index([addedById])
+  /// The student lookup: every column it filters on, in order.
+  @@index([organizationId, isActive, faculty, department, level, semester])
+}
+
+/// Metadata for files stored in a private object-storage bucket. The database
+/// never stores the file bytes or a permanent public URL.
+model FileAsset {
+  id             String       @id @default(uuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  uploadedById   String
+  uploadedBy     User         @relation("FileUploader", fields: [uploadedById], references: [id], onDelete: Restrict)
+  bucket         String
+  objectPath     String
+  originalName   String
+  mimeType       String
+  sizeBytes      BigInt
+  checksum       String?
+  createdAt      DateTime     @default(now())
+
+  materials       CourseMaterial[]
+  assignmentFiles AssignmentAttachment[]
+
+  @@unique([bucket, objectPath])
+  @@index([organizationId, uploadedById])
+}
+
+model Assignment {
+  id             String         @id @default(uuid())
+  organizationId String
+  organization   Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  departmentId   String
+  department     Department     @relation(fields: [departmentId], references: [id], onDelete: Restrict)
+  offeringId     String
+  offering       CourseOffering @relation(fields: [offeringId], references: [id], onDelete: Cascade)
+  createdById    String
+  createdBy      User           @relation("AssignmentCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  title          String
+  description    String?
+  deadline       DateTime
+  maxScore       Decimal        @db.Decimal(8, 2)
+  isPublished    Boolean        @default(false)
+  publishedAt    DateTime?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  cohorts     AssignmentCohort[]
+  attachments AssignmentAttachment[]
+  grades      AssignmentGrade[]
+  gradeItem   GradeItem?
+
+  @@index([organizationId, deadline])
+  @@index([departmentId, deadline])
+  @@index([offeringId, isPublished, deadline])
+  @@index([createdById])
+}
+
+model AssignmentCohort {
+  assignmentId String
+  assignment   Assignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  cohortId     String
+  cohort       Cohort     @relation(fields: [cohortId], references: [id], onDelete: Cascade)
+
+  @@id([assignmentId, cohortId])
+  @@index([cohortId])
+}
+
+model AssignmentAttachment {
+  id           String     @id @default(uuid())
+  assignmentId String
+  assignment   Assignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  fileId       String
+  file         FileAsset  @relation(fields: [fileId], references: [id], onDelete: Restrict)
+  sortOrder    Int        @default(0)
+
+  @@unique([assignmentId, fileId])
+  @@index([fileId])
+}
+
+model AssignmentGrade {
+  id           String     @id @default(uuid())
+  assignmentId String
+  assignment   Assignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  studentId    String
+  student      User       @relation("AssignmentGradeStudent", fields: [studentId], references: [id], onDelete: Cascade)
+  score        Decimal    @db.Decimal(8, 2)
+  feedback     String?
+  gradedById   String
+  gradedBy     User       @relation("AssignmentGrader", fields: [gradedById], references: [id], onDelete: Restrict)
+  gradedAt     DateTime   @default(now())
+  publishedAt  DateTime?
+
+  @@unique([assignmentId, studentId])
+  @@index([studentId, publishedAt])
+  @@index([gradedById])
+}
+
+model GradeItem {
+  id             String         @id @default(uuid())
+  organizationId String
+  organization   Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  departmentId   String
+  department     Department     @relation(fields: [departmentId], references: [id], onDelete: Restrict)
+  offeringId     String
+  offering       CourseOffering @relation(fields: [offeringId], references: [id], onDelete: Cascade)
+  createdById    String
+  createdBy      User           @relation("GradeItemCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  assignmentId   String?        @unique
+  assignment     Assignment?    @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  category       GradeCategory
+  name           String
+  maxScore       Decimal        @db.Decimal(8, 2)
+  weight         Decimal?       @db.Decimal(5, 2)
+  isPublished    Boolean        @default(false)
+  publishedAt    DateTime?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  grades StudentGrade[]
+
+  @@index([organizationId, offeringId])
+  @@index([departmentId, category])
+  @@index([createdById])
+}
+
+model StudentGrade {
+  id          String    @id @default(uuid())
+  gradeItemId String
+  gradeItem   GradeItem @relation(fields: [gradeItemId], references: [id], onDelete: Cascade)
+  studentId   String
+  student     User      @relation("StudentGradeStudent", fields: [studentId], references: [id], onDelete: Cascade)
+  score       Decimal   @db.Decimal(8, 2)
+  feedback    String?
+  gradedById  String
+  gradedBy    User      @relation("GradeItemGrader", fields: [gradedById], references: [id], onDelete: Restrict)
+  gradedAt    DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@unique([gradeItemId, studentId])
+  @@index([studentId])
+  @@index([gradedById])
+}
+
+model AuditLog {
+  id             String       @id @default(uuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  actorId        String?
+  actor          User?        @relation("AuditActor", fields: [actorId], references: [id], onDelete: SetNull)
+  action         AuditAction
+  resourceType   String
+  resourceId     String
+  metadata       Json?
+  ipAddress      String?
+  createdAt      DateTime     @default(now())
+
+  @@index([organizationId, createdAt])
+  @@index([resourceType, resourceId])
+  @@index([actorId, createdAt])
+}
+
+/**
+ * A one-time code mailed to an address, and the only record that the address
+ * was ever proven.
+ * ── Why this table is keyed by email and not by user ────────────────────────
+ * At registration there is no user yet. The address is verified *before* the
+ * account exists, so that a failed or abandoned signup leaves nothing behind —
+ * no half-made User row holding the unique claim on an email address or a
+ * university ID that somebody else may legitimately need. Password reset could
+ * have carried a userId, but giving the two purposes different shapes would
+ * mean two code paths for issuing, throttling and burning codes, and the
+ * throttle in particular has to count both purposes together or it is not a
+ * throttle at all.
+ * ── What is stored, and what is not ────────────────────────────────────────
+ * The code itself is never stored. `codeHash` is bcrypt over it, for the same
+ * reason passwords are hashed: a leaked database must not hand over live
+ * credentials. bcrypt rather than a fast digest is a deliberate cost — six
+ * digits is only a million possibilities, which any fast hash surrenders
+ * instantly, and which bcrypt at the project's work factor does not.
+ * ── Why rows are kept after use ────────────────────────────────────────────
+ * A consumed row is not deleted. It is the evidence that a code was spent and
+ * when, which is what makes replay detectable rather than merely impossible,
+ * and it is what the per-hour issue ceiling counts against. Rows are pruned on
+ * a schedule by the sweep, not on use.
+ */
+model EmailChallenge {
+  id String @id @default(uuid())
+
+  /// Lowercased at the service boundary, so "A@b.com" and "a@b.com" share one
+  /// throttle bucket rather than two.
+  email String
+
+  purpose EmailChallengePurpose
+
+  /// bcrypt over the code. Never selected into a response.
+  codeHash String
+
+  /// Wrong guesses so far. At OTP_MAX_ATTEMPTS the row is burned by stamping
+  /// consumedAt: a code that has been guessed at five times is not a code any
+  /// more, whatever its expiry says.
+  attempts Int @default(0)
+
+  /// Set the moment the code is spent, burned, or superseded by a newer code
+  /// for the same address and purpose. Non-null means unusable, permanently.
+  consumedAt DateTime?
+
+  expiresAt DateTime
+
+  /// Audit trail only. Nothing is authorized by it — see the note on
+  /// Device.lastIpAddress for the same rule applied to devices.
+  requestIp String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  /// The verification lookup (newest live code for an address and purpose) and
+  /// the throttle count (codes issued to an address in the last hour) are the
+  /// same query shape, so one index serves both.
+  @@index([email, purpose, createdAt])
+  /// The pruning sweep.
+  @@index([expiresAt])
 }

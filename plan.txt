@@ -1,0 +1,957 @@
+LEORNIAN CAMPUS ASSISTANT - COMPLETE PROJECT EXECUTION PLAN
+Date: September 2, 2026
+
+EXECUTION STATUS (SEPTEMBER 2, 2026)
+
+- Phase 0 complete: protected Git checkpoints exist and secret/test isolation is enforced.
+- Phase 1 and live re-verification complete: all 14 migrations are applied and the Supabase public schema matches the current migration history; retired robot and billing data is absent.
+- Phase 2 complete: the Supabase-aware seed is idempotent and created 12 linked development identities/application users twice without duplicates.
+- Phase 3 complete and live-verified: all seeded roles authenticate through Supabase, invalid/legacy tokens are rejected, account-state gates hold, and login/restoration/refresh/logout pass against the running backend.
+- Phase 4 complete and live-verified: public registration is token-derived, forced to STUDENT/PENDING, idempotent, recoverable after cross-device confirmation, and a self-cleaning real registration run passed.
+- Phase 5 core account lifecycle is implemented together with Phase 4: web/mobile recovery entry points, reset callbacks/deep links, signed-in password changes, Supabase Admin password reset for linked campus users, trusted-token email projection, and status enforcement.
+- Automated checks: backend source/test typechecks and 504/504 tests pass; web 24/24 tests and production build pass; Flutter 3.44.9 analysis and 13/13 mobile tests pass. Web covers staff/admin roles only; mobile covers students only.
+- Phase 6 complete in the working checkpoint: the route-permission matrix is documented, QR issuance is permanently restricted to authorized session staff with no rollback flag, pending students are blocked from generic course/schedule reads, course access is narrowed by trusted enrollment/teaching/department scope, and negative role/tenant/department tests pass.
+- Phase 7 backend completion is implemented and live-verified: normalized academic APIs, pagination, validation, stable errors, readiness, shutdown behavior, tenant scope, and populated live academic reads all pass.
+- Connected rendered web workflows are complete: real Supabase login/restoration/logout, role routes, cross-role denial, department-scoped courses, session detail/QR terminal state, pending/disabled gates and responsive navigation passed against the live backend.
+- Phase 9 implementation and emulator verification are complete. The current mobile boundary is student-only: Flutter 3.44.9 analysis, 13 widget/API tests, a 7-screen student runtime walk, configured Android build, approved/pending/disabled student flows, session restoration/logout, and QR camera permission/preview passed. All mobile staff/admin shells and assets were removed; staff use web only.
+- Phase 9 complete with explicitly approved emulator-only acceptance: no physical phone was available, so the connected Pixel 6 checks, passing student integration case, deterministic 7-screen student walker, and automated suite form this checkpoint. Physical-device validation is deferred to the final pre-release smoke test.
+- Phases 10-13 repository work is complete in the Step 6 checkpoint: real SMTP is mandatory in production, push is explicitly deferred in favor of in-app notifications, production boot/configuration is hardened, structured redacted observability and release identity are implemented, CI replays migrations and verifies every application, immutable deployment containers and smoke tooling exist, and backup/restore/monitoring/rollback procedures are documented.
+- Local release verification passes: 500 backend tests, backend typechecks/build, 28 web tests/lint/build, production high-severity dependency audits, tracked-secret scan, production-environment validator, API/database/web/CORS smoke checks, and SMTP preflight's safe refusal of the development logging provider.
+- Outstanding before public release: provision the target staging/production services, run CI/container builds on a Docker-enabled runner, verify a real SMTP delivery, connect monitoring/alerts and backups, execute the authenticated staging matrix, and complete the physical Android-device smoke test when a phone is available.
+
+CURRENT POSITION
+
+All repository-controlled implementation through deployment, observability, security and release readiness is complete. The project is not yet publicly released: external staging/production services, real SMTP, monitoring/alerts, backup restore rehearsal, Docker/CI execution, the authenticated staging matrix and the final physical-device check still have to be performed in the target environment.
+
+RECOMMENDED FINAL ARCHITECTURE
+
+React Web -----\
+                > Express API -> Prisma -> PostgreSQL
+Flutter Mobile-/        |
+                        +-> Supabase Auth
+                        +-> Email provider
+                        +-> Push notifications
+
+Use:
+
+- Supabase Auth for identity, login sessions, email confirmation and password recovery.
+- The Express backend for authorization, roles, tenant isolation and business rules.
+- PostgreSQL and Prisma for application data.
+- React, React Query and Vite for the web.
+- Flutter for mobile.
+- Playwright for web end-to-end testing.
+- Flutter integration_test for mobile end-to-end testing.
+- Firebase Cloud Messaging only if real push notifications are required.
+- GitHub Actions for automated checks.
+- Sentry or equivalent for production error monitoring.
+
+Do not add Clerk now. Supabase is already integrated into the backend, web and mobile. Moving to Clerk would introduce an unnecessary second authentication migration.
+
+FROZEN SCOPE
+
+Supported roles: SYSTEM_OWNER, UNIVERSITY_ADMIN, DEPARTMENT_ADMIN, INSTRUCTOR, STUDENT.
+
+Permanently excluded: robot/device functionality, and billing, subscriptions, invoices and payments.
+
+PHASE 0 - PROTECT THE CURRENT CHECKPOINT
+
+Actions
+
+1. Review all modified and untracked files.
+2. Separate intentional project changes from local tool files such as .claude/.
+3. Inspect the prepared database rebuild script.
+4. Confirm it can affect only the configured Supabase project's public schema.
+5. Confirm it refuses to run when:
+   - NODE_ENV=production
+   - The approved hostname is missing
+   - The hostname does not exactly match
+   - Any application table contains data
+6. Run typechecks and existing tests again.
+7. Commit the rebuild script, runbook updates, package.json cleanup and plan.txt before modifying the database.
+
+Completion criteria
+
+- Working tree contains only understood changes.
+- A recoverable Git checkpoint exists.
+- Backend typecheck and all existing tests pass.
+
+PHASE 1 - REBUILD AND ALIGN THE DATABASE
+
+The current Supabase application database is empty but structurally inconsistent. A clean rebuild is safer than pretending old migrations were applied.
+
+Actions
+
+1. Reconfirm immediately before rebuilding:
+   - All application tables contain zero records.
+   - auth.users contains zero identities.
+   - No important views, functions, triggers or policies exist in public.
+   - Supabase-managed schemas will not be touched.
+2. Replay all 13 migrations against a scratch database first, as a pre-flight
+   check, before touching the target. See "Migration replay pre-flight" below.
+3. Run the guarded database-rebuild command against the exact approved Supabase hostname.
+4. Recreate only the public schema, restoring ownership to the postgres role.
+
+   Do NOT add anon / authenticated / service_role grants. The schema carried no
+   ACL before the rebuild (nspacl IS NULL), so there are no grants to restore,
+   and adding PostgREST grants would expose every application table through the
+   Supabase data API. This project does not use that API: Prisma connects to
+   Postgres directly as postgres. backend/scripts/rebuild-database.mjs is
+   correct as written on this point and must not be "fixed" to add grants.
+
+5. Run all Prisma migrations from the beginning using the direct database connection.
+6. Generate Prisma Client.
+7. Run prisma migrate status.
+8. Compare the live database against schema.prisma.
+9. Confirm removal of:
+   - Robot/device tables and enums
+   - Payment tables
+   - Invoice tables
+   - Subscription tables
+   - Billing enums and relationships
+10. Confirm creation of all academic tables, indexes, constraints and enums.
+
+Migration replay pre-flight
+
+Migration 11 (20260826123000_leornian_academic_core) rewrites the UserRole enum
+- only 2 of 5 value names survive - and adds 15 tables and 4 enums. Prisma does
+not roll back across migrations, so a failure part-way through leaves a partial
+schema AND a partial ledger.
+
+Therefore, before the real rebuild:
+
+- Replay all 13 migrations from empty against a scratch/disposable database and
+  confirm 13 applied, 0 pending.
+- Only then run the rebuild against the approved host.
+
+Recovery, if the real replay fails part-way: re-run
+backend/scripts/rebuild-database.mjs and then migrate deploy again. This is safe
+and repeatable because the script re-verifies emptiness at the moment of use and
+refuses on any populated table. Do not hand-patch a partial ledger.
+
+Note on the scope of the rebuild
+
+The rebuild drops and recreates the public schema only. The auth, storage,
+realtime, graphql, extensions and vault schemas are never referenced and are
+left exactly as they are. This has a direct consequence for Phase 2: see
+"Supabase identities survive the rebuild".
+
+Verification
+
+Expected results:
+- All 13 migrations are recorded as applied.
+- Zero migrations are pending.
+- _prisma_migrations exists.
+- Prisma schema validation passes.
+- Backend typecheck passes.
+- Backend test suite passes.
+- Supabase auth, storage, realtime and other managed schemas remain intact.
+
+Completion criteria
+
+The live database exactly matches the current Prisma schema.
+
+PHASE 2 - CREATE A SAFE SUPABASE-AWARE SEED PROCESS
+
+Because authentication will go directly through Supabase, seed accounts must exist in both Supabase Auth and the application database.
+
+Supabase identities survive the rebuild
+
+Dropping the public schema does NOT clear auth.users - identities live in the
+auth schema, which the rebuild never touches. So rebuilding the database does
+not give a clean slate for identities, and a second seed run will hit "user
+already exists" for every account.
+
+Rebuilding first is therefore NOT sufficient to make seeding repeatable. The
+seed must be explicitly idempotent on the identity side:
+
+- Key each seed account on its email address.
+- If the Supabase identity already exists, adopt it and reuse its user ID
+  rather than failing or creating a duplicate.
+- Then create or update the matching Prisma User with that authUserId.
+
+Actions
+
+1. Update the seed so every login account is created through the Supabase Admin API.
+2. For each account:
+   - Create the Supabase identity, or adopt the existing one for that email.
+   - Receive its Supabase user ID.
+   - Create the Prisma User record.
+   - Store the Supabase ID in User.authUserId.
+   - Do not create a local password hash.
+3. Seed accounts for:
+   - One SYSTEM_OWNER
+   - Two UNIVERSITY_ADMIN accounts in different universities
+   - At least one DEPARTMENT_ADMIN
+   - At least two instructors
+   - One pending student
+   - One approved student
+   - One rejected or disabled student
+   - A second-university student for tenant-isolation testing
+4. Seed academic data:
+   - Organizations
+   - Departments
+   - Academic terms
+   - Cohorts
+   - Courses and offerings
+   - Teaching assignments
+   - Enrollments
+   - Timetables
+   - Materials
+   - Assignments
+   - Attendance sessions
+   - Notifications
+5. Make the seed fail safely:
+   - Development/test environments only
+   - Exact remote-host approval required
+   - Never allowed in production
+   - Clear warning that it creates demo accounts
+   - Clean up the Supabase identity if the Prisma user creation fails, but only
+     when this run created it - never delete an identity it adopted
+   - Avoid leaving partial identity/application records
+6. Switch AUTH_PROVIDER to supabase as part of this phase, not after it.
+   Seeding Supabase-only accounts (no passwordHash) while the backend still
+   defaults to AUTH_PROVIDER=legacy leaves no account able to log in. The seed
+   and the provider switch are one unit of work.
+
+Verification
+
+- Every seeded identity exists in auth.users.
+- Every application user has the correct authUserId.
+- No user contains a local passwordHash.
+- Each seeded account can authenticate with Supabase.
+- Roles and organization IDs are correct.
+- Running the seed twice in a row succeeds and produces the same result.
+
+Completion criteria
+
+A clean database can be transformed into a fully testable development environment with one documented seed command, repeatably.
+
+PHASE 3 - COMPLETE DIRECT SUPABASE AUTHENTICATION
+
+There is no real user population to migrate, so dual authentication should be skipped.
+
+Configuration
+
+1. Set the backend to:
+   - AUTH_PROVIDER=supabase
+   - Correct Supabase URL
+   - Correct publishable key
+   - Correct backend-only service-role key
+2. Configure the same Supabase URL and publishable key in web and mobile.
+3. Keep the service-role key exclusively on the backend.
+4. Remove dual/legacy configuration after the Supabase path is verified.
+
+Backend authentication
+
+1. Accept only verified Supabase access tokens.
+2. Validate:
+   - JWT signature
+   - Issuer
+   - Audience
+   - Expiration
+   - Subject
+3. Load the application user using authUserId.
+4. Reject access when:
+   - The Supabase identity has no application user
+   - The account is disabled
+   - The registration was rejected
+   - The token is invalid or expired
+5. Continue loading role, organization, department, approval and activity status from PostgreSQL - not from editable client metadata.
+
+Web authentication
+
+Implement and verify:
+1. Login through Supabase.
+2. Session restoration after page refresh.
+3. Automatic access-token refresh.
+4. Logout from Supabase and clear application state.
+5. Clear React Query cache on logout.
+6. Handle expired or revoked sessions.
+7. Redirect authenticated users to their role home page.
+8. Prevent authenticated users from returning to login/register pages unnecessarily.
+
+Mobile authentication
+
+Implement and verify:
+1. Login through Supabase.
+2. Store sessions using secure storage.
+3. Restore the session after application restart.
+4. Refresh expired access tokens.
+5. Clear secure storage and cached data on logout.
+6. Block every staff and administrator role from mobile, and block students from web.
+7. Handle network failures and expired sessions clearly.
+
+Completion criteria
+
+All seeded roles can log in through Supabase, restore sessions and log out on their permitted clients.
+
+PHASE 4 - COMPLETE STUDENT REGISTRATION
+
+Final registration sequence
+
+1. Student enters:
+   - University code
+   - University ID
+   - Full name
+   - University email
+   - Password and confirmation
+2. Client validates the form.
+3. Supabase creates only the authentication identity.
+4. Supabase sends the confirmation email.
+5. The student confirms the email.
+6. The confirmation callback restores the Supabase session.
+7. The client sends the confirmed access token and registration information to the backend.
+8. The backend derives:
+   - Email from the verified token
+   - authUserId from the verified token
+   - Role as STUDENT
+   - Initial status as PENDING
+   - Verification state as awaiting university approval
+9. The backend finds the organization using the supplied organization code.
+10. The backend checks that email and university ID are unused.
+11. The backend creates the application user and empty student profile.
+
+Cross-device completion
+
+The current web flow depends partly on browser localStorage. That can fail if a student opens the confirmation email on another device.
+
+Fix the design by putting only non-authoritative registration fields in Supabase user metadata or a short-lived registration record. Role and account authority must never come from that metadata.
+
+The backend must always force:
+- Role: STUDENT
+- Status: PENDING
+- Organization resolved from a valid organization code
+- Email derived from the verified identity
+
+Failure handling
+
+Handle:
+- Unknown university code
+- Duplicate university ID
+- Duplicate email
+- Expired confirmation
+- Missing registration information
+- Repeated completion request
+- Identity created but application registration incomplete
+
+Repeated registration completion should be idempotent and return the already-created account when appropriate.
+
+Completion criteria
+
+Registration succeeds on the same device and across devices, always creates a pending student, and cannot create a staff or owner account.
+
+PHASE 5 - FINISH ACCOUNT LIFECYCLE AND PASSWORD MANAGEMENT
+
+The existing application password endpoint supports legacy password hashes. Supabase users require Supabase-managed password operations.
+
+Student self-service
+
+Implement:
+1. Forgot-password request through Supabase.
+2. Reset-password email callback.
+3. New-password screen on web.
+4. Password-reset deep link on mobile.
+5. Password change for signed-in users through Supabase.
+6. Clear success and error messages.
+7. Session refresh or reauthentication after a password change.
+
+Staff password management
+
+1. University administrators can reset passwords for authorized accounts inside their university.
+2. The backend uses the Supabase Admin API.
+3. Department administrators can reset passwords only if that permission is approved and only inside their department.
+4. Nobody can reset a system-owner password through a campus endpoint.
+5. Cross-tenant user IDs must return a safe not-found result.
+6. Record administrator password resets in the audit log.
+
+Email/profile synchronization
+
+1. Define one controlled operation for changing email.
+2. Update Supabase Auth first or through a coordinated backend operation.
+3. Update the Prisma user only after identity-provider success.
+4. Prevent application email and Supabase email from drifting.
+5. Require reauthentication for sensitive changes when appropriate.
+
+Account status
+
+Verify behavior for:
+- PENDING
+- ACTIVE
+- REJECTED
+- DISABLED
+
+Disabling or rejecting an application account must block API access immediately, even when the Supabase token is still valid.
+
+Completion criteria
+
+Login, logout, password recovery, password change, email update and account deactivation behave consistently on web and mobile.
+
+PHASE 6 - FINALIZE THE AUTHORIZATION MODEL
+
+Authentication identifies the user. The backend must make every authorization decision.
+
+QR endpoint policy — completed
+
+QR issuance is permanently restricted in code to INSTRUCTOR,
+UNIVERSITY_ADMIN, and SYSTEM_OWNER. Instructors are limited to sessions they
+opened; university administrators and system owners remain limited to the
+organization on their campus API identity. STUDENT and DEPARTMENT_ADMIN are
+denied. The old QR_ENDPOINT_STAFF_ONLY rollback flag and robot precondition were
+removed. See docs/QR_CUTOVER.md.
+
+Final recommended role boundaries
+
+SYSTEM_OWNER
+- Web only
+- Manage organizations
+- Create and manage university administrators
+- View platform-wide users and metrics
+- No unrestricted access should be granted merely through frontend routing
+
+UNIVERSITY_ADMIN
+- Limited to one university
+- Manage departments, administrators, instructors and students
+- Manage university courses and timetables
+- Review student registrations
+- View university sessions, materials, assignments and exports
+
+DEPARTMENT_ADMIN
+- Limited to one university and assigned department
+- Manage or view department users and cohorts
+- Review students in the assigned department
+- Manage department-scoped academic information
+- Cannot create university administrators
+- Cannot access other departments
+
+INSTRUCTOR
+- Access assigned courses and teaching schedule
+- Open and close their authorized attendance sessions
+- Display QR codes
+- Read session attendance
+- Manage materials and assignments for authorized courses
+- Grade students in authorized offerings
+- Cannot administer platform or university accounts
+
+STUDENT
+- Access only their own profile
+- Access their own cohort schedule
+- Scan attendance for themselves
+- Read their own attendance
+- Read assigned materials and assignments
+- Read their own grades and notifications
+- Cannot submit another student ID through the API to access data
+
+Authorization implementation
+
+1. Create a route-permission matrix.
+2. Place authentication middleware before protected routes.
+3. Add role checks.
+4. Add organization checks.
+5. Add department checks where required.
+6. Add instructor-assignment and course-ownership checks.
+7. Add cohort checks for students.
+8. Add student approval gates.
+9. Derive tenant and user scope from the authenticated database record.
+10. Ignore or reject client-supplied organization authority.
+
+Negative tests
+
+For every sensitive route, test:
+- No token
+- Invalid token
+- Wrong role
+- Correct role but wrong university
+- Correct university but wrong department
+- Instructor not assigned to the course
+- Student outside the target cohort
+- Pending student
+- Disabled student
+- Rejected student
+- Attempted role escalation
+
+Completion criteria
+
+A user cannot gain access by changing a URL, request body, query parameter, local storage value or frontend code.
+
+PHASE 7 - COMPLETE AND VERIFY THE BACKEND
+
+API foundation
+
+1. Standardize error responses:
+   - Human-readable message
+   - Stable error code
+   - Validation details where safe
+   - Correct HTTP status
+2. Standardize pagination, sorting and filtering.
+3. Validate request bodies, query strings and route parameters.
+4. Use consistent date formats and the configured campus timezone.
+5. Prevent sensitive database fields from appearing in responses.
+
+Domain verification
+
+Verify every operation in:
+1. Organizations
+2. Platform users
+3. Campus accounts
+4. Departments
+5. Academic terms
+6. Cohorts
+7. Courses and offerings
+8. Teaching assignments
+9. Enrollments
+10. Timetables
+11. Attendance sessions
+12. QR issuance and scanning
+13. Attendance history and summaries
+14. Materials
+15. Assignments and grades
+16. Notifications
+17. Exports
+18. Audit logging
+
+For each domain, verify:
+- Create
+- List
+- Read
+- Update
+- Disable/delete where applicable
+- Validation
+- Authorization
+- Tenant isolation
+- Empty state
+- Pagination
+- Concurrent requests where relevant
+
+Attendance workers
+
+1. Verify manual session closure.
+2. Verify automatic stale-session closure.
+3. Generate absences only after a session is closed.
+4. Prevent repeated worker executions from duplicating rows.
+5. Use timetable duration when available.
+6. Use the configured fallback duration for ad-hoc sessions.
+7. Ensure only one production worker owns the write process or add a distributed lock.
+
+Notifications
+
+1. Generate reminders idempotently.
+2. Prevent duplicate reminders.
+3. Keep notifications scoped to the correct user.
+4. Ensure deactivated users receive nothing.
+5. Make delivery failures retryable and observable.
+
+Completion criteria
+
+The backend works against a real PostgreSQL database and all automated tests pass.
+
+PHASE 8 - COMPLETE THE WEB APPLICATION
+
+Public authentication experience
+
+Finish and test:
+- Login
+- Registration
+- Confirmation completion
+- Forgot password
+- Reset password
+- Pending approval page
+- Rejected account page
+- Disabled account behavior
+- Logout
+
+System-owner experience
+
+Verify:
+- Dashboard metrics
+- Organization list
+- Organization details
+- Create/update organization
+- Create university administrator
+- Platform user management
+- Correct owner-only navigation
+
+University-admin experience
+
+Verify:
+- University overview
+- Directory
+- Student approval
+- Departments
+- Courses
+- Timetable
+- Sessions
+- Attendance
+- Materials
+- Assignments
+- Notifications
+- Exports
+
+Department-admin experience
+
+1. Show only permitted navigation.
+2. Scope lists to the assigned department.
+3. Hide organization-wide operations.
+4. Ensure backend responses match the visible scope.
+
+Instructor experience
+
+Verify:
+- Teaching schedule
+- Assigned courses
+- Open attendance session
+- Display live QR
+- Monitor scans
+- Close session
+- Review attendance
+- Publish materials
+- Create/publish assignments
+- Grade authorized students
+- Read notifications
+
+Student experience
+
+Verify:
+- Dashboard
+- Academic profile completion
+- Timetable
+- Assignments
+- Materials
+- Attendance history
+- Notifications
+- Account page
+- Pending-approval restrictions
+
+Web quality
+
+1. Remove duplicate Account/Settings functionality.
+2. Add consistent loading states.
+3. Add empty states.
+4. Add retryable error states.
+5. Disable repeated submissions.
+6. Display backend validation errors.
+7. Verify responsive layouts.
+8. Add keyboard support and accessibility labels.
+9. Add not-found and unexpected-error pages.
+10. Ensure forbidden actions are not displayed.
+
+Completion criteria
+
+Every required web action calls a real backend endpoint and works for the correct role in a live browser.
+
+PHASE 9 - COMPLETE THE FLUTTER MOBILE APPLICATION
+
+The mobile application requires a full screen-by-screen audit because connected and static/demo pages are currently mixed.
+
+Mobile audit
+
+For every navigation destination, classify it as:
+- Fully API-connected
+- Partially API-connected
+- Static/demo
+- Out of release scope
+
+Every release-facing page must either become functional or be removed from navigation.
+
+Cleanup
+
+Remove:
+- Stale robot golden images
+- Stale robot test descriptions
+- Static robot-related examples
+- Hard-coded university statistics
+- Fake profiles
+- Fake sessions
+- Fake courses and people
+- Buttons that do nothing
+
+Preserve the current visual design while connecting real data.
+
+Student mobile functionality
+
+Complete:
+- Supabase login
+- Registration
+- Email confirmation
+- Pending approval
+- Profile completion
+- Timetable
+- QR camera scanning
+- Attendance result
+- Attendance history and summary
+- Materials and external links
+- Assignments
+- Notifications
+- Account/profile editing
+- Logout
+
+Staff mobile functionality
+
+Complete only the staff functionality approved for mobile:
+- Teaching schedule
+- Course list
+- Open attendance session
+- Display QR
+- Monitor attendance
+- Close session
+- Materials
+- Pending-student approval
+- Notifications
+- Profile and logout
+
+Keep the system owner web-only.
+
+Device behavior
+
+Implement and test:
+- Android camera permission
+- iOS camera permission if applicable
+- Supabase email deep links
+- Password-reset deep links
+- Secure session persistence
+- API URL for emulator
+- API URL for physical devices
+- Timeout and no-network errors
+- Retry
+- Loading state
+- Empty state
+- Application restart
+- Token refresh
+- Logout cleanup
+
+Completion criteria
+
+Flutter analyze, widget tests and integration tests pass, and the release flows work on an emulator and at least one physical device.
+
+PHASE 10 - CONFIGURE REAL EMAIL AND OPTIONAL PUSH NOTIFICATIONS
+
+Email
+
+1. Select and configure an SMTP or transactional-email provider.
+2. Configure sender identity and domain authentication.
+3. Create templates for:
+   - Email confirmation
+   - Password reset
+   - Registration approval
+   - Registration rejection
+   - Administrator-created account
+   - Security notification
+4. Prevent responses from revealing whether an email account exists.
+5. Rate-limit confirmation and password-reset requests.
+6. Verify expired and reused codes/links.
+
+Push notifications
+
+If real push is part of the first release:
+1. Use Firebase Cloud Messaging.
+2. Configure Android and iOS projects.
+3. Register device tokens.
+4. Update rotated tokens.
+5. Remove tokens on logout.
+6. Deactivate invalid tokens.
+7. Route notification taps to the correct screen.
+8. Never send another user's private notification.
+9. Add delivery retry and failure logs.
+
+If push is not essential, keep reliable in-app notifications and defer FCM until after the main release.
+
+Completion criteria
+
+Production-style emails work in staging. If enabled, push notifications reach the correct signed-in device.
+
+PHASE 11 - BUILD THE COMPLETE TEST SYSTEM
+
+Backend tests
+
+Add:
+- Database integration tests
+- API tests with real HTTP requests
+- Supabase token verification tests
+- Account lifecycle tests
+- Permission-matrix tests
+- Cross-tenant tests
+- Worker idempotency tests
+
+The migration replay test is NOT introduced here. It is a Phase 1 pre-flight
+check, because it validates exactly the operation Phase 1 performs and is
+worthless if it first runs afterwards. This phase only keeps it running
+continuously - see Phase 13.
+
+Web tests
+
+Add Playwright flows for:
+1. System-owner login and organization management
+2. University-admin login and student approval
+3. Department-admin isolation
+4. Instructor session and QR flow
+5. Student registration and pending state
+6. Student approval followed by feature access
+7. Password recovery
+8. Disabled-account handling
+9. Cross-role route protection
+
+Mobile tests
+
+Add:
+- Widget tests for authentication states
+- API gateway tests
+- Secure-session restoration tests
+- Registration tests
+- QR scan tests
+- Student main-flow integration test
+- Instructor attendance-flow integration test
+- Updated design golden tests without robot artifacts
+
+Critical full-system test
+
+Create university
+-> create administrator
+-> create department and course
+-> create instructor
+-> student registers
+-> student confirms email
+-> student completes profile
+-> administrator approves student
+-> instructor creates/opens attendance session
+-> student scans QR
+-> backend records attendance
+-> student sees attendance history
+-> instructor sees session attendance
+
+Completion criteria
+
+This scenario passes against a staging database using the real backend, web client and mobile client.
+
+PHASE 12 - SECURITY AND RELIABILITY REVIEW
+
+Security
+
+1. Confirm no secrets are committed.
+2. Rotate any secret that may have been exposed.
+3. Check CORS origins.
+4. Review Helmet configuration.
+5. Review rate limits.
+6. Validate all inputs.
+7. Prevent account enumeration.
+8. Review Supabase service-role usage.
+9. Verify QR signature, expiry and replay protection.
+10. Protect exports from unauthorized access.
+11. Prevent unsafe external material URLs.
+12. Disable development endpoints in production.
+13. Record sensitive administrator actions.
+14. Run dependency and secret scans.
+
+Reliability
+
+1. Add structured application logs.
+2. Exclude passwords, tokens and personal secrets from logs.
+3. Add error monitoring.
+4. Add API uptime monitoring.
+5. Add database backups.
+6. Perform a test restoration.
+7. Define worker ownership and restart behavior.
+8. Add graceful shutdown.
+9. Add database and service readiness checks.
+
+Completion criteria
+
+The security checklist passes, backups are restorable and failures are observable.
+
+PHASE 13 - CI/CD AND STAGING
+
+Continuous integration
+
+Every pull request should run:
+- Prisma formatting and validation
+- Migration replay from empty against a scratch database
+- Backend typecheck
+- Backend tests
+- Web lint
+- Web typecheck
+- Web tests
+- Web production build
+- Flutter formatting check
+- Flutter analyze
+- Flutter tests
+- Dependency scan
+- Secret scan
+
+Staging environment
+
+Create a separate staging environment with:
+- Staging Supabase project
+- Staging database
+- Staging backend
+- Staging web deployment
+- Test email delivery
+- Staging mobile configuration
+
+Do not use the destructive development seed against production.
+
+Deployment order
+
+1. Back up the target database.
+2. Apply migrations.
+3. Deploy backend.
+4. Verify health/readiness.
+5. Deploy web.
+6. Run browser smoke tests.
+7. Build signed mobile packages.
+8. Test against the production API.
+9. Release to a small pilot group.
+10. Monitor errors, workers and database activity.
+11. Expand the release after the pilot is stable.
+
+Completion criteria
+
+A clean checkout can be tested and deployed through documented, repeatable commands.
+
+COMMIT CHECKPOINTS
+
+Create a commit only after each phase is verified:
+
+0. Phase 0 - baseline checkpoint: rebuild tooling, runbook, plan
+1. Phase 1 - database rebuild and migration alignment
+2. Phase 2 - Supabase-aware seed and AUTH_PROVIDER switch
+3. Phase 3 - direct Supabase authentication
+4. Phase 4 - registration
+5. Phase 5 - account lifecycle and password management
+6. Phase 6 - authorization hardening and QR endpoint decision
+7. Phase 7 - backend domain completion
+8. Phase 8 - web completion
+9. Phase 9 - mobile completion
+10. Phase 10 - email/push completion
+11. Phase 11 - end-to-end tests
+12. Phase 12 - security and reliability
+13. Phase 13 - CI/CD and staging
+
+Do not combine all work into one final commit.
+
+FINAL COMPLETION CHECKLIST
+
+The project is fully complete only when all of these are true:
+
+- All Prisma migrations are applied.
+- Database schema matches the code.
+- No robot or payment functionality remains.
+- Seeded Supabase accounts can log in.
+- Web and mobile use Supabase authentication.
+- Registration and email confirmation work across devices.
+- Pending students can complete profiles but cannot use protected academic features.
+- Authorized administrators can approve students.
+- Password recovery and password changes work.
+- Account disabling immediately blocks API access.
+- Every role has correct permissions.
+- Cross-university and cross-department access is blocked.
+- Backend domains work against a real database.
+- All visible web actions work.
+- All visible mobile actions work.
+- Mobile contains no release-facing demo data.
+- Attendance works end to end.
+- Materials and assignments work end to end.
+- Email works in staging.
+- Automated tests and builds pass.
+- Staging smoke tests pass.
+- Security, monitoring and backups are ready.
+- Deployment is reproducible.
+
+The operational starting point is docs/PROJECT_STATUS.md. This plan expands it into the complete path from the current checkpoint to a production-ready project.

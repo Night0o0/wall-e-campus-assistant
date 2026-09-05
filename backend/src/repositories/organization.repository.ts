@@ -6,9 +6,8 @@ import { OrganizationQuery } from "../types/organization.types.js";
 const SORTABLE = ["name", "code", "createdAt", "updatedAt"] as const;
 
 const listInclude = {
-  subscription: { include: { plan: true } },
   _count: {
-    select: { users: true, courses: true, sessions: true, invoices: true },
+    select: { users: true, courses: true, sessions: true },
   },
 } satisfies Prisma.OrganizationInclude;
 
@@ -22,16 +21,6 @@ export class OrganizationRepository {
         { code: { contains: query.search, mode: "insensitive" } },
         { email: { contains: query.search, mode: "insensitive" } },
       ];
-    }
-
-    if (query.status === "NONE") {
-      where.subscriptionId = null;
-    } else if (query.status) {
-      where.subscription = { status: query.status };
-    }
-
-    if (query.planId) {
-      where.subscription = { ...(where.subscription as object), planId: query.planId };
     }
 
     return where;
@@ -53,36 +42,15 @@ export class OrganizationRepository {
     return { data, total };
   }
 
-  /** Total completed payments per organization, in one query instead of N. */
-  async revenueByOrganization(organizationIds: string[]) {
-    if (organizationIds.length === 0) return new Map<string, number>();
-
-    const rows = await prisma.payment.groupBy({
-      by: ["organizationId"],
-      where: {
-        organizationId: { in: organizationIds },
-        status: "COMPLETED",
-      },
-      _sum: { amount: true },
-    });
-
-    return new Map(
-      rows.map((row) => [row.organizationId, Number(row._sum.amount ?? 0)])
-    );
-  }
-
   async findById(id: string) {
     return prisma.organization.findUnique({
       where: { id },
       include: {
-        subscription: { include: { plan: true } },
         _count: {
           select: {
             users: true,
             courses: true,
             sessions: true,
-            invoices: true,
-            payments: true,
           },
         },
       },

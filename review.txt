@@ -1,0 +1,877 @@
+===============================================================================
+WALL-E CAMPUS ASSISTANT - FULL FUNCTIONAL REVIEW
+Per account type, per page: what works, what does not.
+===============================================================================
+ARCHIVED: This August 25 review predates the reduced product scope and the
+completed database, Supabase authentication, account lifecycle, and
+authorization checkpoints. Use docs/PROJECT_STATUS.md and plan.txt for current
+status.
+
+Reviewed : 25 August 2026
+Scope    : backend/ (Express + Prisma), apps/web/ (React), apps/mobile/ (Flutter)
+Baseline : PAGES_AND_GAPS.txt (16 Aug 2026), README.md, docs/
+Method   : static read of every route, controller, service, repository and page,
+           cross-checked page-by-page against the endpoint it calls, plus a
+           compile and test run of both TypeScript projects.
+
+NOTHING IN THE PROJECT WAS EDITED. This file is the only thing written.
+
+
+-------------------------------------------------------------------------------
+0) EVIDENCE - WHAT WAS ACTUALLY RUN
+-------------------------------------------------------------------------------
+
+  backend   npm run typecheck ....... PASS (tsc --noEmit, no errors)
+  backend   npm test ................ PASS (21 files, 348 tests, 11.8s)
+  apps/web  npx tsc --noEmit ........ PASS (no errors)
+  apps/web  npm test ................ PASS (4 files, 12 tests)
+
+  apps/mobile (Flutter) - NOT compiled. No Dart/Flutter toolchain was invoked;
+  the mobile findings below are from reading the source, not from running it.
+
+  The database was NOT touched. Every claim about migrations below is quoted
+  from the project's own documents, not verified against a live Supabase.
+
+  IMPORTANT: a green typecheck and a green test suite prove the code is
+  internally consistent. They do NOT prove a page shows the right data - most
+  of the defects found below are contract mismatches where the client's type
+  declares a field OPTIONAL and the server simply never sends it. TypeScript
+  cannot catch those, and no test covers them.
+
+
+-------------------------------------------------------------------------------
+1) SCOREBOARD
+-------------------------------------------------------------------------------
+
+  ROLE / CLIENT              PAGES   FULLY OK   DEFECT   PLACEHOLDER   MISSING
+  -------------------------  -----   --------   ------   -----------   -------
+  ROBOT      (web /robot)      2         1         0          1           0
+  ADMIN      (apps/web)        9         6         3          0           0
+  SUPER ADM  (apps/web)       11         8         3          0           0
+  SYS OWNER  (apps/web)        6*        4         0          2           0
+  STUDENT    (apps/mobile)     8         5         1          0           2
+  ADMIN      (apps/mobile)     8         4         2          2           0
+  SUPER ADM  (apps/mobile)    11         5         2          4           0
+  ROBOT      (apps/mobile)     2         1         0          1           0
+
+  * SYSTEM_OWNER counted with billing OFF (the shipped default). With
+    VITE_BILLING_ENABLED=true it is 10 pages.
+
+  "DEFECT"       = the page loads and mostly works, but a specific element is
+                   wrong, empty, or offers an action the server will refuse.
+  "PLACEHOLDER"  = the page renders, but it is hardcoded copy with no backend
+                   behind it. It is not broken; it was never wired.
+  "MISSING"      = the plan requires the screen and no screen exists.
+
+
+===============================================================================
+2) ROBOT - 2 PAGES (apps/web /robot)
+===============================================================================
+
+PAGE 1. QR DISPLAY  - /robot  ........................................ WORKING
+  File: apps/web/src/pages/robot/RobotConsole.tsx (542 lines)
+
+  All four documented states are implemented and correctly wired:
+
+    PAIRING  -> POST /api/devices/auth            device.routes.ts:43
+    IDLE     -> GET  /api/devices/me/sessions/active
+    PICKING  -> same list, >1 result
+    SHOWING  -> GET  /api/devices/me/sessions/:id/qr
+
+  Verified correct:
+    - Auto-select on a single session (RobotConsole.tsx, `selected` derivation).
+    - Silent re-auth on 401 via DEVICE_UNAUTHORIZED_EVENT
+      (lib/deviceApi.ts) - the console re-exchanges the stored credential
+      rather than dropping to the pairing screen. Matches the documented
+      15-minute token TTL behaviour.
+    - Rotation at 25s against a 30s server expiry
+      (components/campus/QrDisplay.tsx, useRotatingQr, intervalMs 25_000).
+    - Response shape matches exactly: roomFilterActive, unlocatedCount,
+      expiredCount, attendanceCount, lecture - all produced by
+      backend/src/services/device.service.ts:150-242 and all consumed.
+    - The device surface really is four endpoints. There is no session-open
+      route and no capability that could unlock one (device.routes.ts).
+    - Guarded by authenticateDevice, never authenticate. A user token cannot
+      reach these routes and a device token cannot reach any other route.
+
+  Minor, not a defect:
+    - robotApi.me() (GET /devices/me) is defined in api/device.ts and never
+      called; the device identity comes back inside the auth response instead.
+      Dead code, no user impact.
+
+PAGE 2. MAPPING / NAVIGATION  ................................. NOT STARTED
+  Correctly documented as not started. Confirmed: nothing in backend/ serves
+  it, no route in apps/web. (A stub CampusMapPage exists in the Flutter app -
+  see section 7.)
+
+
+===============================================================================
+3) ADMIN - TEACHING STAFF - 9 ROUTES (apps/web)
+===============================================================================
+Nav: apps/web/src/lib/navigation.ts ADMIN_NAV (7 entries)
+Routes: apps/web/src/App.tsx
+
+PAGE 1. MY TEACHING TIMETABLE  - /teaching ........................... WORKING
+  File: pages/campus/TeachingSchedule.tsx
+
+  GET /api/admin/schedule -> requireRole("ADMIN"), admin.routes.ts:45.
+  Reads r.data.schedules (correct - the envelope is
+  { instructorId, count, schedules }, not `schedule`).
+  Sunday-first grouping matches the DayOfWeek enum declaration order.
+  "Open attendance" POSTs /api/sessions with lectureScheduleId and navigates
+  straight to /sessions/:id/qr. Works end to end.
+
+  Note: this route is gated to ADMIN alone. A UNIVERSITY_SUPER_ADMIN typing
+  /teaching gets the AccessDenied screen. That is intentional (they have no
+  teaching timetable), but it also means GET /api/admin/schedule is the only
+  campus endpoint a super admin cannot call.
+
+PAGE 2. SESSIONS  - /sessions ......................... WORKING WITH DEFECT
+  File: pages/campus/Sessions.tsx
+
+  Working: list, 15s live refresh, attendee count (_count.attendances,
+  correctly excluding ABSENT via `attendedCount` in the repository), close
+  with confirmation, "Show code" link, super-admin-only "Opened by" column.
+
+  >> DEFECT D-1 - EVERY SESSION IS LABELLED "Ad-hoc session - no course".
+     Sessions.tsx:74 reads `session.course`.
+     GET /api/sessions never sends it:
+       - SessionRepository.findByCreator   (line 242) - ADMIN path - includes
+         lectureSchedule and _count only. No `course`, no `createdBy`.
+       - SessionRepository.findByOrganization (line 168) - super admin path -
+         includes createdBy, lectureSchedule and _count. No `course`.
+     The course IS present one level down, at session.lectureSchedule.course
+     (scheduleSummary, session.repository.ts:9-20), which the page ignores.
+     Result: the course code and name never appear on the sessions list for
+     EITHER staff role, and every linked lecture is mislabelled as ad-hoc.
+     TypeScript does not catch it because CampusSession.course is declared
+     optional (types/campus.ts:90).
+
+  >> DEFECT D-2 - NO PAGINATION. GET /api/sessions returns the entire history
+     unpaginated (findByCreator / findByOrganization have no skip/take). After
+     a term this is one very large response rendered as one very long table.
+
+PAGE 3. ATTENDANCE & EXCEL EXPORT  - /sessions/:id ..... WORKING WITH DEFECT
+  File: pages/campus/SessionDetail.tsx
+
+  Working: live roster with 10s refresh while ACTIVE, per-row scan time,
+  PRESENT/LATE/ABSENT badges, the statistics card (total / present / late /
+  absent / roll - matches AttendanceRepository.getSessionStats:203-223 exactly,
+  including `total` = present + late and `roll` reported separately), and the
+  .xlsx export button (guarded on session.courseId, which IS returned because
+  it is a scalar).
+
+  >> DEFECT D-3 - same root cause as D-1. SessionDetail.tsx:124 reads
+     `session?.course`; GET /api/sessions/:id -> SessionRepository.findById
+     (line 103) includes createdBy and lectureSchedule but not course. The page
+     subtitle therefore always reads "Ad-hoc session - no course behind it",
+     even for a session opened from a lecture.
+
+  Export rule verified correct: an ADMIN may export only a course they created
+  or instruct an active LectureSchedule for; anything else is 403
+  ("You are not assigned to this course") -
+  services/student-export.service.ts:124-155. The tenant check runs first and
+  applies to SYSTEM_OWNER too.
+
+PAGE 4. LIVE QR DISPLAY  - /sessions/:id/qr .......................... WORKING
+  File: pages/campus/LiveQr.tsx
+
+  Correctly outside DashboardLayout (full-bleed, projector-safe). Rotating code
+  at 25s, live scan count, fullscreen toggle, closed-session state, error
+  state. Uses the staff endpoint GET /api/sessions/:id/qr.
+
+  Cosmetic consequence of D-3: the heading falls back from
+  session.course.courseCode to session.title. Because TeachingSchedule creates
+  the session titled "CODE - Name", the projector still shows the right words.
+  This one degrades gracefully; D-1 and D-3 do not.
+
+PAGE 5. MY COURSES  - /courses ........................ WORKING WITH DEFECT
+  File: pages/campus/Courses.tsx
+
+  >> DEFECT D-4 - THE PAGE IS NOT "MY" COURSES.
+     Courses.tsx:55 calls coursesApi.list(params) -> GET /api/courses, which is
+     open to any authenticated user and returns EVERY course in the university
+     (course.routes.ts:26 -> CourseService.getOrgCourses, no role narrowing).
+     The page title says "My Courses" and the subtitle says "The subjects you
+     are assigned to or created" (Courses.tsx:167). Neither is true - an
+     instructor sees the whole university's catalogue.
+
+     The correct endpoint exists and is unused: coursesApi.mine() -> GET
+     /api/courses/my is defined at api/campus.ts:180 and called from nowhere.
+     (Note it would not be a perfect fix either: CourseService.getMyCourses
+     uses findByCreator - created-by only - so it does not implement the
+     "assigned to OR created" rule the export endpoint uses.)
+
+  >> DEFECT D-5 - the roster download button renders on EVERY row for an
+     ADMIN (Courses.tsx, actions column - only Pencil/Trash are behind
+     `canManage`). Combined with D-4, an instructor sees a download button on
+     every course in the university, and gets a 403 toast on all the ones they
+     do not teach. The page's own header comment says showing a button that
+     always 403s is worse than not showing it; the export button breaks that
+     rule.
+
+  Create / edit / delete are correctly hidden for an ADMIN.
+  Filters (search, department, level) all reach real server-side filters -
+  `level` resolves through active LectureSchedule rows
+  (course.repository.ts:76-82), matching the documented design.
+
+PAGE 6. COURSE MATERIAL  - /materials .................. WORKING WITH DEFECT
+  File: pages/campus/Materials.tsx
+
+  Publishing works and the authorization is exactly as documented: an ADMIN
+  publishes by picking one of their own lectures, the service copies the
+  academic address off it, and the `cohort` parameter is refused for an ADMIN
+  (material.service.ts, cohortFromSchedule / cohortFromRequest). The client
+  correctly sends selectedLecture.course.id, not a second dropdown.
+
+  >> DEFECT D-6 - THE LIST IS NOT "the links you publish".
+     MaterialService.list (material.service.ts:118) calls
+     findManyInOrganization - every material row in the university, whoever
+     published it. There is no addedById filter in the service and none in
+     materialQuerySchema (material.types.ts:120-130). The subtitle at
+     Materials.tsx:97 claims otherwise.
+     Consequence: the Edit and Withdraw buttons render on every row, including
+     other instructors' rows, where loadEditable (material.service.ts:244)
+     answers 403 "You can only change material you published".
+
+  >> DEFECT D-7 - DEAD "WITHDRAWN" STATE. The repository defaults to
+     `isActive: query.isActive ?? true` (material.repository.ts:79) and the
+     client never sends isActive. A withdrawn link therefore disappears
+     entirely, so the `!material.isActive` branch and the "Withdrawn" badge in
+     Materials.tsx can never render, and there is no way to see or reactivate a
+     withdrawn link from the UI even though the row is deliberately kept.
+
+PAGE 7. PENDING STUDENTS  - /pending-students ........................ WORKING
+  File: pages/campus/PendingStudents.tsx
+
+  The most completely correct page in the project. Every field the card
+  renders is genuinely present in the server projection
+  (AdminService.presentPending, admin.service.ts:496-527), including
+  `registeredAt` - the page comment explicitly notes that `createdAt` is absent
+  and would render "Invalid Date", and it reads the right one.
+  Approve and reject both reach canApprove (admin.routes.ts:129/133), which
+  admits ADMIN and UNIVERSITY_SUPER_ADMIN as documented. The approval and its
+  Notification commit in one transaction (verified by
+  tests/student-approval.test.ts, 18 tests passing).
+  Incomplete profiles are flagged rather than hidden. Pagination is capped at
+  limit:50 with no page control (see D-8) - the only rough edge.
+
+PAGE 8. NOTIFICATIONS  - /notifications .............................. WORKING
+  File: pages/campus/Notifications.tsx
+
+  Reads GET /api/notifications, /unread-count (correctly unwrapping
+  `unreadCount`, not `count`), PATCH /:id/read and /read-all. All five
+  NotificationType values in the Prisma enum have a label and tone in
+  TYPE_META. LECTURE_ADMIN_24H and LECTURE_ADMIN_30M are the rows an instructor
+  actually receives, and they now have a page - this was a real gap that has
+  been closed.
+  The dev simulation panel is correctly hidden from an ADMIN (isSuperAdmin
+  gate) and the routes are unmounted server-side outside development
+  (notification.routes.ts:64, env.devToolsEnabled forced off in production).
+
+PAGE 9. ACCOUNT  - /account .......................................... WORKING
+  File: pages/Account.tsx
+  GET/PATCH /api/auth/profile and PATCH /api/auth/password. Role-agnostic
+  endpoints, role-agnostic page. Client-side confirm-password check before
+  submitting. Works for both staff roles.
+
+
+===============================================================================
+4) UNIVERSITY_SUPER_ADMIN - 11 PAGES (apps/web)
+===============================================================================
+Nav: navigation.ts SUPER_ADMIN_NAV (11 entries, 5 flagged `mobile`)
+
+PAGE 1. DASHBOARD  - / ............................................... WORKING
+  File: pages/campus/Overview.tsx
+  GET /api/admin/overview. Every field the page reads exists in
+  AdminService.getOrganizationOverview (admin.service.ts:67-102):
+  people.activeStudents / .staff / .incompleteProfiles, academics.courses /
+  .activeLectures, sessions.active / .today / .closedThisWeek,
+  attendance.scansThisWeek / .averageAttendeesPerSession.
+  The null-vs-zero rule on averageAttendeesPerSession is honoured on both
+  sides (server returns null; the page renders an em dash).
+  The approval-queue banner is driven by a second query with limit:1 reading
+  meta.total - correct and cheap.
+
+PAGE 2. TIMETABLE MANAGEMENT  - /timetable ............ WORKING WITH DEFECT
+  File: pages/campus/Timetable.tsx
+
+  Create, edit and deactivate all work. Server-side clash detection is
+  authoritative and the page surfaces the error rather than duplicating the
+  check - correct choice. Filters (department, level, dayOfWeek, room) all
+  exist in scheduleQuerySchema (schedule.types.ts:141-155).
+  The course and instructor dropdowns are populated from GET /api/courses and
+  GET /api/admin/users?role=ADMIN&limit=100.
+
+  >> DEFECT D-8 (CROSS-CUTTING) - PAGINATION CONTROLS NEVER RENDER.
+     DataTable only draws its pager when BOTH `meta` and `onPageChange` are
+     supplied (components/ui/DataTable.tsx:140). Four campus pages pass `meta`
+     and none passes `onPageChange`:
+       Timetable.tsx:168  (limit 100)
+       Directory.tsx:198  (limit 25)
+       Courses.tsx:183
+       Devices.tsx:188    (limit 50)
+     Every platform-owner page does wire it (Users, Organizations,
+     Subscriptions, Invoices). So the campus console silently truncates:
+     a university with more than 100 lectures cannot see lecture 101, and
+     Students & Staff shows the first 25 people with no way forward.
+
+  >> DEFECT D-9 - the instructor dropdown is also capped at limit:100 with no
+     paging, so a university with more than 100 staff cannot assign the rest.
+
+PAGE 3. COURSES  - /courses ........................... WORKING WITH DEFECT
+  File: pages/campus/Courses.tsx (same file as ADMIN page 5)
+
+  >> DEFECT D-10 - A SUPER ADMIN CANNOT EDIT OR DELETE A COURSE THEY DID NOT
+     CREATE. This is the most significant gap found.
+     PAGES_AND_GAPS.txt promises "Create / edit / delete ANY course".
+     CourseService.updateCourse (course.service.ts:53) and deleteCourse
+     (course.service.ts:65) both do:
+         if (course.createdById !== adminId) throw forbidden(...)
+     with no role branch. The route guard admits the role
+     (course.routes.ts:49/52) but the service refuses the person.
+     Consequence: a course created by a departed instructor, or by a colleague,
+     is permanently uneditable and undeletable by the university administrator.
+     The Pencil and Trash buttons render (canManage is true), so the failure is
+     a 403 toast on click, not a hidden button.
+     Contrast: the export path DOES branch on role correctly
+     (student-export.service.ts:124-131, "A UNIVERSITY_SUPER_ADMIN never
+     reaches this check"). The course service was never given the same rule.
+
+  Filters and creation work correctly.
+
+PAGE 4. SESSIONS & ATTENDANCE  - /sessions, /sessions/:id
+                                          ............ WORKING WITH DEFECT
+  Same pages as ADMIN. The server widens the scope correctly
+  (SessionService.listSessionsFor, session.service.ts:106-110: findByCreator
+  for ADMIN, findByOrganization otherwise), and the "Opened by" column is
+  populated because findByOrganization DOES include createdBy.
+  Carries defects D-1, D-2 and D-3 unchanged.
+
+PAGE 5. STUDENTS & STAFF  - /directory ................ WORKING WITH DEFECT
+  File: pages/campus/Directory.tsx
+
+  Working: Students | Staff tabs, debounced search, the three status filters
+  (pending -> isVerified=false, inactive -> isActive=false, incomplete ->
+  profileStatus=INCOMPLETE - all present in adminUserQuerySchema,
+  admin.types.ts:24-37), create account (ADMIN or STUDENT only, jobTitle
+  required for ADMIN - matches createCampusUserSchema), deactivate/reactivate
+  via PATCH isActive, and reset password via PATCH /users/:id/password.
+
+  This is the staff password-recovery path and it is correctly the only one:
+  AuthService deliberately refuses staff on the emailed self-service reset and
+  mails them an explanation instead (verified in
+  tests/auth-recovery.test.ts, 20 tests passing).
+
+  Carries D-8 (capped at 25 rows, no pager).
+
+PAGE 6. PENDING STUDENTS  - /pending-students ........................ WORKING
+  Same page as ADMIN page 7. Correct.
+
+PAGE 7. COURSE MATERIAL  - /materials ................. WORKING WITH DEFECT
+  The super admin's explicit-cohort form (faculty, department, level, semester,
+  section) works and is correctly refused for an ADMIN by the service.
+  Carries D-7 (withdrawn links invisible). D-6 does not apply to this role -
+  seeing every link IS the super admin's job; the subtitle is right for them
+  and wrong for an ADMIN.
+
+PAGE 8. ROBOT DEVICES  - /devices ..................... WORKING WITH DEFECT
+  File: pages/campus/Devices.tsx
+
+  Provision, rotate-secret and revoke all work. The secret is shown exactly
+  once, on provision and on rotate, and only bcrypt over it is stored - this is
+  where the robot's credential comes from and the flow is correct end to end
+  with the RobotConsole pairing screen.
+
+  >> DEFECT D-11 - NO WAY TO EDIT A DEVICE. PATCH /api/admin/devices/:id exists
+     (admin.routes.ts:164) and devicesApi.update() exists (api/campus.ts), but
+     nothing calls it. A device cannot be renamed and - more importantly - its
+     ROOM BINDING cannot be changed from the console. Moving a screen from
+     B-204 to C-101 currently requires revoking it (terminal, by design) and
+     provisioning a new one. The room binding is part of the QR authorization
+     (SessionService.getQrTokenForDevice, session.service.ts:175-198), so this
+     is an operational gap, not a cosmetic one.
+
+  Carries D-8 (capped at 50 devices).
+
+PAGE 9. EXPORTS  - /exports ......................... SIGNPOST, NOT A PAGE
+  File: pages/campus/Overview.tsx (Exports component, bottom of file)
+
+  This page exports nothing. It is two explanatory cards and a "Go to Courses"
+  button. The actual download lives on the Courses table row. That is a
+  defensible design, but the nav entry "Exports" promises a tool and delivers a
+  help page, and the plan lists it as "Roster export for any course". It also
+  re-fetches /admin/overview purely to render a course count badge.
+  Not broken - just not what its name says.
+
+PAGE 10. NOTIFICATIONS  - /notifications ............................. WORKING
+  Same page as ADMIN, plus the DevTools panel (import.meta.env.DEV gate on the
+  client, env.devToolsEnabled gate on the server). Generate / dispatch /
+  simulate all reach real routes when running in development.
+
+PAGE 11. ACCOUNT  - /account ......................................... WORKING
+
+
+===============================================================================
+5) SYSTEM_OWNER - PLATFORM CONSOLE (apps/web)
+===============================================================================
+Nav: navigation.ts SYSTEM_OWNER_NAV. With billing OFF (shipped default) four
+entries are filtered out and five remain.
+
+  /                   Dashboard      WORKING   - GET /api/metrics/overview
+  /organizations      Organizations  WORKING   - full CRUD, paginated (wires
+                                                 onPageChange correctly)
+  /organizations/:id  Detail         WORKING
+  /users              Users          WORKING   - GET /api/users (the one
+                                                 endpoint that reads
+                                                 organizationId from a query
+                                                 parameter; safe only because
+                                                 requireOwner gates it)
+  /robots             Robots         PLACEHOLDER
+        pages/Robots.tsx is explicitly a "planned extension" page. It renders
+        three explanatory cards. Note it calls usePlans(), which hits
+        /api/plans - and /api/plans is UNMOUNTED when BILLING_ENABLED=false
+        (app.ts:89). So with the default config this page fires a request that
+        404s. It fails silently (optional chaining), but it is a guaranteed
+        failed request on every visit.
+        Also confusing: this is NOT the robot device console. Robot credentials
+        live at /devices under the super admin.
+  /settings           Settings       WORKING   - owner's own profile + password
+
+  Behind VITE_BILLING_ENABLED (off): /revenue, /subscriptions, /plans,
+  /invoices. Code is present and complete on both sides; the backend unmounts
+  the matching routers under the same flag, so the two agree. Untested in this
+  review because the flag is off.
+
+  Note: /account is gated to STAFF only (App.tsx). A SYSTEM_OWNER typing
+  /account gets AccessDenied. Correct - they use /settings - but the two pages
+  duplicate the same two forms.
+
+  Confirmed: no campus role can reach any owner route. requireOwner on
+  user.routes.ts:22, organization.routes.ts:20, metrics.routes.ts:11.
+
+
+===============================================================================
+6) STUDENT - apps/mobile (Flutter)
+===============================================================================
+
+  ** FIRST, A DISCREPANCY THE PLAN DOES NOT REFLECT **
+
+  PAGES_AND_GAPS.txt states, in three separate places, that the student client
+  is "a Flutter app, OUTSIDE this repository" and that mobile means "a reduced
+  navigation menu inside apps/web". Neither is true of the working tree any
+  more. apps/mobile/ exists, is untracked in git, is 7,238 lines of Dart, and
+  serves ALL FOUR roles - student, admin, super admin and robot - with its own
+  screens, not a reduced apps/web menu.
+
+  Everything below is therefore reviewed against the plan's STUDENT page list,
+  but the plan itself is out of date on where that client lives.
+
+  The Flutter app was NOT compiled. These are source-reading findings.
+
+STUDENT SHELL: apps/mobile/lib/presentation/student_shell.dart (2,441 lines)
+Five bottom-nav tabs + a profile screen reached from the header.
+
+PAGE 1. MY PROFILE  ................................................. WORKING
+  GET /students/me/profile + GET /auth/profile (lines 1874-1875),
+  PATCH /students/me/profile (line 1975). Editable while PENDING, as required -
+  the route is deliberately NOT behind requireApproved (student.routes.ts:26).
+
+PAGE 2. MY TIMETABLE  ................................. WORKING WITH DEFECT
+  GET /students/me/schedule (line 404). No academic filter is sent; the cohort
+  is resolved server-side from the student's own profile. Correct.
+
+  >> DEFECT D-12 - NO FRIDAY. The day selector is hardcoded to six days:
+     SAT, SUN, MON, TUE, WED, THU (student_shell.dart:392-398). The Prisma
+     DayOfWeek enum has seven, FRIDAY included (schema.prisma:99-107). A Friday
+     lecture is returned by the API and is unreachable in the mobile UI.
+     The same six-day list appears in the super admin's schedule editor
+     (connected_pages.dart:240-247), so a Friday lecture cannot be CREATED from
+     mobile either.
+
+PAGE 3. SCAN QR  .................................................... WORKING
+  Real camera scanning via mobile_scanner ^6.0.11 (pubspec.yaml), POST
+  /attendance/scan (line 1201). Three result states handled: success, already
+  recorded, expired. Guarded against double submission.
+
+PAGE 4. MATERIAL  ..................................... WORKING WITH DEFECT
+  GET /materials/my (line 1434). The endpoint already groups by subject, so the
+  page renders what it is given.
+
+  >> DEFECT D-13 - the documented 400 branch is not implemented. The plan says
+     a 400 from /materials/my carries `profileStatus` and `missingFields` and
+     the client must send the student to Profile with those fields highlighted.
+     Grepping the whole Flutter source for `missingFields` and `profileStatus`
+     returns nothing. The student sees a generic error message instead.
+
+PAGE 5. ACHIEVEMENT / ATTENDANCE  ................................... WORKING
+  GET /attendance/summary + GET /attendance/history (lines 777-778) - both
+  views over one dataset, as designed. The backend correctly reports
+  `recordedLectures` (not "lectures") and returns attendanceRate as null rather
+  than 0 when nothing is recorded (verified in
+  tests/attendance-summary.test.ts, passing).
+  Whether the UI copy says "recorded lectures" was not verified word by word;
+  the DATA is correct.
+
+PAGE 6. INBOX  ...................................................... WORKING
+  GET /notifications, PATCH /:id/read, PATCH /read-all (lines 1635-1658).
+  Both lecture reminders and the ACCOUNT_APPROVED / ACCOUNT_REJECTED notices
+  arrive on this one feed, as designed.
+  Does not call /notifications/unread-count; the badge, if any, is derived
+  client-side.
+
+SCREEN 7. REGISTER + OTP  ........................................... MISSING
+  >> The single largest missing piece in the project.
+     A student CANNOT CREATE AN ACCOUNT from the mobile app.
+     The Flutter client calls none of the three registration endpoints:
+       POST /auth/verify-email/start    - not called
+       POST /auth/verify-email/confirm  - not called
+       POST /auth/register              - not called
+     (Full endpoint inventory taken from apps/mobile/lib - the app touches 25
+     paths and none of them is /auth/register.)
+     The backend side is complete and tested: EmailChallengeService, the OTP
+     four-limit set, the ticket exchange, and
+     STUDENT_EMAIL_VERIFICATION_REQUIRED behind a flag
+     (tests/email-challenge.test.ts + tests/auth-recovery.test.ts, 38 tests,
+     all passing). The server is waiting for a client that does not exist.
+     Today, every student account has to be created by a super admin from
+     /directory.
+
+  Related, same cause - PASSWORD RECOVERY IS HALF-BUILT.
+     campus_api.dart:169 sends POST /auth/forgot-password and nothing else.
+     There is NO screen to enter the mailed 6-digit code and NO call to
+     POST /auth/reset-password. The student receives a code with nowhere to
+     type it. This is worse than not offering the button.
+
+SCREEN 8. WAITING FOR APPROVAL  ..................................... MISSING
+  >> Grepping the Flutter source for ACCOUNT_PENDING_APPROVAL returns nothing.
+     The AuthSession model does carry isVerified (campus_api.dart:118), but no
+     screen branches on it and no error handler branches on the code.
+     Consequence: a PENDING student logs in successfully (login is deliberately
+     not blocked) and then hits 403 ACCOUNT_PENDING_APPROVAL on Timetable,
+     Scan, Material and Achievement. They see four generic error panels instead
+     of one "waiting for approval" screen. This is exactly the failure the plan
+     warns about: "Without it a pending student sees four broken pages."
+
+
+===============================================================================
+7) STAFF AND ROBOT ON apps/mobile (Flutter)
+===============================================================================
+Nav: connected_pages.dart connectedDestinationsFor()
+
+  DEAD CODE, worth knowing: role_pages.dart defines a SECOND, entirely static
+  set of screens via destinationsFor(). Nothing calls it - app_shell.dart:25
+  uses connectedDestinationsFor(). role_pages.dart is 1,459 lines of unused
+  mockups, except that two of its widgets (ExportsPage, CampusMapPage) are
+  still imported into the live nav. See below.
+
+ADMIN on mobile (8 entries)
+  Overview          WORKING     - /admin/schedule, /sessions,
+                                  /admin/students/pending, /courses.
+                                  All four are ADMIN-reachable. Correct.
+  My Teaching       WORKING     - /admin/schedule
+  Sessions          READ-ONLY   >> DEFECT D-14: the page lists sessions and
+                                  nothing else (connected_pages.dart:670-737).
+                                  No open, no close, no QR display. An
+                                  instructor cannot take attendance from the
+                                  phone - which is the one thing they would
+                                  open a phone for. The web page can.
+  Courses           WORKING     - /courses (read-only listing)
+  Materials         WORKING     - GET/POST/PATCH /materials
+  Pending Students  WORKING     - /admin/students/pending + approve/reject
+  Inbox             WORKING     - /notifications + read/read-all
+  Account           PARTIAL     >> DEFECT D-15: /auth/profile read-only. No
+                                  name edit and NO PASSWORD CHANGE. The web
+                                  Account page has both.
+
+SUPER ADMIN on mobile (11 entries)
+  Dashboard         WORKING     - /admin/overview + /schedules
+  Timetable         WORKING     - /schedules + POST/PATCH. Carries D-12 (no
+                                  Friday in the day dropdown). No deactivate.
+  Courses           READ-ONLY   - listing only; no create/edit/delete
+  Sessions          READ-ONLY   - D-14
+  Students & Staff  READ-ONLY   >> /admin/users listing only. No create, no
+                                  deactivate, NO PASSWORD RESET - and the
+                                  password reset is the staff recovery path.
+  Pending Students  WORKING
+  Materials         WORKING
+  Devices           READ-ONLY   >> /admin/devices listing only. No provision,
+                                  no rotate, no revoke. A robot cannot be
+                                  credentialed from mobile.
+  Exports           PLACEHOLDER >> ExportsPage from role_pages.dart:1196 -
+                                  two `readOnly: true` TextFields and a dead
+                                  "Generate Excel file" button. No API call of
+                                  any kind. It looks functional and is not.
+  Inbox             WORKING
+  Account           PARTIAL     - D-15
+
+ROBOT on mobile (2 entries)
+  QR Display        WORKING     - /devices/me/sessions/active and
+                                  /devices/me/sessions/:id/qr, with refresh.
+                                  Device credentials are exchanged through the
+                                  same login form: campus_api.dart:88-140 tries
+                                  /auth/mobile-login first, and on a 401 falls
+                                  back to /devices/auth. Clever, and it
+                                  correctly re-throws WEB_ONLY_ACCOUNT rather
+                                  than misreading a policy answer as a robot
+                                  credential.
+  Campus Map        PLACEHOLDER - matches the plan (not started).
+
+
+===============================================================================
+8) CROSS-CUTTING DEFECT REGISTER
+===============================================================================
+Ordered by how much they cost somebody. File:line included for each.
+
+  ID    SEVERITY  WHAT
+  ----  --------  --------------------------------------------------------------
+  D-10  HIGH      A super admin cannot edit or delete a course they did not
+                  create. backend/src/services/course.service.ts:53 and :65 -
+                  createdById check with no role branch. Contradicts the plan
+                  and contradicts the pattern used by
+                  student-export.service.ts:124-131.
+
+  S-7   HIGH      No student registration client. All three /auth/verify-email
+                  and /auth/register endpoints are unreachable from any client
+                  in this repo. See section 6, screen 7.
+
+  S-8   HIGH      No pending-approval screen. A PENDING student gets four
+                  generic errors. No ACCOUNT_PENDING_APPROVAL handling exists
+                  anywhere in apps/mobile.
+
+  D-1   HIGH      Every session on /sessions is labelled "Ad-hoc session - no
+                  course". apps/web/src/pages/campus/Sessions.tsx:74 vs
+                  backend/src/repositories/session.repository.ts:168 and :242 -
+                  neither projection includes `course`. The data IS available
+                  at session.lectureSchedule.course and is ignored.
+
+  D-3   HIGH      Same on /sessions/:id.
+                  pages/campus/SessionDetail.tsx:124 vs
+                  session.repository.ts:103 (findById, no course).
+
+  --    HIGH      Password reset is half-built on mobile: the code is mailed,
+                  no screen accepts it, /auth/reset-password is never called.
+                  apps/mobile/lib/data/campus_api.dart:169.
+
+  D-8   MEDIUM    Pagination controls never render on four campus pages.
+                  components/ui/DataTable.tsx:140 requires onPageChange; it is
+                  passed by no campus page. Directory caps at 25 users,
+                  Timetable at 100 lectures, Devices at 50.
+
+  D-4   MEDIUM    "My Courses" shows every course in the university.
+                  pages/campus/Courses.tsx:55 calls GET /courses, not
+                  /courses/my. coursesApi.mine() exists and is never called.
+
+  D-6   MEDIUM    "Course Material" shows every link in the university to an
+                  ADMIN. material.service.ts:118 (findManyInOrganization, no
+                  addedById filter). Edit/withdraw buttons render on rows the
+                  server will refuse.
+
+  D-11  MEDIUM    Devices cannot be edited. PATCH /admin/devices/:id and
+                  devicesApi.update() both exist; nothing calls them. Rebinding
+                  a screen to a different room requires revoke + reprovision.
+
+  D-14  MEDIUM    Mobile Sessions is read-only for staff - no open, no close,
+                  no QR. connected_pages.dart:670.
+
+  D-12  MEDIUM    Friday is missing from both mobile day selectors.
+                  student_shell.dart:392, connected_pages.dart:240. The Prisma
+                  enum has seven days.
+
+  D-2   MEDIUM    GET /api/sessions is unpaginated. Grows without bound.
+
+  D-15  MEDIUM    No password change on mobile for any role.
+
+  D-5   LOW       Export button renders on every course row for an ADMIN and
+                  403s on most of them. Courses.tsx actions column.
+
+  D-7   LOW       Withdrawn material is invisible and unreactivatable.
+                  material.repository.ts:79 defaults isActive to true.
+
+  D-13  LOW       The documented profileStatus/missingFields branch on
+                  /materials/my 400 is not implemented in the mobile client.
+
+  D-9   LOW       Instructor dropdown capped at 100 with no paging.
+
+  --    LOW       /robots (owner) fires a request to /api/plans, which is
+                  unmounted while BILLING_ENABLED=false. Fails silently every
+                  visit. apps/web/src/pages/Robots.tsx:12, app.ts:89.
+
+  --    LOW       /exports (super admin) is a help page, not an export tool.
+
+  Unused client functions (defined, never called) - each marks an endpoint with
+  no UI: campusAdminApi.user, devicesApi.get, devicesApi.update,
+  schedulesApi.get, schedulesApi.attendanceLog, coursesApi.mine,
+  coursesApi.get, attendanceApi.analytics, robotApi.me.
+
+
+===============================================================================
+9) BACKEND ENDPOINTS WITH NO UI ANYWHERE
+===============================================================================
+These are built, guarded, and reachable - but no page in apps/web or
+apps/mobile calls them.
+
+  GET   /api/schedules/:id/attendance-log
+        Which occurrences of a lecture were NOT_RECORDED / OPEN / PENDING /
+        RECORDED. schedule.routes.ts:48. This is the answer to "which lectures
+        did nobody take attendance for", and it is the report a university
+        administrator would most want. schedulesApi.attendanceLog() exists in
+        the client and is called from nowhere.
+
+  GET   /api/attendance/analytics
+        attendance.routes.ts:30 -> AttendanceService.getAdminAnalytics.
+        attendanceApi.analytics() exists, unused.
+
+  GET   /api/courses/my
+        course.routes.ts:29. See D-4.
+
+  GET   /api/courses/:id/sessions
+        course.routes.ts:35. No client function at all.
+
+  POST  /api/notifications/device-tokens
+  PATCH /api/notifications/device-tokens/deactivate
+        Push registration. Documented as awaiting a provider; the mobile app
+        does not register a token either.
+
+  POST  /api/auth/verify-email/start, /confirm
+  POST  /api/auth/register
+  POST  /api/auth/reset-password
+        See section 6.
+
+
+===============================================================================
+10) WHAT IS DEMONSTRABLY SOLID
+===============================================================================
+Stated plainly, because the defect list above is longer than the praise and
+that would give a misleading impression of the codebase.
+
+  THE TENANT RULE HOLDS. organizationId is taken from the token-backed user
+  record everywhere and spread LAST into every where clause. The query schemas
+  do not declare an organizationId field, so Zod strips one before it reaches a
+  service. The two owner-only exceptions (/api/metrics/overview, /api/users)
+  are both behind requireOwner. No path was found that violates this.
+
+  THE TWO PRINCIPAL TYPES ARE GENUINELY SEPARATE. Device tokens are signed with
+  DEVICE_JWT_SECRET, land on a different request property, and are checked by
+  authenticateDevice - which guards device.routes.ts and nothing else. A user
+  token cannot reach a device route and a device token cannot reach a user
+  route. The client mirrors this with two axios instances (lib/api.ts and
+  lib/deviceApi.ts) so a token cannot be sent to the wrong surface by accident.
+
+  THE ROBOT CANNOT OPEN A SESSION. No route, no capability, and
+  Session.createdById is a non-nullable FK to User. This is enforced three ways.
+
+  ATTENDANCE COUNTING IS CONSISTENT. The `attendedCount` constant
+  (session.repository.ts:47) excludes ABSENT from every session projection, so
+  the robot's screen, the admin's list and the attendance log cannot disagree.
+  Roll size is reported separately as `roll`. 348 backend tests cover the
+  lifecycle, the scan hardening, the summary arithmetic and the absence sweep.
+
+  THE APPROVAL DECISION AND ITS NOTIFICATION COMMIT TOGETHER. One transaction,
+  so a student is never admitted-and-not-told or told-and-not-admitted.
+
+  THE OTP LIMITS ARE A COMPLETE SET. TTL, attempt ceiling, per-email hourly
+  ceiling, resend cooldown, previous-code consumption, and bcrypt-only storage.
+  All are configurable and all are tested.
+
+  BOTH TYPESCRIPT PROJECTS COMPILE CLEAN AND ALL 360 TESTS PASS.
+
+
+===============================================================================
+11) DEPLOYMENT BLOCKERS (quoted from the project's own documents;
+    NOT independently verified - no database or environment was touched)
+===============================================================================
+
+  1. TEN MIGRATIONS ARE WRITTEN AND REPORTED UNAPPLIED, including
+     20260802073548_init. PAGES_AND_GAPS.txt records that the
+     _prisma_migrations table is empty, meaning the database was built by some
+     route other than the migration history. `prisma migrate deploy` would try
+     to replay init over existing tables. docs/MIGRATION_RUNBOOK.md is the
+     procedure and it correctly starts with a read-only comparison.
+     Migrations present on disk: 10 (backend/prisma/migrations/).
+
+  2. QR_ENDPOINT_STAFF_ONLY=false. Verified in code: session.routes.ts:30 -
+     the guard array is empty while the flag is off, so GET /api/sessions/:id/qr
+     is reachable by ANY authenticated user, students included. A QR token is a
+     plain JWT whose payload reads without a secret, so a student who scans once
+     learns the session id and can mint fresh codes for as long as the session
+     is open. The robot console now exists and runs on /api/devices/*, so the
+     blocker is proof, not code. See docs/QR_CUTOVER.md.
+
+  3. DEVICE_JWT_SECRET is unset in .env.example (line 20) and is derived from
+     JWT_SECRET with a warning. Set it before the robot ships.
+
+  4. MAIL_PROVIDER=log in .env.example (line 135). Production refuses to boot
+     on this value - correctly, since the logging provider would print one-time
+     codes into the server log while telling the caller they were sent.
+
+  FLAG STATE (backend/.env.example, verified):
+    BILLING_ENABLED=false / VITE_BILLING_ENABLED unset ... off
+    QR_ENDPOINT_STAFF_ONLY=false ......................... off
+    STUDENT_EMAIL_VERIFICATION_REQUIRED=false ............ off
+    DEVICE_ROOM_FILTER_STRICT ............................ off
+    SCAN_ALLOW_UNLINKED_SESSIONS ......................... on
+
+  Note on flag 3: STUDENT_EMAIL_VERIFICATION_REQUIRED ships off because "the
+  Flutter app registers with no ticket today". That is now understated - the
+  Flutter app does not register AT ALL. Turning this flag on would change
+  nothing, because nothing calls /auth/register.
+
+
+===============================================================================
+12) WHERE THE PLAN AND THE CODE DISAGREE
+===============================================================================
+Documentation defects, not code defects. Listed because the plan is the
+document somebody will read next.
+
+  a) "STUDENT - Flutter app, OUTSIDE this repository" and "THE STUDENT HAS NO
+     WEB CLIENT ... mobile is a REDUCED NAVIGATION MENU inside apps/web".
+     Both are now false. apps/mobile/ is in the working tree (untracked), is a
+     full Flutter client, and serves all four roles with its own screens.
+     PAGES_AND_GAPS.txt has not caught up.
+
+  b) "SUPER ADMIN - Courses - Create / edit / delete ANY course."
+     The service permits neither edit nor delete on a course the caller did not
+     create. See D-10.
+
+  c) "ADMIN - My Courses - Courses they are assigned to or created."
+     The page calls the university-wide endpoint. See D-4.
+
+  d) "ADMIN - Course Material - Publish / edit / withdraw THEIR OWN links."
+     The list is university-wide. See D-6.
+
+  e) "SUPER ADMIN - Exports - Roster export for any course."
+     /exports contains no export control. See section 4, page 9.
+
+  f) The plan's ADMIN table lists nine rows and says the menu lists seven -
+     that reconciles correctly against ADMIN_NAV, which has exactly 7 entries.
+     SUPER_ADMIN_NAV has exactly 11. Both counts are accurate.
+
+
+===============================================================================
+13) IF THE DEFECTS WERE FIXED IN ORDER OF VALUE
+===============================================================================
+Not a request to change anything - an ordering, so the list above is usable.
+
+  1.  D-10  role branch in CourseService.updateCourse / deleteCourse.
+            Smallest fix, largest unblocking: it restores the super admin's
+            documented authority over their own university's catalogue.
+  2.  D-1 + D-3  add `course: courseSummary` to the three session projections,
+            or read session.lectureSchedule.course in the two pages. Either
+            way, one change fixes both and stops every session being
+            mislabelled ad-hoc.
+  3.  S-8   the pending-approval screen. Cheap, and it converts four broken
+            pages into one honest one.
+  4.  S-7   the registration + OTP screens. Larger, but the entire server side
+            is already built and tested and is currently doing nothing.
+  5.  the reset-password screen - the code is already being mailed.
+  6.  D-8   four `onPageChange={setPage}` props.
+  7.  D-4 / D-6 - either fix the queries or fix the two subtitles, but the page
+            and its own description should stop disagreeing.
+  8.  D-11  wire devicesApi.update into a small edit modal.
+  9.  D-12  add FRIDAY to two arrays.
+  10. the rest of the LOW register.
+
+===============================================================================
+END OF REVIEW
+===============================================================================

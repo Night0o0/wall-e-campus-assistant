@@ -1,278 +1,599 @@
 ===============================================================================
 WALL-E CAMPUS ASSISTANT - UI PAGE PLAN PER ACCOUNT TYPE
 ===============================================================================
-Scope   : STUDENT, ADMIN (teaching staff), UNIVERSITY_SUPER_ADMIN
-Status  : PLAN ONLY. None of these pages exist yet - the web console currently
-          admits SYSTEM_OWNER accounts only (apps/web ProtectedRoute).
-          Every page below is backed by a WORKING backend API except the two
-          gaps described at the end of this file.
-Totals  : Student 5 pages | Admin 6 pages | Super Admin 7 pages
-          (+1 shared Login page used by all three roles)
+ARCHIVED: This August 16 snapshot predates removal of robot and billing scope
+and the Supabase/authorization phases. Do not use it as current implementation
+status. Use README.md, docs/PROJECT_STATUS.md, plan.txt, and
+docs/AUTHORIZATION_MATRIX.md.
+
+Scope   : STUDENT, ADMIN (teaching staff), UNIVERSITY_SUPER_ADMIN, ROBOT
+          (SYSTEM_OWNER is the platform console and is documented last.)
+Updated : 16 August 2026
+Status  : Staff, owner and robot web pages are built. Role landing, navigation,
+          guards, staff login and critical API contracts have frontend tests;
+          the backend endpoints have service/schema coverage.
+
+Totals  : Robot 2 | Student 8 | Admin 7 | Super Admin 11 | System Owner 11
+          (+1 shared Login page for the three web roles)
 
 
 -------------------------------------------------------------------------------
-SHARED
+WHICH CLIENT SERVES WHICH ROLE
 -------------------------------------------------------------------------------
-Login  ->  POST /api/auth/login
-           Fields: email, password. Returns a JWT (default 7d expiry).
-           After login the role decides where the user lands.
+
+  ROLE                     WEB (apps/web)        MOBILE
+  -----------------------  --------------------  ----------------------------
+  SYSTEM_OWNER             full console          reduced menu, same app
+  UNIVERSITY_SUPER_ADMIN   full, 9 pages         reduced menu, same app
+  ADMIN                    full, 6 pages         reduced menu, same app
+  ROBOT                    /robot                same route, same app
+  STUDENT                  none, by decision     Flutter app, OUTSIDE this repo
+
+Every page in apps/web is responsive and works at every width. "Mobile" above
+is not a separate application: it is a REDUCED NAVIGATION MENU, defined per role
+in apps/web/src/lib/navigation.ts by the `mobile` flag on each entry.
+
+The distinction matters. A super admin has nine pages, and a phone menu of nine
+is a phone menu nobody reads. The ones marked `mobile` are the pages somebody
+actually opens while walking across campus; the rest stay reachable by URL and
+by every in-page link, they are simply not in the small-screen menu. This is an
+editorial decision per role, revisited by editing one array — not a breakpoint,
+and not a capability difference.
+
+  ADMIN on a phone        : My Teaching, Sessions, Pending Students, Account
+  SUPER ADMIN on a phone  : Dashboard, Sessions, Students & Staff,
+                            Pending Students, Robot Devices
+
+THE STUDENT HAS NO WEB CLIENT. This is deliberate, not missing work. A student
+who signs in to apps/web is shown an explanation and pointed at the mobile app
+rather than a shell that would 403 on every request inside it.
 
 
 ===============================================================================
-1) STUDENT - 5 PAGES
+0) ROBOT - 2 PAGES
+===============================================================================
+
+THE ROBOT IS A DEVICE ACCOUNT, NOT A TABLET.
+
+  There is no apps/tablet, no kiosk build, and no hardware assumption anywhere
+  in the code. /robot is an ordinary route in apps/web. Run it on a wall screen,
+  a spare laptop, a phone propped against a lectern — the platform is
+  irrelevant and nothing in the client asks what it is running on.
+
+  What makes it a robot is the CREDENTIAL. A device authenticates with a key id
+  and secret at POST /api/devices/auth, receives a token signed with
+  DEVICE_JWT_SECRET — a different key from any user token — and can reach
+  exactly four endpoints. `authenticateDevice` guards them, never
+  `authenticate`, so no route below is reachable by a user token and no route
+  anywhere else is reachable by a device token.
+
++---------------------+------------------------------+--------------------------------------------------+
+| PAGE                | FUNCTION                     | DATA IT CONTAINS                                 |
++---------------------+------------------------------+--------------------------------------------------+
+| 1. QR Display       | Show the attendance code for | Rotating QR, course code + name, session title,  |
+|                     | a session a HUMAN opened.    | room, live scan count, refresh countdown.        |
++---------------------+------------------------------+--------------------------------------------------+
+| 2. Mapping          | Navigation / campus map.     | NOT STARTED. No backend exists for this. Nothing |
+|    ** later **      |                              | in backend/ serves it.                           |
++---------------------+------------------------------+--------------------------------------------------+
+
+PAGE 1 HAS FOUR STATES, all implemented in pages/robot/RobotConsole.tsx:
+
+  PAIRING   Key id + secret, asked for once. The only state that ever asks a
+            human for anything.
+  IDLE      Paired, nothing open. Where the screen spends most of the day,
+            which is why it is designed rather than left blank.
+  PICKING   More than one session matches. Shown only when the choice is
+            genuinely ambiguous.
+  SHOWING   One session, its code, rotating every 25 seconds.
+
+  A SINGLE MATCHING SESSION AUTO-SELECTS. Making somebody tap through a list of
+  one, in front of a waiting lecture hall, would be a worse default. The picker
+  exists because two sessions can share a room, and an unbound device sees the
+  whole university — guessing there would put the wrong course's code on a wall.
+
+TIMING
+  A QR token expires 30 seconds after the server signs it (utils/qr.util.ts).
+  The client refreshes at 25. The five-second margin covers the round trip and
+  the seconds between a student raising their phone and the scan landing.
+
+  The device ACCESS TOKEN lives DEVICE_TOKEN_TTL_MINUTES (default 15). The
+  console re-exchanges its stored credential silently on 401 rather than
+  dropping to the pairing screen — a robot that asks for its secret every
+  quarter of an hour is a robot nobody deploys.
+
+THE ROBOT CANNOT OPEN A SESSION
+  No button, no endpoint, no capability. The `session:open` capability was
+  deleted outright rather than shipped switched off, because a permanently
+  disabled permission is an invitation to enable it. Session.createdById is in
+  any case a non-nullable foreign key to User, which a device cannot satisfy.
+
+APIs used:
+  POST /api/devices/auth
+  GET  /api/devices/me
+  GET  /api/devices/me/sessions/active
+  GET  /api/devices/me/sessions/:id/qr
+
+WHERE THE CREDENTIAL COMES FROM
+  Super Admin page 7, Robot Devices. The secret is shown once at provisioning
+  and never again — only bcrypt over it is stored. Lost secret means rotate.
+
+
+===============================================================================
+THE APPROVAL FLOW
+===============================================================================
+
+  Student registers -> verifies email -> PENDING -> Admin approves -> ACTIVE
+
+EMAIL VERIFICATION (new, 16 Aug 2026)
+    Registration is three requests, and the address is proven BEFORE the
+    account exists:
+
+      1. POST /api/auth/verify-email/start    -> a 6-digit code is mailed
+      2. POST /api/auth/verify-email/confirm  -> code spent, ticket returned
+      3. POST /api/auth/register              -> ticket presented with the account
+
+    Verifying first means an abandoned signup leaves NOTHING behind: no User row
+    holding the unique claim on an email address or a university ID that
+    somebody else may legitimately need.
+
+    ENFORCEMENT IS BEHIND A FLAG. STUDENT_EMAIL_VERIFICATION_REQUIRED ships
+    false, for the same reason QR_ENDPOINT_STAFF_ONLY does: the client that has
+    to change is not in this repository. The Flutter app registers with no
+    ticket today, and turning this on before it implements the OTP screens would
+    stop student registration outright. Turn it on once the app sends
+    `verificationTicket`.
+
+WHAT A PENDING STUDENT CAN DO
+    Log in.                              /api/auth/login
+    Read and fill their own profile.     /api/students/me/profile
+
+WHAT A PENDING STUDENT CANNOT DO
+    Timetable, QR scan, attendance history, attendance summary, materials.
+    All answer 403 with code "ACCOUNT_PENDING_APPROVAL", which the client
+    branches on to show a "waiting for approval" screen.
+
+WHY LOGIN IS NOT BLOCKED
+    Deliberate. If PENDING blocked the token, the student could never fill in
+    their profile, and staff would be approving a row carrying nothing but a
+    name and an email address. Letting them in as far as the profile — and no
+    further — is what makes the approval a real decision.
+
+WHO APPROVES
+    Any ADMIN in the same university, plus UNIVERSITY_SUPER_ADMIN. Routing every
+    registration through one super admin would make that person the bottleneck
+    for the whole university at the start of term.
+
+    Approval stamps verifiedAt and verifiedById in the same write as the flag.
+    Approving twice is a no-op, so two people working the queue do not collide.
+
+THE STUDENT IS NOW TOLD (new, 16 Aug 2026)
+    Approval and rejection each write a Notification IN THE SAME TRANSACTION as
+    the decision. Both rows commit or neither does.
+
+    One transaction rather than two writes, because the orderings fail in
+    different but equally unacceptable ways: approve-then-notify can leave a
+    student admitted and never told, staring at a waiting screen that will never
+    change; notify-then-approve can tell them they are in while they are not.
+
+    Neither message names the member of staff who decided. verifiedById records
+    that; a student reading "Dr. X rejected you" turns an institutional decision
+    into a personal one, and the appeal route is the department.
+
+REJECTION
+    Deactivates (isActive = false) rather than deleting. The row is the only
+    thing holding the unique claim on that university ID. Login then answers
+    "This account has been deactivated".
+
+
+===============================================================================
+PASSWORD RECOVERY
+===============================================================================
+
+STUDENTS - self-service, by email
+    POST /api/auth/forgot-password  -> code mailed
+    POST /api/auth/reset-password   -> code spent, new password set
+
+STAFF - administrator-mediated, by decision
+    An ADMIN who forgets their password contacts the UNIVERSITY_SUPER_ADMIN,
+    who sets a new one from Students & Staff (PATCH /api/admin/users/:id/password).
+
+    A staff account approves registrations and publishes material to whole
+    cohorts, so recovering one is a decision a person makes about another person
+    — not something a mailbox can authorise on its own. A staff member who uses
+    the forgot-password form receives an email SAYING THIS, rather than a code
+    or silence, so the endpoint's answer stays identical for every address.
+
+NO ENUMERATION
+    /verify-email/start and /forgot-password answer identically for every
+    address and decide privately what to send:
+
+      no account          -> forgot-password sends nothing at all
+      account exists      -> verify-email sends "you already have an account"
+      staff account       -> forgot-password sends the explanation above
+      active student      -> a code
+
+    Exactly one party learns anything, and it is whoever reads the inbox.
+
+THE FOUR LIMITS ON A CODE
+    Six digits is one of a million: a good secret or a hopeless one depending
+    entirely on the limits around it. They are a SET — relax any one and the
+    others stop being sufficient.
+
+      OTP_TTL_MINUTES (10)             guessable given unlimited time; not
+                                       given ten minutes
+      OTP_MAX_ATTEMPTS (5)             5 tries per code, not 10^6
+      OTP_MAX_PER_EMAIL_PER_HOUR (5)   otherwise the attempt ceiling is beaten
+                                       by requesting a fresh code every 5 guesses
+      OTP_RESEND_COOLDOWN_SECONDS (60) stops the endpoint being a mail cannon
+
+    Plus: issuing a code CONSUMES the previous live one, so a code read over
+    somebody's shoulder dies the moment they request a fresh one. The code is
+    never stored — only bcrypt over it, so a leaked database yields nothing.
+
+KNOWN LIMITATION, recorded rather than hidden
+    Existing access tokens survive a password reset. Tokens are stateless JWTs
+    with a 7-day expiry and there is no token-version column to bump. Closing
+    that needs a revocation column on User and a check in the auth middleware —
+    a deliberate change, not something to smuggle into this one.
+
+
+===============================================================================
+1) STUDENT - 6 PAGES + 2 SCREENS   (Flutter app, OUTSIDE this repository)
 ===============================================================================
 
 +---------------------+------------------------------+--------------------------------------------------+
 | PAGE                | FUNCTION                     | DATA IT CONTAINS                                 |
 +---------------------+------------------------------+--------------------------------------------------+
-| My Profile          | Fill in / edit own academic  | Faculty, department, level, semester, section,   |
-|                     | record. No approval step.    | group name, academic year, phone number,         |
-|                     |                              | national ID, date of birth, and the derived      |
-|                     |                              | status badge INCOMPLETE / COMPLETED.             |
+| 1. My Profile       | Fill in / edit own academic  | Faculty, department, level, semester, section,   |
+|                     | record. Available while      | group name, academic year, phone, national ID,   |
+|                     | PENDING.                     | date of birth, status INCOMPLETE / COMPLETED.    |
 +---------------------+------------------------------+--------------------------------------------------+
-| My Timetable        | Weekly lecture grid, matched | Per lecture: course code + name, instructor      |
-|                     | from the student's own       | name and job title, day of week, start-end time, |
-|                     | profile (no filters sent).   | room. Plus the matched cohort criteria.          |
+| 2. My Timetable     | Weekly lecture grid, matched | Per lecture: course code + name, instructor name |
+|                     | from the student's own       | and job title, day, start-end time, room.        |
+|                     | profile (no filters sent).   |                                                  |
 +---------------------+------------------------------+--------------------------------------------------+
-| Scan QR             | Scan the projected code to   | Camera scanner, decoded session token, result    |
+| 3. Scan QR          | Scan the projected code to   | Camera scanner, decoded session token, result    |
 |                     | register attendance.         | message (success / expired / already scanned).   |
 +---------------------+------------------------------+--------------------------------------------------+
-| My Attendance       | Own attendance history.      | Session title, date/time, status PRESENT or      |
-|                     |                              | LATE, scan time, per-course totals.              |
+| 4. Material         | One card per subject. Tap a  | Per subject: course code + name, then its links: |
+|                     | subject to open its Google   | title ("Lectures", "Labs", "Past papers"), the   |
+|                     | Drive links.                 | Drive URL, who published it, when.               |
 +---------------------+------------------------------+--------------------------------------------------+
-| Notifications       | Lecture reminders inbox.     | Title, body, the lecture it refers to, scheduled |
-|                     |                              | time, sent time, read/unread, unread count badge |
+| 5. Achievement      | Two views over one dataset.  | BY SUBJECT: per course present / late / absent,  |
+|                     | Tap a subject for its own    | attended, recordedLectures, attendanceRate.      |
+|                     | history; or the full log.    | FULL HISTORY: every row - session title, course, |
+|                     |                              | date, room, PRESENT / LATE / ABSENT, scan time.  |
++---------------------+------------------------------+--------------------------------------------------+
+| 6. Inbox            | Lecture reminders AND the    | Title, body, the lecture it refers to, scheduled |
+|                     | account approval notice.     | time, sent time, read/unread, unread count.      |
 +---------------------+------------------------------+--------------------------------------------------+
 
+TWO MORE SCREENS, not in the six but required or the app breaks:
+
+  7. Register + OTP        Email -> code -> account -> profile. Three requests;
+                           see THE APPROVAL FLOW above.
+  8. Waiting for approval  The 403 ACCOUNT_PENDING_APPROVAL branch. Without it a
+                           pending student sees four broken pages.
+
 APIs used:
+  POST      /api/auth/verify-email/start      (+ /confirm)
+  POST      /api/auth/register
+  POST      /api/auth/forgot-password         (+ /reset-password)
   GET/PATCH /api/students/me/profile
   GET       /api/students/me/schedule
   POST      /api/attendance/scan
-  GET       /api/attendance/history
-  GET       /api/notifications
-  GET       /api/notifications/unread-count
-  PATCH     /api/notifications/:id/read
-  PATCH     /api/notifications/read-all
-  POST      /api/notifications/device-tokens        (mobile only, future)
+  GET       /api/attendance/history          (+ ?courseId= for one subject)
+  GET       /api/attendance/summary          <-- per-subject + overall tallies
+  GET       /api/materials/my                <-- ALREADY GROUPED BY SUBJECT
+  GET       /api/notifications  (+ unread-count, :id/read, read-all)
+  POST      /api/notifications/device-tokens (push, when a provider is wired up)
+
+READ THIS BEFORE BUILDING THE ACHIEVEMENT PAGE
+    Every total is a count of RECORDED attendance, and the API field is called
+    `recordedLectures` so it cannot be quietly read as a lecture count.
+
+    A lecture nobody opened a session for leaves NO attendance row at all. It is
+    therefore in neither the numerator nor the denominator. The UI must say
+    "recorded lectures", never "lectures", or it will state a percentage the
+    data does not support.
+
+    `attendanceRate` is null - not 0 - when nothing has been recorded yet. A
+    student with no records has not missed anything.
+
+    LATE counts as attended. ABSENT is written only by the absence sweep, never
+    by a student.
+
+TWO ERROR STATES THE CLIENT MUST HANDLE
+    403 ACCOUNT_PENDING_APPROVAL  -> the waiting screen (screen 8).
+    400 from /api/materials/my    -> profile incomplete. The response carries
+                                     `profileStatus` and `missingFields`; send
+                                     the student to Profile with those fields
+                                     highlighted, not to a generic error.
 
 
 ===============================================================================
-2) ADMIN (TEACHING STAFF) - 6 PAGES
+2) ADMIN (TEACHING STAFF) - 7 PAGES   ** BUILT, apps/web **
 ===============================================================================
-Note: ADMIN is the role for professors, doctors, lecturers and engineers.
-      There is no separate professor role; the academic title is stored on
+Note: ADMIN is the role for professors, doctors, lecturers and engineers. There
+      is no separate professor role; the academic title is stored on
       AdminProfile.jobTitle.
 
 +---------------------+------------------------------+--------------------------------------------------+
-| PAGE                | FUNCTION                     | DATA IT CONTAINS                                 |
+| PAGE                | ROUTE                        | WHAT IT DOES                                     |
 +---------------------+------------------------------+--------------------------------------------------+
-| My Teaching         | The lectures THIS instructor | Course, day, start-end time, room, section,      |
-| Timetable           | teaches - nobody else's.     | level, semester, active flag.                    |
+| 1. My Teaching      | /teaching                    | Own lectures, Sunday-first. "Open attendance" on |
+|    Timetable        |                              | a lecture creates the session AND jumps straight |
+|                     |                              | to the code.                                     |
 +---------------------+------------------------------+--------------------------------------------------+
-| My Courses          | Courses they are assigned to | Course code, name, description, credits,         |
-|                     | or created.                  | semester, department, session count.             |
+| 2. Sessions         | /sessions                    | Open / monitor / close. Live attendee count,     |
+|                     |                              | 15s refresh.                                     |
 +---------------------+------------------------------+--------------------------------------------------+
-| Sessions            | Open, monitor and close      | Session title, linked course, status ACTIVE or   |
-|                     | attendance sessions.         | CLOSED, start/end time, live attendee count.     |
+| 3. Attendance &     | /sessions/:id                | Live roster, per-session stats, .xlsx export.    |
+|    Excel Export     |                              |                                                  |
 +---------------------+------------------------------+--------------------------------------------------+
-| Live QR Display     | Full-screen rotating QR code | QR image refreshed about every 25 seconds        |
-|                     | projected in the lecture     | (the token itself expires after 30 seconds),     |
-|                     | hall.                        | session title, live scan counter.                |
+| 4. Live QR Display  | /sessions/:id/qr             | Full-bleed, OUTSIDE DashboardLayout: it goes on  |
+|                     |                              | a projector, where a sidebar of admin links is   |
+|                     |                              | noise and a small privacy leak.                  |
 +---------------------+------------------------------+--------------------------------------------------+
-| Attendance &        | Live roster, statistics, and | Student name, university ID, scan time, PRESENT  |
-| Excel Export        | the .xlsx roster download.   | / LATE, totals present/late/absent, and the      |
-|                     |                              | export button producing a real .xlsx file.       |
+| 5. My Courses       | /courses                     | Courses they are assigned to or created, with    |
+|                     |                              | the roster export per course.                    |
 +---------------------+------------------------------+--------------------------------------------------+
-| Notifications       | Instructor reminders inbox.  | 24-hour and 30-minute lecture reminders, title,  |
-|                     |                              | body, read/unread, unread count.                 |
+| 6. Course Material  | /materials                   | Publish / edit / withdraw their own Drive links, |
+|                     |                              | grouped by subject.                              |
 +---------------------+------------------------------+--------------------------------------------------+
+| 7. Pending Students | /pending-students            | Approve or reject, with the registrant's full    |
+|                     |                              | academic profile to check against.               |
++---------------------+------------------------------+--------------------------------------------------+
+| +. Notifications    | /notifications               | The 24h and 30m lecture reminders addressed to   |
+|                     |                              | this instructor. The generator writes them for   |
+|                     |                              | staff as well as students.                       |
+| +. Account          | /account                     | Own name, email, password.                       |
++---------------------+------------------------------+--------------------------------------------------+
+
+  (Pages 3 and 4 are routes off the Sessions page rather than separate menu
+  entries, which is why the menu lists seven and the table lists nine rows.)
 
 APIs used:
   GET   /api/admin/schedule
-  GET   /api/courses            /api/courses/my        /api/courses/:id
+  GET   /api/courses  (+ ?search= &department= &semester= &level=)
+  GET   /api/courses/my            /api/courses/:id
   POST  /api/sessions
-  GET   /api/sessions           /api/sessions/:id      /api/sessions/:id/qr
+  GET   /api/sessions              /api/sessions/:id      /api/sessions/:id/qr
   PATCH /api/sessions/:id/close
-  GET   /api/attendance/session/:sessionId
-  GET   /api/attendance/session/:sessionId/stats
-  GET   /api/attendance/analytics
-  GET   /api/courses/:id/students/export      <-- Excel export (.xlsx)
-  GET   /api/notifications  (+ unread-count, :id/read, read-all)
+  GET   /api/attendance/session/:sessionId          (+ /stats)
+  GET   /api/courses/:id/students/export            <-- Excel export (.xlsx)
+  GET   /api/materials             (+ POST, PATCH /:id, PATCH /:id/deactivate)
+  GET   /api/admin/students/pending
+  PATCH /api/admin/students/:id/approve             (+ /reject)
+  GET/PATCH /api/auth/profile      PATCH /api/auth/password
 
 Export rule: an ADMIN can only export a course they are ASSIGNED to - meaning
 they instruct an active LectureSchedule for it, or they created the course.
 Any other course in their own university returns 403.
 
+Material rule: an ADMIN publishes by picking one of THEIR OWN lectures. The
+service copies the academic address (faculty / department / level / semester /
+section) off that lecture, which is simultaneously the proof that they teach the
+cohort. Naming a cohort directly is refused for an ADMIN - that parameter is the
+one through which an instructor could address a year they have nothing to do
+with. An ADMIN can only edit material they published themselves.
+
+Multiple years / multiple sections: ONE ROW PER AUDIENCE. The same course taught
+to level 2 and level 3 gets two links. A link with section = null covers EVERY
+section of its cohort, so an instructor teaching A, B and C from one folder adds
+ONE row, not three.
+
+The cohort is NOT editable after creation. Re-addressing a link to a different
+year is not an edit, it is a different link, and silently moving one out from
+under the students already using it is worse than adding a row.
+
 
 ===============================================================================
-3) UNIVERSITY_SUPER_ADMIN - 7 PAGES
+3) UNIVERSITY_SUPER_ADMIN - 11 PAGES   ** BUILT, apps/web **
 ===============================================================================
 
 +---------------------+------------------------------+--------------------------------------------------+
-| PAGE                | FUNCTION                     | DATA IT CONTAINS                                 |
+| PAGE                | ROUTE                        | WHAT IT DOES                                     |
 +---------------------+------------------------------+--------------------------------------------------+
-| Dashboard           | University-wide overview.    | Counts of students, staff, courses, lectures,    |
-| ** GAP 1 **         |                              | today's sessions, attendance rate.               |
+| 1. Dashboard        | /                            | University-wide counts, plus the approval queue  |
+|                     |                              | banner — the one figure here that is actively    |
+|                     |                              | costing somebody something.                      |
 +---------------------+------------------------------+--------------------------------------------------+
-| Timetable           | Full CRUD over the whole     | Every lecture in the university: course,         |
-| Management          | university timetable, with   | instructor, cohort (faculty/department/level/    |
-|                     | instructor and room clash    | semester/section), day, time, room, active flag. |
-|                     | detection.                   | Deactivate = soft delete.                        |
+| 2. Timetable        | /timetable                   | Full CRUD, clash detection server-side.          |
+|    Management       |                              | Filter by department, level, day, room.          |
+|                     |                              | Deactivate = soft delete.                        |
 +---------------------+------------------------------+--------------------------------------------------+
-| Courses             | Create / edit / delete any   | Full course list with creator, code, name,       |
-|                     | course in the university.    | credits, semester, department, session count.    |
+| 3. Courses          | /courses                     | Create / edit / delete any course. Filter by     |
+|                     |                              | search, department, semester, level.             |
 +---------------------+------------------------------+--------------------------------------------------+
-| Sessions &          | View any session and its     | All sessions, rosters, per-session statistics,   |
-| Attendance          | attendance.                  | admin analytics.                                 |
+| 4. Sessions &       | /sessions, /sessions/:id     | Every session in the university, its roster and  |
+|    Attendance       |                              | statistics. Same pages as the ADMIN sees; the    |
+|                     |                              | SERVER decides the scope, not the page.          |
 +---------------------+------------------------------+--------------------------------------------------+
-| Students & Staff    | Directory of the university's| Name, university ID, email, role, active flag,   |
-| ** GAP 2 **         | accounts.                    | profile status, department, level, section.      |
+| 5. Students & Staff | /directory                   | Students | Staff tabs. Create, deactivate, reset |
+|                     |                              | password. Filter by pending / incomplete /       |
+|                     |                              | deactivated.                                     |
 +---------------------+------------------------------+--------------------------------------------------+
-| Exports             | Roster export for ANY course | Same .xlsx as the admin export, but with no      |
-|                     | in the university.           | assignment restriction inside the organization.  |
+| 6. Pending Students | /pending-students            | Same page the ADMIN uses. `canApprove` admits a  |
+|                     |                              | super admin too — routing every registration     |
+|                     |                              | through one person would bottleneck the whole    |
+|                     |                              | university at the start of term.                 |
 +---------------------+------------------------------+--------------------------------------------------+
-| Notifications       | Own inbox, plus the          | Reminder list, unread count. In non-production   |
-|                     | development simulation tools.| only: generate / simulate / dispatch reminders.  |
+| 7. Course Material  | /materials                   | Publish for ANY cohort, by naming it explicitly. |
++---------------------+------------------------------+--------------------------------------------------+
+| 8. Robot Devices    | /devices                     | Provision, rotate secret, revoke. WHERE THE      |
+|                     |                              | ROBOT GETS ITS CREDENTIAL.                       |
++---------------------+------------------------------+--------------------------------------------------+
+| 9. Exports          | /exports                     | Roster export for any course, no assignment      |
+|                     |                              | restriction inside the organization.             |
++---------------------+------------------------------+--------------------------------------------------+
+| 10. Notifications   | /notifications               | Own inbox, plus the simulation tools. The dev    |
+|                     |                              | panel renders only in a development build, and   |
+|                     |                              | the routes 404 in production regardless.         |
++---------------------+------------------------------+--------------------------------------------------+
+| 11. Account         | /account                     | Own name, email, password.                       |
 +---------------------+------------------------------+--------------------------------------------------+
 
 APIs used:
+  GET   /api/admin/overview
+  GET   /api/admin/users  (+ ?role= &isActive= &isVerified= &profileStatus= &search=)
+  GET   /api/admin/users/:id
+  POST  /api/admin/users
+  PATCH /api/admin/users/:id       (+ /:id/password)
+  GET   /api/admin/students/pending
+  PATCH /api/admin/students/:id/approve             (+ /reject)
   POST  /api/schedules
-  GET   /api/schedules          /api/schedules/:id
-  PATCH /api/schedules/:id      /api/schedules/:id/deactivate
+  GET   /api/schedules             /api/schedules/:id
+  PATCH /api/schedules/:id         /api/schedules/:id/deactivate
+  GET   /api/schedules/:id/attendance-log
   GET   /api/courses  (+ POST, PATCH, DELETE)
   GET   /api/sessions, /api/attendance/*
+  GET   /api/materials  (+ POST, PATCH /:id, PATCH /:id/deactivate)
   GET   /api/courses/:id/students/export
+  GET   /api/admin/devices  (+ POST, PATCH, rotate-secret, revoke)
   GET   /api/notifications  (+ /dev/generate, /dev/simulate, /dev/dispatch)
 
+ANSWERING "WHICH YEAR, WHICH SUBJECT"
+    Every drill-down is a filter on an existing endpoint, scoped to their own
+    university by the token:
 
-===============================================================================
-THE TWO GAPS - PAGES WITH NO BACKEND ENDPOINT YET
-===============================================================================
+      Second-year mechatronics timetable
+        GET /api/schedules?department=Mechatronics&level=2
 
-Both gaps affect the UNIVERSITY_SUPER_ADMIN role only. Everything else listed
-above is already backed by a working, tested API.
+      Second-year mechatronics subjects
+        GET /api/courses?department=Mechatronics&level=2
+        (Course has no level of its own - a subject can be taught to several
+        years - so `level` resolves through the active LectureSchedule rows.)
 
+      Everyone in a department
+        GET /api/admin/users?role=STUDENT&search=...
 
--------------------------------------------------------------------------------
-GAP 1 - DASHBOARD / UNIVERSITY METRICS
--------------------------------------------------------------------------------
-WHAT IS MISSING
-    There is no endpoint that returns statistics for ONE university.
+      One instructor's lectures
+        GET /api/schedules?instructorId=...
 
-WHY
-    The only metrics endpoint is:
+WHAT A SUPER ADMIN CANNOT DO
+    Create another UNIVERSITY_SUPER_ADMIN, or a SYSTEM_OWNER. The creatable role
+    enum is ADMIN and STUDENT only - a super admin creating a super admin is
+    escalation with no ceiling. The university-administrator role is granted by
+    the platform owner through /api/users and nowhere else.
 
-        GET /api/metrics/overview
+    Change an existing account's role. There is no role field on the update
+    schema; moving an account between roles is a different account.
 
-    and in backend/src/routes/metrics.routes.ts the entire router is mounted
-    behind:
-
-        router.use(authenticate, requireOwner);
-
-    requireOwner means SYSTEM_OWNER only. A UNIVERSITY_SUPER_ADMIN calling it
-    receives 403 Forbidden.
-
-THE DEEPER PROBLEM
-    Simply relaxing the guard would NOT be correct. /metrics/overview is a
-    PLATFORM-WIDE aggregate - it counts users, organizations and revenue across
-    every university on the platform. Opening it to a university super admin
-    would leak other universities' numbers, breaking tenant isolation.
-
-WHAT NEEDS TO BE BUILT
-    A new, organization-scoped endpoint, for example:
-
-        GET /api/admin/overview          (or /api/organizations/me/metrics)
-
-    Rules it must follow, matching the rest of the codebase:
-      - guard with requireRole("UNIVERSITY_SUPER_ADMIN", "SYSTEM_OWNER")
-      - read organizationId from req.user, NEVER from the query string or body
-      - every count filtered by that organizationId
-
-    Suggested payload:
-        totalStudents, totalStaff, totalCourses, activeLectures,
-        sessionsToday, activeSessions, attendanceRateThisWeek,
-        studentsWithIncompleteProfile
-
-    Estimated work: one controller + one service + one repository method.
-    No database migration required - all the data already exists.
-
-INTERIM WORKAROUND
-    The dashboard can be assembled client-side from endpoints that are already
-    organization-scoped: /api/courses, /api/schedules and /api/sessions each
-    return only the caller's university. This costs several requests and cannot
-    produce attendance rates efficiently, so it is a stopgap, not a solution.
-
-
--------------------------------------------------------------------------------
-GAP 2 - STUDENTS & STAFF DIRECTORY
--------------------------------------------------------------------------------
-WHAT IS MISSING
-    There is no endpoint that lists the users of ONE university.
-
-WHY
-    The only user-listing endpoint is:
-
-        GET /api/users
-
-    and in backend/src/routes/user.routes.ts the whole router is again behind:
-
-        router.use(authenticate, requireOwner);
-
-    So a UNIVERSITY_SUPER_ADMIN receives 403.
-
-THE DEEPER PROBLEM - THIS ONE IS A SECURITY TRAP
-    Do NOT fix this by loosening the role guard. In
-    backend/src/repositories/user.repository.ts the query builder contains:
-
-        if (query.organizationId) where.organizationId = query.organizationId;
-
-    The organization is taken from the CLIENT-SUPPLIED query string. That is
-    safe today because only SYSTEM_OWNER can reach it, and the owner is
-    legitimately allowed to browse any tenant. The moment that route is opened
-    to university super admins, any of them could pass another university's
-    organizationId and read its entire user list.
-
-    This is exactly the pattern the rest of the codebase avoids: organizationId
-    is never accepted from a request, it is always read from the token-backed
-    user record.
-
-WHAT NEEDS TO BE BUILT
-    A separate organization-scoped listing endpoint, for example:
-
-        GET /api/admin/users?role=STUDENT&search=...&page=1&limit=20
-
-    Rules it must follow:
-      - guard with requireRole("UNIVERSITY_SUPER_ADMIN", "SYSTEM_OWNER")
-      - FORCE organizationId = req.user.organizationId, applied last so a query
-        string parameter cannot override it (the same technique already used in
-        ScheduleService.resolveScope for the ADMIN instructorId filter)
-      - never select passwordHash (reuse safeUserSelect)
-      - do not expose nationalId in a list view
-
-    Suggested payload per row:
-        id, fullName, universityId, email, role, isActive, isVerified,
-        profile status, department, level, section
-
-    Estimated work: one route + controller + service + one repository method.
-    No database migration required.
-
-INTERIM WORKAROUND
-    None that is safe. There is currently no way for a university super admin
-    to list their own students. The roster Excel export
-    (GET /api/courses/:id/students/export) is the closest available data, but
-    it is per-course, not university-wide.
+    Edit a fellow super admin, or the platform owner's account. Those answer
+    404, the same as a user from another university.
 
 
 ===============================================================================
-SUMMARY
+4) SYSTEM_OWNER - 11 PAGES   ** BUILT, apps/web **
 ===============================================================================
-  Student            5 pages   - all endpoints exist
-  Admin              6 pages   - all endpoints exist
-  Super Admin        7 pages   - 5 ready, 2 blocked (Dashboard, Directory)
-  Shared login       1 page
 
-  Both gaps need new ORGANIZATION-SCOPED endpoints. Neither needs a database
-  migration. Neither should be fixed by relaxing the guard on the existing
-  SYSTEM_OWNER route - in the case of GAP 2 that would open a cross-tenant
-  data leak.
+  /  Dashboard          /organizations  Organizations   /organizations/:id
+  /users  Users         /robots  Robots                 /settings  Settings
+  + Revenue, Subscriptions, Plans, Invoices behind VITE_BILLING_ENABLED
+  + the shared Login page
+
+The platform console is unchanged. No campus role has ever been able to reach
+it, and the role-aware routing did not relax that: /organizations, /users,
+/robots and /settings are gated to SYSTEM_OWNER alone.
+
+Account roles are fixed at creation. Creating ADMIN or UNIVERSITY_SUPER_ADMIN
+through /api/users requires a jobTitle and creates AdminProfile in the same
+write; creating STUDENT creates StudentProfile. Editing an account cannot change
+its role, which prevents a role/profile mismatch.
+
+
+===============================================================================
+THE TENANT RULE - READ BEFORE ADDING ANY ENDPOINT
+===============================================================================
+
+organizationId is ALWAYS taken from the authenticated user's token-backed
+record, and NEVER from a query string, path or body.
+
+The two platform-owner routes are the exception that proves it:
+
+  GET /api/metrics/overview   aggregates across every university on the
+                              platform.
+  GET /api/users              reads its organization from a CLIENT-SUPPLIED
+                              query parameter.
+
+Both are safe only because requireOwner keeps them to SYSTEM_OWNER, who is
+legitimately allowed to browse any tenant. Neither may ever be opened up by
+relaxing its guard. The university-scoped equivalents - /api/admin/overview and
+/api/admin/users - exist precisely so that nobody is ever tempted to.
+
+The technique, used throughout: the tenant is a required first argument to the
+repository method, and it is spread LAST into the where clause, so no filter
+derived from a request can displace it. The query schemas do not even declare an
+organizationId field, so Zod strips one before it can reach a service.
+
+apps/web/src/api/campus.ts follows the same rule from the other side: no
+function in it accepts an organization id, because sending one would be dead
+weight at best and a misleading suggestion that it does something at worst.
+
+
+===============================================================================
+OUTSTANDING - DEPLOYMENT STEPS, NOT GAPS
+===============================================================================
+
+1. MIGRATIONS ARE WRITTEN BUT NOT APPLIED.
+
+   Ten migrations, all reporting unapplied, including 20260802073548_init. The
+   _prisma_migrations table on the Supabase database is EMPTY, which means the
+   database was set up by some route other than the migration history.
+
+   Running `prisma migrate deploy` as-is will therefore attempt to replay `init`
+   over tables that may already exist. RESOLVE THE HISTORY FIRST — see
+   docs/MIGRATION_RUNBOOK.md, which is written to be executed by a human and
+   starts with a read-only comparison rather than with `resolve`.
+
+   The two newest migrations:
+
+     20260814090000_course_materials_and_approval_audit
+       CourseMaterial + User.verifiedAt / verifiedById. Strictly additive, and
+       deliberately does NOT backfill isVerified: every student currently in the
+       database reads false, which is correct, because nobody has approved them.
+
+     20260816090000_email_challenges_and_account_notices
+       EmailChallenge + two new NotificationType values. Strictly additive. One
+       PostgreSQL rule shapes it: ALTER TYPE ... ADD VALUE may run inside a
+       transaction on PG 12+, but the value cannot be USED in that same
+       transaction — so the file adds the labels and writes no rows.
+
+2. QR_ENDPOINT_STAFF_ONLY IS STILL false.
+
+   /api/sessions/:id/qr remains reachable by any authenticated user, students
+   included. A QR token is an ordinary JWT whose payload reads without a secret,
+   so a student who scans once legitimately learns the session id and can then
+   mint fresh 30-second codes for as long as the session stays open.
+
+   The robot console now exists and runs on /api/devices/*, so the blocker is
+   no longer code — it is PROOF. See docs/QR_CUTOVER.md.
+
+3. DEVICE_JWT_SECRET IS NOT SET.
+
+   It is derived from JWT_SECRET with a warning when absent. Still independent
+   key material, but set it explicitly before the robot ships so the two can be
+   rotated separately. Rotating it invalidates live device tokens; the TTL is
+   15 minutes and robots re-authenticate on their own, so the impact is a brief
+   reconnect rather than a re-pairing.
+
+4. MAIL_PROVIDER MUST BE CONFIGURED BEFORE PRODUCTION.
+
+   Production REFUSES TO BOOT on MAIL_PROVIDER=log. Student registration and
+   password recovery both depend on real delivery, and the logging provider
+   would print one-time codes into the server log while telling the caller they
+   had been sent. Set SMTP_HOST and MAIL_PROVIDER=smtp.
+
+FEATURE FLAGS
+  BILLING_ENABLED / VITE_BILLING_ENABLED         off. Nothing is deleted.
+  QR_ENDPOINT_STAFF_ONLY                         off until item 2 is done.
+  STUDENT_EMAIL_VERIFICATION_REQUIRED            off until the Flutter app
+                                                 sends `verificationTicket`.
+  DEVICE_ROOM_FILTER_STRICT                      off until every session-opening
+                                                 path sends lectureScheduleId
+                                                 and every device has a room.
+  SCAN_ALLOW_UNLINKED_SESSIONS                   on; ad-hoc sessions stay
+                                                 scannable.
 ===============================================================================

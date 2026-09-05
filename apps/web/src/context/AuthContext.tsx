@@ -11,6 +11,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { authApi } from '../api/endpoints'
 import { tokenStorage, UNAUTHORIZED_EVENT } from '../lib/api'
 import type { AuthUser } from '../types/api'
+import { supabase, supabaseConfigured } from '../lib/supabase'
 
 interface AuthContextValue {
   user: AuthUser | null
@@ -28,6 +29,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient()
 
   const logout = useCallback(() => {
+    if (supabaseConfigured) void supabase?.auth.signOut()
     tokenStorage.clear()
     setUser(null)
     queryClient.clear()
@@ -35,19 +37,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // Restore the session on boot by validating the stored token.
   useEffect(() => {
-    if (!tokenStorage.get()) {
-      setIsLoading(false)
-      return
-    }
-
     let cancelled = false
 
-    authApi
-      .profile()
+    const restore = async () => {
+      if (supabaseConfigured) {
+        const { data } = await supabase!.auth.getSession()
+        if (data.session) {
+          tokenStorage.set(data.session.access_token)
+        }
+      }
+
+      if (!tokenStorage.get()) return null
+      return authApi.profile()
+    }
+
+    restore()
       .then((profile) => {
-        if (!cancelled) setUser(profile)
+        if (!cancelled && profile) setUser(profile)
       })
       .catch(() => {
+        if (supabaseConfigured) void supabase?.auth.signOut()
         if (!cancelled) tokenStorage.clear()
       })
       .finally(() => {
@@ -57,6 +66,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true
     }
+  }, [])
+
+  useEffect(() => {
+    if (!supabaseConfigured) return
+
+    const { data } = supabase!.auth.onAuthStateChange((_event, session) => {
+      if (session) tokenStorage.set(session.access_token)
+    })
+
+    return () => data.subscription.unsubscribe()
   }, [])
 
   // The axios interceptor fires this when any request comes back 401.
@@ -71,14 +90,39 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [queryClient])
 
   const login = useCallback(async (email: string, password: string) => {
+    if (supabaseConfigured) {
+      const { data, error } = await supabase!.auth.signInWithPassword({
+        email,
+        password,
+      })
+
+      if (error) throw error
+      if (!data.session) throw new Error('Sign in did not create a session')
+
+      tokenStorage.set(data.session.access_token)
+      try {
+        const profile = await authApi.profile()
+        setUser(profile)
+        return profile
+      } catch (error) {
+        tokenStorage.clear()
+        await supabase!.auth.signOut()
+        throw error
+      }
+    }
+
     const result = await authApi.login(email, password)
     tokenStorage.set(result.token)
 
-    // The login payload omits the organization, so read the full profile.
-    const profile = await authApi.profile().catch(() => result.user)
-
-    setUser(profile)
-    return profile
+    try {
+      // The profile request enforces that student accounts cannot use web.
+      const profile = await authApi.profile()
+      setUser(profile)
+      return profile
+    } catch (error) {
+      tokenStorage.clear()
+      throw error
+    }
   }, [])
 
   const value = useMemo(

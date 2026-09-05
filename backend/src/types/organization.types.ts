@@ -35,12 +35,7 @@ export const updateOrganizationSchema = z.object({
   logo: z.string().url().optional().or(z.literal("")),
 });
 
-export const organizationQuerySchema = paginationSchema.extend({
-  status: z
-    .enum(["TRIAL", "ACTIVE", "PAST_DUE", "CANCELLED", "EXPIRED", "NONE"])
-    .optional(),
-  planId: z.string().uuid().optional(),
-});
+export const organizationQuerySchema = paginationSchema;
 
 export type CreateOrganizationInput = z.infer<typeof createOrganizationSchema>;
 export type UpdateOrganizationInput = z.infer<typeof updateOrganizationSchema>;

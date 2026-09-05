@@ -288,7 +288,7 @@ export class LectureNotificationService {
   /**
    * Who this lecture's reminder goes to.
    *
-   * ADMIN — the instructor assigned to the lecture, and nobody else. Not every
+   * INSTRUCTOR — the instructor assigned to the lecture, and nobody else. Not every
    * admin in the university, and not the course's creator.
    *
    * STUDENT — the active students whose academic profile is the cohort this
@@ -298,14 +298,14 @@ export class LectureNotificationService {
     schedule: ScheduleForReminders,
     audience: ReminderAudience
   ): Promise<Recipient[]> {
-    if (audience === "ADMIN") {
+    if (audience === "INSTRUCTOR") {
       const { instructor } = schedule;
 
       // A deactivated or reassigned instructor is not sent to. The role check
-      // is defensive: teaching staff are ADMIN users by construction.
+      // is defensive: teaching staff are INSTRUCTOR users by construction.
       if (
         !instructor.isActive ||
-        instructor.role !== "ADMIN" ||
+        instructor.role !== "INSTRUCTOR" ||
         instructor.organizationId !== schedule.organizationId
       ) {
         return [];

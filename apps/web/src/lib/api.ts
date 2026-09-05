@@ -11,7 +11,10 @@ export const tokenStorage = {
 export const api = axios.create({
   // Dev goes through the Vite proxy; set VITE_API_URL for other environments.
   baseURL: import.meta.env.VITE_API_URL ?? '/api',
-  headers: { 'Content-Type': 'application/json' },
+  headers: {
+    'Content-Type': 'application/json',
+    'X-Client-Platform': 'web',
+  },
 })
 
 api.interceptors.request.use((config) => {

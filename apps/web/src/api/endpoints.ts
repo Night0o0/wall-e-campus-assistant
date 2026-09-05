@@ -1,16 +1,11 @@
 import { api } from '../lib/api'
 import type {
   AuthUser,
-  Invoice,
   ListParams,
   LoginResponse,
   MetricsOverview,
   Organization,
   Paginated,
-  Payment,
-  Plan,
-  RevenueMetrics,
-  Subscription,
   User,
   UserStats,
 } from '../types/api'
@@ -81,83 +76,9 @@ export const usersApi = {
     api.delete<{ message: string }>(`/users/${id}`).then((r) => r.data),
 }
 
-export const plansApi = {
-  list: (includeInactive = true) =>
-    api
-      .get<Plan[]>('/plans', { params: { includeInactive } })
-      .then((r) => r.data),
-
-  create: (data: Record<string, unknown>) =>
-    api.post<Plan>('/plans', data).then((r) => r.data),
-
-  update: (id: string, data: Record<string, unknown>) =>
-    api.patch<Plan>(`/plans/${id}`, data).then((r) => r.data),
-
-  remove: (id: string) =>
-    api.delete<{ message: string }>(`/plans/${id}`).then((r) => r.data),
-}
-
-export const subscriptionsApi = {
-  list: (params: ListParams) =>
-    api
-      .get<Paginated<Subscription>>('/subscriptions', { params: clean(params) })
-      .then((r) => r.data),
-
-  create: (data: Record<string, unknown>) =>
-    api.post<Subscription>('/subscriptions', data).then((r) => r.data),
-
-  update: (id: string, data: Record<string, unknown>) =>
-    api.patch<Subscription>(`/subscriptions/${id}`, data).then((r) => r.data),
-
-  cancel: (id: string) =>
-    api.patch<Subscription>(`/subscriptions/${id}/cancel`).then((r) => r.data),
-
-  renew: (id: string) =>
-    api.patch<Subscription>(`/subscriptions/${id}/renew`).then((r) => r.data),
-}
-
-export const invoicesApi = {
-  list: (params: ListParams) =>
-    api
-      .get<Paginated<Invoice>>('/invoices', { params: clean(params) })
-      .then((r) => r.data),
-
-  get: (id: string) => api.get<Invoice>(`/invoices/${id}`).then((r) => r.data),
-
-  create: (data: Record<string, unknown>) =>
-    api.post<Invoice>('/invoices', data).then((r) => r.data),
-
-  update: (id: string, data: Record<string, unknown>) =>
-    api.patch<Invoice>(`/invoices/${id}`, data).then((r) => r.data),
-
-  markPaid: (id: string, paymentMethod?: string) =>
-    api.patch<Invoice>(`/invoices/${id}/pay`, { paymentMethod }).then((r) => r.data),
-
-  remove: (id: string) =>
-    api.delete<{ message: string }>(`/invoices/${id}`).then((r) => r.data),
-}
-
-export const paymentsApi = {
-  list: (params: ListParams) =>
-    api
-      .get<Paginated<Payment>>('/payments', { params: clean(params) })
-      .then((r) => r.data),
-
-  create: (data: Record<string, unknown>) =>
-    api.post<Payment>('/payments', data).then((r) => r.data),
-
-  refund: (id: string) =>
-    api.patch<Payment>(`/payments/${id}/refund`).then((r) => r.data),
-}
-
 export const metricsApi = {
   overview: (months = 8) =>
     api
       .get<MetricsOverview>('/metrics/overview', { params: { months } })
-      .then((r) => r.data),
-
-  revenue: (months = 8) =>
-    api
-      .get<RevenueMetrics>('/metrics/revenue', { params: { months } })
       .then((r) => r.data),
 }

@@ -73,7 +73,7 @@ export const renderReminder = (
   // Teaching staff are told about "the lecture" they are giving; a student is
   // told about the subject they are going to.
   const subject =
-    context.audience === "ADMIN"
+    context.audience === "INSTRUCTOR"
       ? `${context.courseName} lecture`
       : context.courseName;
 
@@ -114,4 +114,36 @@ export const reminderPayload = (input: {
   startTime: input.startTime,
   endTime: input.endTime,
   minutesBefore: input.minutesBefore,
+});
+
+/* ---------------------------- Account decisions ---------------------------- */
+
+/**
+ * What a student is told when staff act on their registration.
+ *
+ * These are not reminders: nothing schedules them, nothing retries them, and
+ * they refer to no lecture. They are written in the same transaction as the
+ * decision itself, which is what makes "approved but never told" impossible
+ * rather than merely unlikely.
+ *
+ * Neither message names the member of staff who decided. The audit columns
+ * record that — verifiedById exists precisely so the attribution lives
+ * somewhere accountable — but a student reading "Dr. X rejected you" turns an
+ * institutional decision into a personal one, and the appeal route is the
+ * department, not the individual.
+ */
+
+/** The organisation's own name, so the notice says which university let them in. */
+export const accountApprovedContent = (
+  organizationName: string
+): RenderedNotification => ({
+  title: "Your account has been approved",
+  body: `Welcome to ${organizationName}. Your registration has been approved — your timetable, course material and attendance scanning are now available.`,
+});
+
+export const accountRejectedContent = (
+  organizationName: string
+): RenderedNotification => ({
+  title: "Your registration was not approved",
+  body: `Your registration at ${organizationName} was not approved and the account has been closed. Contact your department if you believe this is a mistake.`,
 });

@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { authenticate, requireOwner } from "../middleware/auth.middleware.js";
-import { validate, validateQuery } from "../middleware/validate.middleware.js";
+import { validate, validateQuery, validateUuidParam } from "../middleware/validate.middleware.js";
 import {
   createOrganizationSchema,
   updateOrganizationSchema,
@@ -15,6 +15,7 @@ import {
 } from "../controllers/organization.controller.js";
 
 const router = Router();
+router.param("id", validateUuidParam("id"));
 
 // Platform-owner surface: every route here spans all tenants.
 router.use(authenticate, requireOwner);

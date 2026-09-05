@@ -1,32 +1,34 @@
-# React + TypeScript + Vite
+# Leornian web app
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+React + Vite console for staff and administrators only.
 
-Currently, two official plugins are available:
+Supported web roles:
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+- `SYSTEM_OWNER`
+- `UNIVERSITY_ADMIN`
+- `DEPARTMENT_ADMIN`
+- `INSTRUCTOR`
 
-## React Compiler
+Student registration and student sign-in belong exclusively to the mobile app.
+The web client declares `X-Client-Platform: web`, and the backend refuses a
+student profile even if a student obtains or reuses an identity token.
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## Main areas
 
-## Expanding the Oxlint configuration
+- staff authentication and account management
+- owner console for organizations and users
+- university administration for timetable, directory, sessions, and exports
+- instructor teaching, sessions, materials, assignments, and notifications
+- student approval and academic record administration
 
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
+## Commands
 
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
+```powershell
+cd apps/web
+npm install
+npm run dev
+npm test -- --run
+npx tsc -b
 ```
 
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+For overall product status, see [../../docs/PROJECT_STATUS.md](../../docs/PROJECT_STATUS.md).

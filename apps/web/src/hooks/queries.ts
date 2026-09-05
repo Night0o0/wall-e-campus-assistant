@@ -5,12 +5,8 @@ import {
   type UseMutationOptions,
 } from '@tanstack/react-query'
 import {
-  invoicesApi,
   metricsApi,
   organizationsApi,
-  paymentsApi,
-  plansApi,
-  subscriptionsApi,
   usersApi,
 } from '../api/endpoints'
 import { getErrorMessage } from '../lib/api'
@@ -19,15 +15,10 @@ import type { ListParams } from '../types/api'
 
 export const queryKeys = {
   metricsOverview: (months: number) => ['metrics', 'overview', months] as const,
-  metricsRevenue: (months: number) => ['metrics', 'revenue', months] as const,
   organizations: (params: ListParams) => ['organizations', params] as const,
   organization: (id: string) => ['organizations', id] as const,
   users: (params: ListParams) => ['users', params] as const,
   userStats: () => ['users', 'stats'] as const,
-  plans: () => ['plans'] as const,
-  subscriptions: (params: ListParams) => ['subscriptions', params] as const,
-  invoices: (params: ListParams) => ['invoices', params] as const,
-  payments: (params: ListParams) => ['payments', params] as const,
 }
 
 /* ---------------------------------- Queries ---------------------------------- */
@@ -36,12 +27,6 @@ export const useOverview = (months = 8) =>
   useQuery({
     queryKey: queryKeys.metricsOverview(months),
     queryFn: () => metricsApi.overview(months),
-  })
-
-export const useRevenueMetrics = (months = 8) =>
-  useQuery({
-    queryKey: queryKeys.metricsRevenue(months),
-    queryFn: () => metricsApi.revenue(months),
   })
 
 export const useOrganizations = (params: ListParams) =>
@@ -67,30 +52,6 @@ export const useUsers = (params: ListParams) =>
 
 export const useUserStats = () =>
   useQuery({ queryKey: queryKeys.userStats(), queryFn: usersApi.stats })
-
-export const usePlans = () =>
-  useQuery({ queryKey: queryKeys.plans(), queryFn: () => plansApi.list(true) })
-
-export const useSubscriptions = (params: ListParams) =>
-  useQuery({
-    queryKey: queryKeys.subscriptions(params),
-    queryFn: () => subscriptionsApi.list(params),
-    placeholderData: (previous) => previous,
-  })
-
-export const useInvoices = (params: ListParams) =>
-  useQuery({
-    queryKey: queryKeys.invoices(params),
-    queryFn: () => invoicesApi.list(params),
-    placeholderData: (previous) => previous,
-  })
-
-export const usePayments = (params: ListParams) =>
-  useQuery({
-    queryKey: queryKeys.payments(params),
-    queryFn: () => paymentsApi.list(params),
-    placeholderData: (previous) => previous,
-  })
 
 /* --------------------------------- Mutations --------------------------------- */
 
@@ -129,15 +90,6 @@ function useApiMutation<TData, TVariables>(
     },
   })
 }
-
-const BILLING_KEYS = [
-  ['metrics'],
-  ['organizations'],
-  ['subscriptions'],
-  ['invoices'],
-  ['payments'],
-  ['plans'],
-]
 
 export const useCreateOrganization = (onDone?: () => void) =>
   useApiMutation(organizationsApi.create, {
@@ -193,105 +145,5 @@ export const useDeleteUser = (onDone?: () => void) =>
   useApiMutation(usersApi.remove, {
     successMessage: 'User deleted',
     invalidate: [['users'], ['metrics'], ['organizations']],
-    onSuccess: onDone,
-  })
-
-export const useCreatePlan = (onDone?: () => void) =>
-  useApiMutation(plansApi.create, {
-    successMessage: 'Plan created',
-    invalidate: [['plans'], ['metrics']],
-    onSuccess: onDone,
-  })
-
-export const useUpdatePlan = (onDone?: () => void) =>
-  useApiMutation(
-    ({ id, data }: { id: string; data: Record<string, unknown> }) =>
-      plansApi.update(id, data),
-    {
-      successMessage: 'Plan updated',
-      invalidate: [['plans'], ['metrics'], ['subscriptions']],
-      onSuccess: onDone,
-    }
-  )
-
-export const useDeletePlan = (onDone?: () => void) =>
-  useApiMutation(plansApi.remove, {
-    successMessage: 'Plan deleted',
-    invalidate: [['plans']],
-    onSuccess: onDone,
-  })
-
-export const useCreateSubscription = (onDone?: () => void) =>
-  useApiMutation(subscriptionsApi.create, {
-    successMessage: 'Subscription created',
-    invalidate: BILLING_KEYS,
-    onSuccess: onDone,
-  })
-
-export const useUpdateSubscription = (onDone?: () => void) =>
-  useApiMutation(
-    ({ id, data }: { id: string; data: Record<string, unknown> }) =>
-      subscriptionsApi.update(id, data),
-    {
-      successMessage: 'Subscription updated',
-      invalidate: BILLING_KEYS,
-      onSuccess: onDone,
-    }
-  )
-
-export const useCancelSubscription = (onDone?: () => void) =>
-  useApiMutation(subscriptionsApi.cancel, {
-    successMessage: 'Subscription cancelled',
-    invalidate: BILLING_KEYS,
-    onSuccess: onDone,
-  })
-
-export const useRenewSubscription = (onDone?: () => void) =>
-  useApiMutation(subscriptionsApi.renew, {
-    successMessage: 'Subscription renewed',
-    invalidate: BILLING_KEYS,
-    onSuccess: onDone,
-  })
-
-export const useCreateInvoice = (onDone?: () => void) =>
-  useApiMutation(invoicesApi.create, {
-    successMessage: 'Invoice created',
-    invalidate: BILLING_KEYS,
-    onSuccess: onDone,
-  })
-
-export const useUpdateInvoice = (onDone?: () => void) =>
-  useApiMutation(
-    ({ id, data }: { id: string; data: Record<string, unknown> }) =>
-      invoicesApi.update(id, data),
-    {
-      successMessage: 'Invoice updated',
-      invalidate: BILLING_KEYS,
-      onSuccess: onDone,
-    }
-  )
-
-export const useMarkInvoicePaid = (onDone?: () => void) =>
-  useApiMutation(
-    ({ id, paymentMethod }: { id: string; paymentMethod?: string }) =>
-      invoicesApi.markPaid(id, paymentMethod),
-    {
-      successMessage: 'Invoice marked as paid',
-      invalidate: BILLING_KEYS,
-      onSuccess: onDone,
-    }
-  )
-
-export const useDeleteInvoice = (onDone?: () => void) =>
-  useApiMutation(invoicesApi.remove, {
-    successMessage: 'Invoice deleted',
-    invalidate: BILLING_KEYS,
-    onSuccess: onDone,
-  })
-
-export const useRefundPayment = (onDone?: () => void) =>
-  useApiMutation(paymentsApi.refund, {
-    successMessage: 'Payment refunded',
-    invalidate: BILLING_KEYS,
     onSuccess: onDone,
   })

@@ -1,0 +1,111 @@
+plugins {
+    id "com.android.application"
+    id "kotlin-android"
+    // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
+    id "dev.flutter.flutter-gradle-plugin"
+}
+
+def releaseValue = { String name, String fallback = null ->
+    def envValue = System.getenv(name)
+    if (envValue != null && !envValue.trim().isEmpty()) return envValue.trim()
+
+    if (project.hasProperty(name)) {
+        def propertyValue = project.property(name)?.toString()?.trim()
+        if (propertyValue) return propertyValue
+    }
+
+    return fallback
+}
+
+def isReleaseTask = gradle.startParameter.taskNames.any { it.toLowerCase().contains("release") }
+def releaseStoreFile = releaseValue("LEORNIAN_UPLOAD_STORE_FILE")
+def releaseStorePassword = releaseValue("LEORNIAN_UPLOAD_STORE_PASSWORD")
+def releaseKeyAlias = releaseValue("LEORNIAN_UPLOAD_KEY_ALIAS")
+def releaseKeyPassword = releaseValue("LEORNIAN_UPLOAD_KEY_PASSWORD")
+def releaseWebDeepLinkHost = releaseValue("LEORNIAN_WEB_DEEP_LINK_HOST")
+def releaseSigningReady = [
+    releaseStoreFile,
+    releaseStorePassword,
+    releaseKeyAlias,
+    releaseKeyPassword,
+].every { it != null && !it.isBlank() }
+
+if (isReleaseTask && !releaseSigningReady) {
+    throw new GradleException(
+        "Release signing is not configured. Set LEORNIAN_UPLOAD_STORE_FILE, " +
+        "LEORNIAN_UPLOAD_STORE_PASSWORD, LEORNIAN_UPLOAD_KEY_ALIAS, and " +
+        "LEORNIAN_UPLOAD_KEY_PASSWORD through CI secrets or Gradle properties."
+    )
+}
+
+if (isReleaseTask && !releaseWebDeepLinkHost) {
+    throw new GradleException(
+        "Release HTTPS app links are not configured. Set LEORNIAN_WEB_DEEP_LINK_HOST " +
+        "to the production web hostname through CI secrets or Gradle properties."
+    )
+}
+
+android {
+    namespace = "io.leornian.campus"
+    compileSdk = 36
+    // `jni` in the committed dependency graph requires NDK 28.2. Higher NDKs
+    // remain backward-compatible with the other Android plugins.
+    ndkVersion = "28.2.13676358"
+
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_1_8
+        targetCompatibility = JavaVersion.VERSION_1_8
+    }
+
+    kotlinOptions {
+        jvmTarget = JavaVersion.VERSION_1_8
+    }
+
+    defaultConfig {
+        applicationId = "io.leornian.campus"
+        minSdkVersion = flutter.minSdkVersion
+        targetSdk = flutter.targetSdkVersion
+        versionCode = flutter.versionCode
+        versionName = flutter.versionName
+        manifestPlaceholders = [
+            applicationName: "android.app.Application",
+            appLabel: "Leornian",
+            usesCleartextTraffic: "false",
+            deepLinkScheme: releaseValue("LEORNIAN_DEEP_LINK_SCHEME", "io.leornian.campus"),
+            registrationDeepLinkHost: releaseValue("LEORNIAN_REGISTRATION_DEEP_LINK_HOST", "register"),
+            recoveryDeepLinkHost: releaseValue("LEORNIAN_RECOVERY_DEEP_LINK_HOST", "reset-password"),
+            webDeepLinkHost: releaseWebDeepLinkHost ?: "invalid.example",
+        ]
+    }
+
+    signingConfigs {
+        if (releaseSigningReady) {
+            release {
+                storeFile file(releaseStoreFile)
+                storePassword releaseStorePassword
+                keyAlias releaseKeyAlias
+                keyPassword releaseKeyPassword
+            }
+        }
+    }
+
+    buildTypes {
+        debug {
+            manifestPlaceholders += [
+                usesCleartextTraffic: "true",
+            ]
+        }
+        release {
+            manifestPlaceholders += [
+                usesCleartextTraffic: "false",
+            ]
+            if (releaseSigningReady) {
+                signingConfig = signingConfigs.release
+            }
+        }
+    }
+}
+
+flutter {
+    source = "../.."
+}

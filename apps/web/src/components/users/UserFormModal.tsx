@@ -12,8 +12,8 @@ interface Props {
 }
 
 const ROLES: Array<{ value: UserRole; label: string }> = [
-  { value: 'ADMIN', label: 'Admin' },
-  { value: 'UNIVERSITY_SUPER_ADMIN', label: 'University Super Admin' },
+  { value: 'INSTRUCTOR', label: 'Admin' },
+  { value: 'UNIVERSITY_ADMIN', label: 'University Super Admin' },
   { value: 'STUDENT', label: 'Student' },
   { value: 'SYSTEM_OWNER', label: 'System Owner' },
 ]
@@ -23,11 +23,16 @@ const emptyForm = {
   universityId: '',
   email: '',
   password: '',
-  role: 'ADMIN' as UserRole,
+  role: 'INSTRUCTOR' as UserRole,
   organizationId: '',
   isVerified: true,
   isActive: true,
+  jobTitle: '',
+  office: '',
 }
+
+const carriesAdminProfile = (role: UserRole) =>
+  role === 'INSTRUCTOR' || role === 'UNIVERSITY_ADMIN'
 
 export function UserFormModal({ open, onClose, user }: Props) {
   const isEdit = Boolean(user)
@@ -49,6 +54,8 @@ export function UserFormModal({ open, onClose, user }: Props) {
             organizationId: user.organizationId,
             isVerified: user.isVerified,
             isActive: user.isActive,
+            jobTitle: '',
+            office: '',
           }
         : emptyForm
     )
@@ -68,7 +75,6 @@ export function UserFormModal({ open, onClose, user }: Props) {
         data: {
           fullName: form.fullName,
           email: form.email,
-          role: form.role,
           organizationId: form.organizationId,
           isVerified: form.isVerified,
           isActive: form.isActive,
@@ -77,7 +83,21 @@ export function UserFormModal({ open, onClose, user }: Props) {
       return
     }
 
-    create.mutate(form)
+    create.mutate({
+      fullName: form.fullName,
+      universityId: form.universityId,
+      email: form.email,
+      password: form.password,
+      role: form.role,
+      organizationId: form.organizationId,
+      isVerified: form.isVerified,
+      ...(carriesAdminProfile(form.role)
+        ? {
+            jobTitle: form.jobTitle,
+            office: form.office || undefined,
+          }
+        : {}),
+    })
   }
 
   return (
@@ -85,11 +105,11 @@ export function UserFormModal({ open, onClose, user }: Props) {
       open={open}
       onClose={onClose}
       title={isEdit ? 'Edit user' : 'Add user'}
-      description={
-        isEdit
-          ? 'Update this account’s details and access.'
+        description={
+          isEdit
+          ? 'Update this account’s details and access. Its role is permanent.'
           : 'Create an account inside one of your organizations.'
-      }
+        }
       size="lg"
       footer={
         <>
@@ -153,6 +173,7 @@ export function UserFormModal({ open, onClose, user }: Props) {
           <Select
             label="Role"
             required
+            disabled={isEdit}
             value={form.role}
             onChange={(event) =>
               setForm({ ...form, role: event.target.value as UserRole })
@@ -181,6 +202,27 @@ export function UserFormModal({ open, onClose, user }: Props) {
             ))}
           </Select>
         </div>
+
+        {!isEdit && carriesAdminProfile(form.role) && (
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <Input
+              label="Job title"
+              required
+              placeholder="Professor, Lecturer, Head of IT"
+              value={form.jobTitle}
+              onChange={(event) =>
+                setForm({ ...form, jobTitle: event.target.value })
+              }
+            />
+            <Input
+              label="Office"
+              value={form.office}
+              onChange={(event) =>
+                setForm({ ...form, office: event.target.value })
+              }
+            />
+          </div>
+        )}
 
         <div className="flex flex-wrap gap-6 rounded-lg border border-slate-200 p-4">
           <label className="flex items-center gap-2.5">

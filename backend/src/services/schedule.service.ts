@@ -11,11 +11,10 @@ import { UserRepository } from "../repositories/user.repository.js";
 import {
   CreateScheduleInput,
   ScheduleQuery,
-  SCHEDULE_MATCH_FIELDS,
   SEMESTER_LABELS,
   UpdateScheduleInput,
-  parseSemesterNumber,
 } from "../types/schedule.types.js";
+import { ScheduleCriteria, cohortMatches, resolveCohort } from "../utils/cohort.js";
 import { badRequest, conflict, notFound } from "../utils/AppError.js";
 import { paginate } from "../utils/pagination.js";
 import { LectureNotificationService } from "./lecture-notification.service.js";
@@ -36,19 +35,13 @@ export interface ScheduleActor {
   organizationId: string;
 }
 
-/** The academic address a timetable is looked up by. */
-export interface ScheduleCriteria {
-  faculty: string;
-  department: string;
-  level: number;
-  semester: number;
-  section: string;
-}
-
-const isFilled = (value: unknown) =>
-  value !== null &&
-  value !== undefined &&
-  !(typeof value === "string" && value.trim() === "");
+/**
+ * The academic address a timetable is looked up by.
+ *
+ * Defined in utils/cohort.ts now that the attendance scan path compares against
+ * it too, and re-exported here so every existing importer is unaffected.
+ */
+export type { ScheduleCriteria } from "../utils/cohort.js";
 
 export class ScheduleService {
   /* ------------------------------- Writing -------------------------------- */
@@ -158,10 +151,10 @@ export class ScheduleService {
   async getSchedule(id: string, actor: ScheduleActor) {
     const schedule = await this.loadInOrg(id, actor.organizationId);
 
-    // An ADMIN reads only their own lectures, and a student only lectures
+    // An INSTRUCTOR reads only their own lectures, and a student only lectures
     // addressed to their cohort. Both get a 404 rather than a 403, so the
     // endpoint cannot be used to enumerate somebody else's timetable.
-    if (actor.role === "ADMIN" && schedule.instructorId !== actor.id) {
+    if (actor.role === "INSTRUCTOR" && schedule.instructorId !== actor.id) {
       throw notFound("Schedule not found");
     }
 
@@ -199,7 +192,7 @@ export class ScheduleService {
     };
   }
 
-  /** The authenticated ADMIN's own teaching timetable. */
+  /** The authenticated INSTRUCTOR's own teaching timetable. */
   async getInstructorTimetable(actor: ScheduleActor) {
     const schedules = await scheduleRepo.findTimetable({
       organizationId: actor.organizationId,
@@ -240,7 +233,7 @@ export class ScheduleService {
       };
     }
 
-    if (actor.role === "ADMIN") {
+    if (actor.role === "INSTRUCTOR") {
       // Forced last: an instructorId in the query string cannot override it.
       return {
         ...base,
@@ -266,58 +259,44 @@ export class ScheduleService {
     };
   }
 
-  /** Reads the matching keys off the student's own profile, or explains why it can't. */
+  /**
+   * Reads the matching keys off the student's own profile, or explains why it
+   * can't.
+   *
+   * The reading itself lives in utils/cohort.ts, shared with the attendance
+   * scan path — a student's cohort has to mean the same thing when it decides
+   * what appears on their timetable and when it decides what they may scan
+   * into, or one of the two is wrong. What stays here is the wording: this
+   * endpoint is being asked for a timetable, so that is what its errors talk
+   * about.
+   */
   private async studentCriteria(userId: string): Promise<ScheduleCriteria> {
     const profile = await studentRepo.findByUserId(userId);
+    const resolution = resolveCohort(profile);
 
-    if (!profile) {
+    if (resolution.ok) {
+      return resolution.criteria;
+    }
+
+    if (resolution.reason === "MISSING_FIELDS") {
       throw badRequest(
         "Complete your academic profile before requesting your timetable",
-        { profileStatus: "INCOMPLETE", missingFields: SCHEDULE_MATCH_FIELDS }
+        {
+          profileStatus: profile?.status ?? "INCOMPLETE",
+          missingFields: resolution.missingFields,
+        }
       );
     }
 
-    const missingFields = SCHEDULE_MATCH_FIELDS.filter(
-      (field) => !isFilled(profile[field])
+    throw badRequest(
+      `The semester on your profile ("${resolution.semester}") could not be read as a first or second semester — update it before requesting your timetable`,
+      { profileStatus: profile?.status ?? "INCOMPLETE", invalidFields: ["semester"] }
     );
-
-    if (missingFields.length > 0) {
-      throw badRequest(
-        "Complete your academic profile before requesting your timetable",
-        { profileStatus: profile.status, missingFields }
-      );
-    }
-
-    const semester = parseSemesterNumber(profile.semester);
-
-    if (semester === null) {
-      throw badRequest(
-        `The semester on your profile ("${profile.semester}") could not be read as a first or second semester — update it before requesting your timetable`,
-        { profileStatus: profile.status, invalidFields: ["semester"] }
-      );
-    }
-
-    return {
-      faculty: profile.faculty!,
-      department: profile.department!,
-      level: profile.level!,
-      semester,
-      section: profile.section!,
-    };
   }
 
   /** The same comparison the database does, for a schedule already in hand. */
   private matches(schedule: ScheduleWithRelations, criteria: ScheduleCriteria) {
-    const same = (a: string, b: string) =>
-      a.trim().toLowerCase() === b.trim().toLowerCase();
-
-    return (
-      same(schedule.faculty, criteria.faculty) &&
-      same(schedule.department, criteria.department) &&
-      same(schedule.section, criteria.section) &&
-      schedule.level === criteria.level &&
-      schedule.semester === criteria.semester
-    );
+    return cohortMatches(schedule, criteria);
   }
 
   private async loadInOrg(id: string, organizationId: string) {
@@ -354,10 +333,10 @@ export class ScheduleService {
       throw badRequest("Instructor not found in this organization");
     }
 
-    // There is no professor role in this system: teaching staff are ADMIN
+    // There is no professor role in this system: teaching staff are INSTRUCTOR
     // users, and their title lives on AdminProfile.jobTitle.
-    if (instructor.role !== "ADMIN") {
-      throw badRequest("The assigned instructor must be a user with the ADMIN role");
+    if (instructor.role !== "INSTRUCTOR") {
+      throw badRequest("The assigned instructor must be a user with the INSTRUCTOR role");
     }
 
     if (!instructor.isActive) {

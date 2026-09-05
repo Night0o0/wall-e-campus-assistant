@@ -1,17 +1,25 @@
 import { Router } from "express";
 import { authenticate, requireRole } from "../middleware/auth.middleware.js";
-import { validate } from "../middleware/validate.middleware.js";
+import { validate, validateQuery, validateUuidParam } from "../middleware/validate.middleware.js";
 import { createSessionSchema } from "../types/session.types.js";
+import { paginationSchema } from "../utils/pagination.js";
 import { createSession, getMySessions, getSession, closeSession, getQrToken } from "../controllers/session.controller.js";
 
 const router = Router();
+router.param("id", validateUuidParam("id"));
 
 router.use(authenticate);
 
-router.post("/", requireRole('ADMIN', 'UNIVERSITY_SUPER_ADMIN', 'SYSTEM_OWNER'), validate(createSessionSchema), createSession);
-router.get("/", requireRole('ADMIN', 'UNIVERSITY_SUPER_ADMIN', 'SYSTEM_OWNER'), getMySessions);
-router.get("/:id", requireRole('ADMIN', 'UNIVERSITY_SUPER_ADMIN', 'SYSTEM_OWNER'), getSession);
-router.get("/:id/qr", getQrToken);
-router.patch("/:id/close", requireRole('ADMIN', 'UNIVERSITY_SUPER_ADMIN', 'SYSTEM_OWNER'), closeSession);
+const isStaff = requireRole('INSTRUCTOR', 'UNIVERSITY_ADMIN', 'SYSTEM_OWNER');
+
+router.post("/", isStaff, validate(createSessionSchema), createSession);
+router.get("/", isStaff, validateQuery(paginationSchema), getMySessions);
+router.get("/:id", isStaff, getSession);
+// QR payloads are credentials for recording attendance. Students scan them;
+// only authorized staff may mint them. This is deliberately not configurable:
+// the retired robot/device flow no longer supplies a legitimate non-staff
+// caller, so a rollback flag would only reopen proxy-attendance abuse.
+router.get("/:id/qr", isStaff, getQrToken);
+router.patch("/:id/close", isStaff, closeSession);
 
 export default router;

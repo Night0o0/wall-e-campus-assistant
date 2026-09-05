@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 import { SessionService } from "../services/session.service.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
+import { PaginationQuery, paginationSchema } from "../utils/pagination.js";
 
 const sessionService = new SessionService();
 
@@ -12,29 +13,44 @@ const sanitizeSession = <T extends { qrSecret?: string }>(session: T) => {
 
 export const createSession = asyncHandler(
   async (req: Request, res: Response) => {
-    const session = await sessionService.createSession(
-      req.body.title,
-      req.user!.id,
-      req.user!.organizationId
-    );
+    // The whole validated body, not field by field: `lectureScheduleId` and
+    // `room` are alternatives to each other, and the service is what decides
+    // between them. `req.user` supplies the tenant and the author — neither is
+    // ever read from the body.
+    const session = await sessionService.createSession(req.body, req.user!);
     res.status(201).json(sanitizeSession(session));
   }
 );
 
+/**
+ * The whole actor, not just the id: who is asking decides how wide the list is.
+ * An INSTRUCTOR gets the sessions they opened, a super admin gets their university —
+ * the same rule `getSession` below applies to one session. See
+ * utils/session-access.ts.
+ */
 export const getMySessions = asyncHandler(
   async (req: Request, res: Response) => {
-    const sessions = await sessionService.getMySessions(
-      req.user!.id,
-      req.user!.organizationId
+    const page = await sessionService.listSessionsFor(
+      req.user!,
+      (req.validatedQuery ?? paginationSchema.parse({})) as PaginationQuery
     );
-    res.status(200).json(sessions.map(sanitizeSession));
+
+    // Envelope, not a bare array. Both clients already cope: the web api layer
+    // unwraps { data, meta }, and the Flutter client wraps a bare array into
+    // { data: ... } itself, so _items finds the same key either way.
+    res.status(200).json({
+      ...page,
+      data: page.data.map(sanitizeSession),
+    });
   }
 );
 
+// The whole actor, not just the tenant: who is asking decides which sessions
+// they may see, and an INSTRUCTOR sees the ones they opened. See utils/session-access.ts.
 export const getSession = asyncHandler(async (req: Request, res: Response) => {
   const session = await sessionService.getSession(
     req.params.id as string,
-    req.user!.organizationId
+    req.user!
   );
   res.status(200).json(sanitizeSession(session));
 });
@@ -42,8 +58,7 @@ export const getSession = asyncHandler(async (req: Request, res: Response) => {
 export const closeSession = asyncHandler(async (req: Request, res: Response) => {
   const session = await sessionService.closeSession(
     req.params.id as string,
-    req.user!.id,
-    req.user!.organizationId
+    req.user!
   );
   res.status(200).json(sanitizeSession(session));
 });
@@ -51,7 +66,7 @@ export const closeSession = asyncHandler(async (req: Request, res: Response) => 
 export const getQrToken = asyncHandler(async (req: Request, res: Response) => {
   const tokenData = await sessionService.getQrToken(
     req.params.id as string,
-    req.user!.organizationId
+    req.user!
   );
   res.status(200).json(tokenData);
 });

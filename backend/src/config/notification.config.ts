@@ -7,7 +7,7 @@ import { env } from "./env.js";
  *
  * The lead time and the type are declared together on purpose. A lead time on
  * its own would let someone change 30 to 45 and leave rows labelled
- * LECTURE_ADMIN_30M going out three quarters of an hour early; changing a rule
+ * LECTURE_INSTRUCTOR_30M going out three quarters of an hour early; changing a rule
  * here means deciding, in the same edit, what the row should now be called.
  */
 export interface ReminderRule {
@@ -17,7 +17,7 @@ export interface ReminderRule {
 }
 
 /**
- * ADMIN users are the university's teaching staff — professors, doctors,
+ * INSTRUCTOR users are the university's teaching staff — professors, doctors,
  * lecturers, engineers. There is no separate professor role in this schema;
  * see the note on LectureSchedule.instructor.
  *
@@ -25,8 +25,8 @@ export interface ReminderRule {
  * application may hardcode 1440, 30 or 10.
  */
 export const ADMIN_REMINDERS: readonly ReminderRule[] = [
-  { minutesBefore: 1440, type: NotificationType.LECTURE_ADMIN_24H },
-  { minutesBefore: 30, type: NotificationType.LECTURE_ADMIN_30M },
+  { minutesBefore: 1440, type: NotificationType.LECTURE_INSTRUCTOR_24H },
+  { minutesBefore: 30, type: NotificationType.LECTURE_INSTRUCTOR_30M },
 ];
 
 export const STUDENT_REMINDERS: readonly ReminderRule[] = [
@@ -34,12 +34,12 @@ export const STUDENT_REMINDERS: readonly ReminderRule[] = [
 ];
 
 /** Who a rule is addressed to, derived from the two lists above. */
-export type ReminderAudience = Extract<UserRole, "ADMIN" | "STUDENT">;
+export type ReminderAudience = Extract<UserRole, "INSTRUCTOR" | "STUDENT">;
 
 export const REMINDER_RULES: readonly (ReminderRule & {
   audience: ReminderAudience;
 })[] = [
-  ...ADMIN_REMINDERS.map((rule) => ({ ...rule, audience: "ADMIN" as const })),
+  ...ADMIN_REMINDERS.map((rule) => ({ ...rule, audience: "INSTRUCTOR" as const })),
   ...STUDENT_REMINDERS.map((rule) => ({
     ...rule,
     audience: "STUDENT" as const,

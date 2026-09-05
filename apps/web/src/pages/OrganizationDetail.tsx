@@ -9,23 +9,15 @@ import {
   Users,
   BookOpen,
   CalendarClock,
-  CreditCard,
   AlertCircle,
 } from 'lucide-react'
 import { Page, Card } from '../components/layout/Page'
 import { SummaryTile } from '../components/ui/SummaryTile'
 import { Skeleton } from '../components/ui/Skeleton'
-import { Badge, StatusBadge, ROLE_LABELS } from '../components/ui/Badge'
+import { Badge, ROLE_LABELS } from '../components/ui/Badge'
 import { Button } from '../components/ui/Button'
 import { useOrganization } from '../hooks/queries'
-import { billingEnabled } from '../lib/features'
-import {
-  cn,
-  formatCurrency,
-  formatDate,
-  formatNumber,
-  formatRelative,
-} from '../lib/utils'
+import { formatDate, formatNumber } from '../lib/utils'
 import type { UserRole } from '../types/api'
 
 export function OrganizationDetail() {
@@ -72,12 +64,7 @@ export function OrganizationDetail() {
         </div>
       ) : (
         <>
-          <div
-            className={cn(
-              'grid grid-cols-1 gap-6 sm:grid-cols-2',
-              billingEnabled ? 'lg:grid-cols-4' : 'lg:grid-cols-3'
-            )}
-          >
+          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
             <SummaryTile
               icon={Users}
               label="Users"
@@ -96,26 +83,16 @@ export function OrganizationDetail() {
               value={formatNumber(org._count.sessions)}
               tone="success"
             />
-            {billingEnabled && (
-              <SummaryTile
-                icon={CreditCard}
-                label="Lifetime Revenue"
-                value={formatCurrency(org.revenue)}
-                tone="warning"
-              />
-            )}
+            <SummaryTile
+              icon={CalendarClock}
+              label="Joined"
+              value={formatDate(org.createdAt)}
+              tone="warning"
+            />
           </div>
 
-          <div
-            className={cn(
-              'grid grid-cols-1 gap-6',
-              billingEnabled && 'lg:grid-cols-3'
-            )}
-          >
-            <Card
-              className={cn(billingEnabled && 'lg:col-span-2')}
-              title="Details"
-            >
+          <div className="grid grid-cols-1 gap-6">
+            <Card title="Details">
               <dl className="grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-2">
                 <Detail icon={Building2} label="Name" value={org.name} />
                 <Detail icon={Building2} label="Code" value={org.code} />
@@ -145,64 +122,6 @@ export function OrganizationDetail() {
                 </div>
               )}
             </Card>
-
-            {billingEnabled && (
-            <Card title="Subscription">
-              {org.subscription ? (
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-slate-500">Plan</span>
-                    <Badge tone="primary">{org.subscription.plan.name}</Badge>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-slate-500">Status</span>
-                    <StatusBadge status={org.subscription.status} />
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-slate-500">Billing</span>
-                    <span className="text-sm font-medium text-slate-900">
-                      {org.subscription.billingCycle === 'YEARLY'
-                        ? 'Yearly'
-                        : 'Monthly'}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-slate-500">Price</span>
-                    <span className="text-sm font-medium text-slate-900">
-                      {formatCurrency(
-                        org.subscription.billingCycle === 'YEARLY'
-                          ? org.subscription.plan.yearlyPrice
-                          : org.subscription.plan.monthlyPrice
-                      )}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-slate-500">Renews</span>
-                    <span className="text-sm font-medium text-slate-900">
-                      {formatRelative(org.subscription.currentPeriodEnd)}
-                    </span>
-                  </div>
-
-                  <div className="border-t border-slate-200 pt-4">
-                    <Link to="/subscriptions">
-                      <Button variant="secondary" size="sm" className="w-full">
-                        Manage subscription
-                      </Button>
-                    </Link>
-                  </div>
-                </div>
-              ) : (
-                <div className="py-6 text-center">
-                  <p className="text-sm text-slate-500">
-                    This organization has no subscription.
-                  </p>
-                  <Link to="/subscriptions" className="mt-4 inline-block">
-                    <Button size="sm">Assign a plan</Button>
-                  </Link>
-                </div>
-              )}
-            </Card>
-            )}
           </div>
 
           <div className="flex flex-wrap gap-3">
@@ -211,13 +130,6 @@ export function OrganizationDetail() {
                 View users
               </Button>
             </Link>
-            {billingEnabled && (
-              <Link to={`/invoices?organizationId=${org.id}`}>
-                <Button variant="secondary" icon={CreditCard}>
-                  View invoices
-                </Button>
-              </Link>
-            )}
           </div>
         </>
       )}

@@ -1,8 +1,9 @@
 import { useState, type FormEvent } from 'react'
-import { Navigate, useLocation, useNavigate } from 'react-router-dom'
-import { Bot, Eye, EyeOff, AlertCircle } from 'lucide-react'
+import { Link, Navigate, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
+import { GraduationCap, Eye, EyeOff, AlertCircle } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { getErrorMessage } from '../lib/api'
+import { routeAfterLogin } from '../lib/navigation'
 import { Button } from '../components/ui/Button'
 import { Input } from '../components/ui/Field'
 
@@ -10,6 +11,7 @@ export function Login() {
   const { user, isLoading: isRestoringSession, login } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
+  const [searchParams] = useSearchParams()
 
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -19,7 +21,7 @@ export function Login() {
 
   if (!isRestoringSession && user) {
     const from = (location.state as { from?: string } | null)?.from
-    return <Navigate to={from ?? '/'} replace />
+    return <Navigate to={routeAfterLogin(user.role, from)} replace />
   }
 
   const handleSubmit = async (event: FormEvent) => {
@@ -29,18 +31,9 @@ export function Login() {
 
     try {
       const profile = await login(email.trim(), password)
+      const from = (location.state as { from?: string } | null)?.from
 
-      if (profile.role !== 'SYSTEM_OWNER') {
-        // Signed in successfully, but this console isn't for them.
-        setError(
-          'This dashboard is for platform owners. Your account does not have access.'
-        )
-        return
-      }
-
-      navigate((location.state as { from?: string } | null)?.from ?? '/', {
-        replace: true,
-      })
+      navigate(routeAfterLogin(profile.role, from), { replace: true })
     } catch (err) {
       setError(getErrorMessage(err, 'Unable to sign in'))
     } finally {
@@ -54,28 +47,31 @@ export function Login() {
       <div className="relative hidden w-1/2 flex-col justify-between gradient-primary p-12 lg:flex">
         <div className="flex items-center gap-3">
           <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-white/15 backdrop-blur">
-            <Bot className="h-6 w-6 text-white" />
+            <GraduationCap className="h-6 w-6 text-white" />
           </div>
           <div>
-            <p className="text-lg font-bold text-white">WALL-E</p>
-            <p className="text-xs text-white/70">Platform Console</p>
+            <p className="text-lg font-bold text-white">Leornian</p>
+            <p className="text-xs text-white/70">University platform</p>
           </div>
         </div>
 
+        {/* One login for three roles now, so the copy no longer describes only
+            the platform owner's console. Students sign in on the mobile app. */}
         <div className="max-w-md">
           <h1 className="text-4xl font-bold leading-tight text-white">
             Campus attendance,
             <br />
-            run as a platform.
+            without the paperwork.
           </h1>
           <p className="mt-4 text-white/80">
-            Manage every university on WALL-E — subscriptions, billing, users and
-            revenue — from a single console.
+            Timetables, attendance sessions and course material for teaching
+            staff and university administrators in the web console. Students
+            use the mobile application.
           </p>
         </div>
 
         <p className="text-sm text-white/60">
-          © {new Date().getFullYear()} WALL-E Campus Assistant
+          © {new Date().getFullYear()} Leornian
         </p>
       </div>
 
@@ -84,20 +80,25 @@ export function Login() {
         <div className="w-full max-w-sm">
           <div className="mb-8 flex items-center gap-3 lg:hidden">
             <div className="flex h-10 w-10 items-center justify-center rounded-xl gradient-primary">
-              <Bot className="h-6 w-6 text-white" />
+              <GraduationCap className="h-6 w-6 text-white" />
             </div>
             <div>
-              <p className="font-bold text-slate-900">WALL-E</p>
-              <p className="text-xs text-slate-500">Platform Console</p>
+              <p className="font-bold text-slate-900">Leornian</p>
+              <p className="text-xs text-slate-500">University platform</p>
             </div>
           </div>
 
           <h2 className="text-2xl font-bold text-slate-900">Welcome back</h2>
           <p className="mt-1 text-sm text-slate-500">
-            Sign in to your platform owner account.
+            Sign in to your Leornian account.
           </p>
 
           <form onSubmit={handleSubmit} className="mt-8 space-y-4">
+            {searchParams.get('password-reset') === '1' && (
+              <div className="rounded-lg bg-success-50 p-3 text-sm text-success-700">
+                Password updated. Sign in with your new password.
+              </div>
+            )}
             {error && (
               <div
                 role="alert"
@@ -115,7 +116,7 @@ export function Login() {
               required
               value={email}
               onChange={(event) => setEmail(event.target.value)}
-              placeholder="owner@wall-e.io"
+              placeholder="owner@leornian.local"
             />
 
             <div className="relative">
@@ -151,6 +152,11 @@ export function Login() {
               Sign in
             </Button>
           </form>
+          <p className="mt-5 text-center text-sm">
+            <Link className="font-semibold text-primary-600" to="/forgot-password">
+              Forgot your password?
+            </Link>
+          </p>
         </div>
       </div>
     </div>

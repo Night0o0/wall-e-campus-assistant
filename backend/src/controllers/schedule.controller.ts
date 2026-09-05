@@ -1,9 +1,11 @@
 import { Request, Response } from "express";
+import { AttendanceLifecycleService } from "../services/attendance-lifecycle.service.js";
 import { ScheduleService } from "../services/schedule.service.js";
-import { ScheduleQuery } from "../types/schedule.types.js";
+import { ScheduleAttendanceLogQuery, ScheduleQuery } from "../types/schedule.types.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 
 const scheduleService = new ScheduleService();
+const lifecycleService = new AttendanceLifecycleService();
 
 export const createSchedule = asyncHandler(
   async (req: Request, res: Response) => {
@@ -48,6 +50,27 @@ export const deactivateSchedule = asyncHandler(
       req.user!
     );
     res.status(200).json({ message: "Schedule deactivated", schedule });
+  }
+);
+
+/**
+ * GET /api/schedules/:id/attendance-log
+ *
+ * The only endpoint that can report NOT_RECORDED, because it is the only one
+ * that reads from the timetable rather than from the session table — an
+ * occurrence nobody opened attendance for leaves no row to find.
+ */
+export const getScheduleAttendanceLog = asyncHandler(
+  async (req: Request, res: Response) => {
+    const { weeks } = req.validatedQuery as ScheduleAttendanceLogQuery;
+
+    const log = await lifecycleService.occurrenceStates(
+      req.params.id as string,
+      req.user!,
+      { weeks }
+    );
+
+    res.status(200).json(log);
   }
 );
 

@@ -1,27 +1,72 @@
 import { Request, Response, NextFunction } from "express";
 import { ZodError } from "zod";
 import { Prisma } from "@prisma/client";
-import { env } from "../config/env.js";
 import { AppError } from "../utils/AppError.js";
+import { logger } from "../utils/logger.js";
 
 interface ErrorResponse {
   message: string;
+  /** Stable machine-readable identifier. Absent when the thrower set none. */
+  code?: string;
   errors?: unknown;
-  stack?: string;
 }
 
-const resolve = (err: unknown): { status: number; body: ErrorResponse } => {
+const statusCodeName = (status: number) =>
+  ({
+    400: "BAD_REQUEST",
+    401: "UNAUTHORIZED",
+    403: "FORBIDDEN",
+    404: "NOT_FOUND",
+    409: "CONFLICT",
+    413: "PAYLOAD_TOO_LARGE",
+    429: "RATE_LIMITED",
+    503: "SERVICE_UNAVAILABLE",
+  })[status] ?? "INTERNAL_SERVER_ERROR";
+
+export const resolveError = (err: unknown): { status: number; body: ErrorResponse } => {
   if (err instanceof AppError) {
     return {
       status: err.statusCode,
-      body: { message: err.message, errors: err.details },
+      body: {
+        message: err.message,
+        code: err.code ?? statusCodeName(err.statusCode),
+        errors: err.details,
+      },
+    };
+  }
+
+  if (
+    err instanceof SyntaxError &&
+    "status" in err &&
+    err.status === 400 &&
+    "type" in err &&
+    err.type === "entity.parse.failed"
+  ) {
+    return {
+      status: 400,
+      body: { message: "Request body contains invalid JSON", code: "INVALID_JSON" },
+    };
+  }
+
+  if (
+    err instanceof Error &&
+    "type" in err &&
+    err.type === "entity.too.large"
+  ) {
+    return {
+      status: 413,
+      body: { message: "Request body is too large", code: "PAYLOAD_TOO_LARGE" },
     };
   }
 
   if (err instanceof ZodError) {
     return {
       status: 400,
-      body: { message: "Validation failed", errors: err.issues },
+      body: {
+        message: "Validation failed",
+        code: "VALIDATION_ERROR",
+        errors: err.issues,
+      },
     };
   }
 
@@ -32,6 +77,7 @@ const resolve = (err: unknown): { status: number; body: ErrorResponse } => {
       return {
         status: 409,
         body: {
+          code: "UNIQUE_CONSTRAINT_VIOLATION",
           message: target
             ? `A record with this ${target} already exists`
             : "A record with these values already exists",
@@ -40,13 +86,17 @@ const resolve = (err: unknown): { status: number; body: ErrorResponse } => {
     }
 
     if (err.code === "P2025") {
-      return { status: 404, body: { message: "Record not found" } };
+      return {
+        status: 404,
+        body: { message: "Record not found", code: "RECORD_NOT_FOUND" },
+      };
     }
 
     if (err.code === "P2003") {
       return {
         status: 409,
         body: {
+          code: "FOREIGN_KEY_CONSTRAINT_VIOLATION",
           message: "This record is still referenced by other records",
         },
       };
@@ -54,40 +104,53 @@ const resolve = (err: unknown): { status: number; body: ErrorResponse } => {
   }
 
   if (err instanceof Prisma.PrismaClientValidationError) {
-    return { status: 400, body: { message: "Invalid query parameters" } };
+    return {
+      status: 400,
+      body: {
+        message: "Invalid query parameters",
+        code: "INVALID_QUERY_PARAMETERS",
+      },
+    };
   }
 
-  const message =
-    err instanceof Error ? err.message : "Internal Server Error";
-
-  return { status: 500, body: { message } };
+  return {
+    status: 500,
+    body: { message: "Internal Server Error", code: "INTERNAL_SERVER_ERROR" },
+  };
 };
 
 export const errorHandler = (
   err: unknown,
-  _req: Request,
+  req: Request,
   res: Response,
   _next: NextFunction
 ) => {
-  const { status, body } = resolve(err);
+  const { status, body } = resolveError(err);
 
   if (status >= 500) {
-    console.error("[error]", err);
+    logger.error("http.error", {
+      requestId: req.requestId,
+      method: req.method,
+      path: req.originalUrl.split("?")[0],
+      status,
+      error: err,
+    });
   }
 
   if (body.errors === undefined) {
     delete body.errors;
   }
 
-  if (!env.isProduction && err instanceof Error) {
-    body.stack = err.stack;
+  if (body.code === undefined) {
+    delete body.code;
   }
 
   res.status(status).json(body);
 };
 
 export const notFoundHandler = (req: Request, res: Response) => {
-  res
-    .status(404)
-    .json({ message: `Route not found: ${req.method} ${req.originalUrl}` });
+  res.status(404).json({
+    message: `Route not found: ${req.method} ${req.originalUrl}`,
+    code: "ROUTE_NOT_FOUND",
+  });
 };

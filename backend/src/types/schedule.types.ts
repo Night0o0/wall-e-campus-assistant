@@ -154,6 +154,11 @@ export const scheduleQuerySchema = paginationSchema.extend({
     .optional(),
 });
 
+export const scheduleAttendanceLogQuerySchema = z.object({
+  weeks: z.coerce.number().int().min(1).max(26).default(4),
+});
+
 export type CreateScheduleInput = z.infer<typeof createScheduleSchema>;
 export type UpdateScheduleInput = z.infer<typeof updateScheduleSchema>;
 export type ScheduleQuery = z.infer<typeof scheduleQuerySchema>;
+export type ScheduleAttendanceLogQuery = z.infer<typeof scheduleAttendanceLogQuerySchema>;

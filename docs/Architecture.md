@@ -1,59 +1,55 @@
-                                 WALL-E Campus Assistant
+# Current architecture
 
-                                       Internet / Wi-Fi
-                                             │
-                                             ▼
-                               ┌─────────────────────────┐
-                               │       Backend API       │
-                               │     (Node.js/Express)   │
-                               └─────────────────────────┘
-                                   │        │        │
-                 ┌─────────────────┘        │        └──────────────────┐
-                 │                          │                           │
-                 ▼                          ▼                           ▼
-        PostgreSQL Database         Robot Events Engine         Face Recognition Service
-                 │                          │
-                 │                          ▼
-                 │                   Robot Command Queue
-                 │                          │
-                 └──────────────────────────┘
-                                            │
-                         ┌──────────────────┼──────────────────┐
-                         │                  │                  │
-                         ▼                  ▼                  ▼
-                  Student Mobile      Robot Tablet        ESP32-S3
-                  (Flutter)           (Flutter)      (Eyes / Servos / Audio)
-                         │                  │                  │
-                         └──────────────────┴──────────────────┘
-                                      WALL-E Robot
+This document describes the current implemented architecture, not the original concept phase.
 
-## for the student 
-Student App
+## System view
 
-↓
+```text
+apps/web  ─┐
+           ├──> Express API (backend/src)
+apps/mobile┘          │
+                      ├──> Prisma ORM
+                      └──> PostgreSQL
+```
 
-Backend
+## Active components
 
-↓
+### Web
 
-Attendance Saved
+- React
+- Vite
+- role-aware routing
+- owner, university admin, department admin, and instructor web flows
 
-↓
+### Mobile
 
-Backend
+- Flutter client
+- connects to the same backend API
+- student registration, approval status, and academic workflows only
 
-↓
+### Backend
 
-Robot API
+- Express
+- TypeScript
+- Prisma
+- PostgreSQL
+- role-based authorization
+- tenant isolation
+- academic/timetable/attendance domain logic
 
-↓
+## Removed from active scope
 
-ESP32
+These are no longer active architecture components:
 
-↓
+- robot/device subsystem
+- billing/payment subsystem
 
-Move Eyes
+Legacy references may still exist in historical documents, but they are not part of the target product.
 
-↓
+## Design rules
 
-Play Audio
+1. backend is the source of truth for authorization
+2. tenant isolation is enforced server-side
+3. web and mobile are clients of the same API
+4. current finish work should stabilize the existing auth approach, not replace it
+5. students use mobile only; every staff and administrator role uses web only

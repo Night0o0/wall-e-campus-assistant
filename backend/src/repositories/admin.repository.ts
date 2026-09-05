@@ -49,7 +49,7 @@ export class AdminRepository {
       prisma.user.count({
         where: {
           organizationId,
-          role: { in: ["ADMIN", "UNIVERSITY_SUPER_ADMIN"] },
+          role: { in: ["INSTRUCTOR", "UNIVERSITY_ADMIN"] },
           isActive: true,
         },
       }),

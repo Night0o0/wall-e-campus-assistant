@@ -4,7 +4,7 @@ import {
   Building2,
   Users,
   BookOpen,
-  CreditCard,
+  CalendarClock,
   Plus,
   Eye,
   Pencil,
@@ -15,7 +15,6 @@ import { SummaryTile } from '../components/ui/SummaryTile'
 import { DataTable, type Column } from '../components/ui/DataTable'
 import { SearchInput } from '../components/ui/SearchInput'
 import { Button } from '../components/ui/Button'
-import { Badge, StatusBadge } from '../components/ui/Badge'
 import { ConfirmDialog } from '../components/ui/ConfirmDialog'
 import { OrganizationFormModal } from '../components/organizations/OrganizationFormModal'
 import {
@@ -24,29 +23,12 @@ import {
   useOverview,
 } from '../hooks/queries'
 import { useDebounce } from '../hooks/useDebounce'
-import { billingEnabled } from '../lib/features'
-import { cn, formatCurrency, formatDate, formatNumber } from '../lib/utils'
-import type { Organization, OrganizationStatus } from '../types/api'
-
-// Every option here describes a subscription state, so the whole filter is
-// meaningless while billing is off.
-const STATUS_OPTIONS: Array<{ value: string; label: string }> = [
-  { value: '', label: 'All statuses' },
-  { value: 'ACTIVE', label: 'Active' },
-  { value: 'TRIAL', label: 'Trial' },
-  { value: 'PAST_DUE', label: 'Past due' },
-  { value: 'CANCELLED', label: 'Cancelled' },
-  { value: 'EXPIRED', label: 'Expired' },
-  { value: 'NONE', label: 'No plan' },
-]
-
-// Columns that only carry meaning once a subscription exists.
-const BILLING_COLUMNS = new Set(['plan', 'status', 'revenue'])
+import { formatDate, formatNumber } from '../lib/utils'
+import type { Organization } from '../types/api'
 
 export function Organizations() {
   const [page, setPage] = useState(1)
   const [search, setSearch] = useState('')
-  const [status, setStatus] = useState('')
   const [editing, setEditing] = useState<Organization | null>(null)
   const [creating, setCreating] = useState(false)
   const [deleting, setDeleting] = useState<Organization | null>(null)
@@ -54,8 +36,8 @@ export function Organizations() {
   const debouncedSearch = useDebounce(search)
 
   const params = useMemo(
-    () => ({ page, limit: 10, search: debouncedSearch, status }),
-    [page, debouncedSearch, status]
+    () => ({ page, limit: 10, search: debouncedSearch }),
+    [page, debouncedSearch]
   )
 
   const { data, isLoading, error, refetch, isFetching } = useOrganizations(params)
@@ -85,21 +67,6 @@ export function Organizations() {
       ),
     },
     {
-      key: 'plan',
-      header: 'Plan',
-      render: (org) =>
-        org.planName ? (
-          <Badge tone="primary">{org.planName}</Badge>
-        ) : (
-          <span className="text-sm text-slate-400">—</span>
-        ),
-    },
-    {
-      key: 'status',
-      header: 'Status',
-      render: (org) => <StatusBadge status={org.status as OrganizationStatus} />,
-    },
-    {
       key: 'users',
       header: 'Users',
       render: (org) => (
@@ -118,11 +85,11 @@ export function Organizations() {
       ),
     },
     {
-      key: 'revenue',
-      header: 'Revenue',
+      key: 'sessions',
+      header: 'Sessions',
       render: (org) => (
-        <span className="text-sm font-medium text-slate-900">
-          {formatCurrency(org.revenue)}
+        <span className="text-sm text-slate-900">
+          {formatNumber(org._count.sessions)}
         </span>
       ),
     },
@@ -163,9 +130,7 @@ export function Organizations() {
         </div>
       ),
     },
-  ] satisfies Column<Organization>[]).filter(
-    (column) => billingEnabled || !BILLING_COLUMNS.has(column.key)
-  )
+  ] satisfies Column<Organization>[])
 
   return (
     <Page
@@ -177,12 +142,7 @@ export function Organizations() {
         </Button>
       }
     >
-      <div
-        className={cn(
-          'grid grid-cols-1 gap-6 sm:grid-cols-2',
-          billingEnabled ? 'lg:grid-cols-4' : 'lg:grid-cols-3'
-        )}
-      >
+      <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
         <SummaryTile
           icon={Building2}
           tone="primary"
@@ -195,31 +155,18 @@ export function Organizations() {
           label="Total Users"
           value={overview ? formatNumber(overview.totals.users) : '—'}
         />
-        {billingEnabled ? (
-          <>
-            <SummaryTile
-              icon={CreditCard}
-              tone="accent"
-              label="Active Subscriptions"
-              value={
-                overview ? formatNumber(overview.totals.activeSubscriptions) : '—'
-              }
-            />
-            <SummaryTile
-              icon={BookOpen}
-              tone="warning"
-              label="Revenue This Month"
-              value={overview ? formatCurrency(overview.monthlyRevenue.current) : '—'}
-            />
-          </>
-        ) : (
-          <SummaryTile
-            icon={BookOpen}
-            tone="accent"
-            label="Students"
-            value={overview ? formatNumber(overview.totals.students) : '—'}
-          />
-        )}
+        <SummaryTile
+          icon={BookOpen}
+          tone="accent"
+          label="Courses"
+          value={overview ? formatNumber(overview.totals.courses) : '—'}
+        />
+        <SummaryTile
+          icon={CalendarClock}
+          tone="warning"
+          label="Students"
+          value={overview ? formatNumber(overview.totals.students) : '—'}
+        />
       </div>
 
       <DataTable
@@ -233,12 +180,12 @@ export function Organizations() {
         onPageChange={setPage}
         emptyTitle="No organizations found"
         emptyMessage={
-          search || status
-            ? 'Try adjusting your search or filters.'
+          search
+            ? 'Try adjusting your search.'
             : 'Add your first university to get started.'
         }
         emptyAction={
-          !search && !status ? (
+          !search ? (
             <Button icon={Plus} size="sm" onClick={() => setCreating(true)}>
               Add Organization
             </Button>
@@ -255,22 +202,6 @@ export function Organizations() {
               placeholder="Search by name, code or email…"
               className="sm:w-80"
             />
-            {billingEnabled && (
-              <select
-                value={status}
-                onChange={(event) => {
-                  setStatus(event.target.value)
-                  setPage(1)
-                }}
-                className="h-10 rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
-              >
-                {STATUS_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            )}
           </div>
         }
       />
@@ -289,7 +220,7 @@ export function Organizations() {
       <ConfirmDialog
         open={Boolean(deleting)}
         title="Delete organization"
-        message={`Permanently delete ${deleting?.name}? Organizations with users or billing history can't be deleted.`}
+        message={`Permanently delete ${deleting?.name}? Organizations with users can't be deleted.`}
         confirmLabel="Delete"
         destructive
         loading={deleteOrg.isPending}
@@ -297,4 +228,5 @@ export function Organizations() {
         onClose={() => setDeleting(null)}
       />
     </Page>
-  )}
+  )
+}
