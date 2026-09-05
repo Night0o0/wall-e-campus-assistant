@@ -148,7 +148,7 @@ jobs:
       - run: flutter test test/visual_baseline_test.dart
       - name: Upload golden test failures
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: mobile-golden-failures
           path: apps/mobile/test/failures/
