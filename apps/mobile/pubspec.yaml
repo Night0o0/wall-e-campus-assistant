@@ -37,7 +37,7 @@ dependencies:
   cupertino_icons: ^1.0.8
   http: ^1.6.0
   mobile_scanner: ^6.0.11
-  url_launcher: ^6.3.1
+  url_launcher: ^6.3.2
   supabase_flutter: ^2.15.4
   flutter_secure_storage: ^10.3.1
   # Injectable clock so date-dependent widgets stay deterministic under test.
