@@ -2,6 +2,7 @@
 // the authenticated campus API.
 // ignore_for_file: unused_element
 
+import 'package:clock/clock.dart';
 import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
@@ -433,7 +434,7 @@ class _TimetablePageState extends State<_TimetablePage> {
         _selectedDay ??= _defaultScheduleDay(schedules);
         final visible =
             schedules.where((row) => row['dayOfWeek'] == _selectedDay).toList();
-        final weekStart = _saturdayOfCurrentWeek(DateTime.now());
+        final weekStart = _saturdayOfCurrentWeek(clock.now());
 
         return RefreshIndicator(
           onRefresh: _refresh,
@@ -2485,7 +2486,7 @@ String _defaultScheduleDay(List<Map<String, dynamic>> schedules) {
     'FRIDAY',
     'SATURDAY',
   ];
-  final today = names[DateTime.now().weekday % 7];
+  final today = names[clock.now().weekday % 7];
   if (schedules.any((row) => row['dayOfWeek'] == today) && today != 'FRIDAY') {
     return today;
   }

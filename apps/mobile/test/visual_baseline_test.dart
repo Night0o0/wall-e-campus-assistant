@@ -1,3 +1,4 @@
+import 'package:clock/clock.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wall_e_mobile/main.dart';
@@ -64,13 +65,19 @@ void main() {
     );
   });
 
+  // The timetable renders the live calendar week, so this golden is only
+  // reproducible against a fixed clock. Without it the image drifts every week
+  // and the suite fails for reasons unrelated to the change under review.
+  // 2026-08-31 is the Monday the approved baseline was captured on.
   testWidgets('golden: student shell', (tester) async {
-    await _pumpAt(tester, WallEApp(api: FakeCampusApi()));
-    await signIn(tester, 'student@campus.edu');
-    await tester.pumpAndSettle();
-    await expectLater(
-      find.byType(WallEApp),
-      matchesGoldenFile('goldens/baseline_student_shell.png'),
-    );
+    await withClock(Clock.fixed(DateTime(2026, 8, 31, 9)), () async {
+      await _pumpAt(tester, WallEApp(api: FakeCampusApi()));
+      await signIn(tester, 'student@campus.edu');
+      await tester.pumpAndSettle();
+      await expectLater(
+        find.byType(WallEApp),
+        matchesGoldenFile('goldens/baseline_student_shell.png'),
+      );
+    });
   });
 }

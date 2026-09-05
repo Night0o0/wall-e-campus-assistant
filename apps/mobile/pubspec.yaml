@@ -40,6 +40,8 @@ dependencies:
   url_launcher: ^6.3.1
   supabase_flutter: ^2.15.4
   flutter_secure_storage: ^10.3.1
+  # Injectable clock so date-dependent widgets stay deterministic under test.
+  clock: ^1.1.2
 
 dev_dependencies:
   flutter_test:
