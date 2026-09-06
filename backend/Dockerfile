@@ -1,6 +1,13 @@
 # syntax=docker/dockerfile:1
 FROM node:24-bookworm-slim AS dependencies
 WORKDIR /app
+# Prisma's query engine is dynamically linked against OpenSSL, which the slim
+# image does not carry. Without it `prisma generate` picks the wrong engine
+# target and the client fails at its first query — a runtime failure from a
+# build that succeeded, so it has to be installed before generate, not after.
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends openssl \
+  && rm -rf /var/lib/apt/lists/*
 COPY backend/package.json backend/package-lock.json ./
 RUN npm ci
 COPY backend/prisma ./prisma
@@ -19,6 +26,12 @@ CMD ["npx", "prisma", "migrate", "deploy"]
 FROM node:24-bookworm-slim AS runtime
 ENV NODE_ENV=production
 WORKDIR /app
+# The runtime is a fresh slim image, not derived from `dependencies`, so it needs
+# OpenSSL of its own: the generated client is copied in, but the shared library
+# it loads at query time is not.
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends openssl \
+  && rm -rf /var/lib/apt/lists/*
 COPY backend/package.json backend/package-lock.json ./
 COPY --from=dependencies /app/node_modules ./node_modules
 RUN npm prune --omit=dev --omit=optional
