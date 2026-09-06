@@ -267,7 +267,27 @@ const envSchema = z.object({
     .transform((value) => value === "true"),
 });
 
-const parsed = envSchema.safeParse(process.env);
+/**
+ * Release identity, most explicit first.
+ *
+ * An operator-set RELEASE_SHA always wins. RENDER_GIT_COMMIT is the fallback
+ * because the platform injects the commit it actually built, while a
+ * hand-maintained RELEASE_SHA goes stale after the first redeploy — health
+ * responses and logs would then name a revision that is not running, which is
+ * worse than naming none. A blank value counts as unset so the schema default
+ * still applies.
+ */
+export const resolveReleaseSha = (
+  source: NodeJS.ProcessEnv
+): string | undefined =>
+  source.RELEASE_SHA?.trim() || source.RENDER_GIT_COMMIT?.trim() || undefined;
+
+const schemaInput: NodeJS.ProcessEnv = { ...process.env };
+const releaseSha = resolveReleaseSha(process.env);
+if (releaseSha) schemaInput.RELEASE_SHA = releaseSha;
+else delete schemaInput.RELEASE_SHA;
+
+const parsed = envSchema.safeParse(schemaInput);
 
 if (!parsed.success) {
   const issues = parsed.error.issues

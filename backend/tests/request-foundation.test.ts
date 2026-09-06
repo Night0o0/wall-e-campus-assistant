@@ -8,6 +8,7 @@ import { materialQuerySchema } from "../src/types/material.types.js";
 import { metricsQuerySchema } from "../src/types/metrics.types.js";
 import { scheduleAttendanceLogQuerySchema } from "../src/types/schedule.types.js";
 import { AppError } from "../src/utils/AppError.js";
+import { resolveReleaseSha } from "../src/config/env.js";
 import { sanitizeLogFields } from "../src/utils/logger.js";
 
 describe("request validation and stable errors", () => {
@@ -59,6 +60,34 @@ describe("request validation and stable errors", () => {
       authorization: "[REDACTED]",
       password: "[REDACTED]",
     });
+  });
+});
+
+describe("release identity resolution", () => {
+  it("prefers an explicitly configured RELEASE_SHA", () => {
+    expect(
+      resolveReleaseSha({ RELEASE_SHA: "abc123", RENDER_GIT_COMMIT: "def456" })
+    ).toBe("abc123");
+  });
+
+  it("falls back to the platform-injected commit", () => {
+    expect(resolveReleaseSha({ RENDER_GIT_COMMIT: "def456" })).toBe("def456");
+  });
+
+  it("treats a blank RELEASE_SHA as unset so the fallback still applies", () => {
+    expect(
+      resolveReleaseSha({ RELEASE_SHA: "   ", RENDER_GIT_COMMIT: "def456" })
+    ).toBe("def456");
+  });
+
+  it("trims surrounding whitespace from either source", () => {
+    expect(resolveReleaseSha({ RELEASE_SHA: " abc123\n" })).toBe("abc123");
+    expect(resolveReleaseSha({ RENDER_GIT_COMMIT: " def456 " })).toBe("def456");
+  });
+
+  it("resolves to undefined when neither is set, leaving the schema default", () => {
+    expect(resolveReleaseSha({})).toBeUndefined();
+    expect(resolveReleaseSha({ RELEASE_SHA: "", RENDER_GIT_COMMIT: "" })).toBeUndefined();
   });
 });
 
