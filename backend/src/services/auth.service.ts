@@ -45,6 +45,55 @@ export class AuthService {
     private challenges = new EmailChallengeService()
   ) {}
 
+  async getRegistrationOptions(rawOrganizationCode: string) {
+    const organizationCode = rawOrganizationCode.trim().toUpperCase();
+    const organization =
+      await this.userRepository.findRegistrationOptionsByOrganizationCode(
+        organizationCode
+      );
+
+    if (!organization) throw notFound("Organization not found");
+
+    const currentTerm = organization.academicTerms[0];
+    const options = organization.cohorts.flatMap((cohort) => {
+      const uniqueSchedules = new Map(
+        cohort.lectureSchedules.map((schedule) => [
+          `${schedule.faculty}\u0000${schedule.department}\u0000${schedule.semester}`,
+          schedule,
+        ])
+      );
+
+      return [...uniqueSchedules.values()].flatMap((schedule) => {
+        if (!cohort.section) return [];
+        const semester = currentTerm?.semester ?? schedule.semester;
+        return [{
+          cohortId: cohort.id,
+          cohortName: cohort.name,
+          faculty: schedule.faculty,
+          department: cohort.department.name,
+          departmentCode: schedule.department || cohort.department.code,
+          level: cohort.level,
+          semester,
+          semesterLabel:
+            currentTerm?.name ??
+            (semester === 1 ? "First Semester" : "Second Semester"),
+          section: cohort.section,
+          groupName: cohort.groupName || "",
+          academicYear: currentTerm?.academicYear ?? cohort.academicYear,
+        }];
+      });
+    });
+
+    return {
+      organization: {
+        id: organization.id,
+        code: organization.code,
+        name: organization.name,
+      },
+      options,
+    };
+  }
+
   /* ----------------------- Student email verification ---------------------- */
 
   /**
@@ -254,6 +303,15 @@ export class AuthService {
 
     if (!organization) throw notFound("Organization not found");
 
+    const cohort = await this.userRepository.findRegistrationCohort(
+      registration.cohortId,
+      organization.id
+    );
+    if (!cohort || !cohort.section || cohort.lectureSchedules.length === 0) {
+      throw badRequest("The selected academic group is no longer available");
+    }
+    const academicAddress = cohort.lectureSchedules[0]!;
+
     const [byEmail, byUniversityId] = await Promise.all([
       this.userRepository.findByEmail(identity.email),
       this.userRepository.findByUniversityId(registration.universityId),
@@ -273,6 +331,25 @@ export class AuthService {
         organizationId: organization.id,
         accountStatus: "PENDING",
         isVerified: false,
+        departmentId: cohort.departmentId,
+        studentProfile: {
+          faculty: academicAddress.faculty,
+          department: academicAddress.department,
+          level: cohort.level,
+          semester:
+            academicAddress.semester === 1
+              ? "First Semester"
+              : "Second Semester",
+          section: cohort.section,
+          ...(cohort.groupName ? { groupName: cohort.groupName } : {}),
+          academicYear: cohort.academicYear,
+          cohortId: cohort.id,
+          phoneNumber: registration.phoneNumber,
+          nationalId: registration.nationalId,
+          dateOfBirth: new Date(`${registration.dateOfBirth}T00:00:00.000Z`),
+          status: "COMPLETED",
+          completedAt: new Date(),
+        },
       });
       return { user, created: true };
     } catch (error) {

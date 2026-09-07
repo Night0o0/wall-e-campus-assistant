@@ -13,6 +13,17 @@ const DETAILS = {
   universityId: "STU-2026-1001",
   fullName: "Verified Student",
   organizationCode: "nctu",
+  cohortId: "14f02be0-0b00-4c5f-9dcf-f0f6737de001",
+  phoneNumber: "+201012345678",
+  nationalId: "30001011234567",
+  dateOfBirth: "2000-01-01",
+};
+
+const METADATA = {
+  universityId: DETAILS.universityId,
+  fullName: DETAILS.fullName,
+  organizationCode: DETAILS.organizationCode,
+  cohortId: DETAILS.cohortId,
 };
 
 type CreateInput = Parameters<UserRepository["create"]>[0];
@@ -40,6 +51,23 @@ const build = (options: { failCreate?: boolean; installRaceWinner?: boolean } = 
         : null;
     }
 
+    override async findRegistrationCohort(id: string, organizationId: string) {
+      if (id !== DETAILS.cohortId || organizationId !== "org-nctu") return null;
+      return {
+        id,
+        organizationId,
+        departmentId: "dept-mec",
+        department: { id: "dept-mec", code: "MEC", name: "Mechatronics" },
+        academicYear: "2026/2027",
+        level: 2,
+        section: "A",
+        groupName: null,
+        lectureSchedules: [
+          { faculty: "Faculty of Engineering", department: "MEC", semester: 1 },
+        ],
+      } as never;
+    }
+
     override async create(data: CreateInput) {
       creates.push(data);
 
@@ -65,6 +93,54 @@ const build = (options: { failCreate?: boolean; installRaceWinner?: boolean } = 
 };
 
 describe("public Supabase registration completion", () => {
+  it("returns only configured university-owned academic choices", async () => {
+    class FakeUsers extends UserRepository {
+      override async findRegistrationOptionsByOrganizationCode(code: string) {
+        if (code !== "NCTU") return null;
+        return {
+          id: "org-nctu",
+          code,
+          name: "New Cairo Technological University",
+          academicTerms: [
+            { name: "First Semester", academicYear: "2026/2027", semester: 1 },
+          ],
+          cohorts: [
+            {
+              id: DETAILS.cohortId,
+              name: "Mechatronics L2 — A",
+              academicYear: "2026/2027",
+              level: 2,
+              section: "A",
+              groupName: null,
+              department: { id: "dept-mec", code: "MEC", name: "Mechatronics" },
+              lectureSchedules: [
+                { faculty: "Faculty of Engineering", department: "MEC", semester: 1 },
+                { faculty: "Faculty of Engineering", department: "MEC", semester: 1 },
+              ],
+            },
+          ],
+        } as never;
+      }
+    }
+
+    const result = await new AuthService(new FakeUsers()).getRegistrationOptions(
+      " nctu "
+    );
+
+    expect(result.organization.code).toBe("NCTU");
+    expect(result.options).toEqual([
+      expect.objectContaining({
+        cohortId: DETAILS.cohortId,
+        faculty: "Faculty of Engineering",
+        department: "Mechatronics",
+        level: 2,
+        semesterLabel: "First Semester",
+        section: "A",
+        academicYear: "2026/2027",
+      }),
+    ]);
+  });
+
   it("uses the verified identity and forces a pending student", async () => {
     const fixture = build();
 
@@ -85,19 +161,31 @@ describe("public Supabase registration completion", () => {
         accountStatus: "PENDING",
         isVerified: false,
         passwordHash: undefined,
+        departmentId: "dept-mec",
+        studentProfile: expect.objectContaining({
+          faculty: "Faculty of Engineering",
+          department: "MEC",
+          level: 2,
+          semester: "First Semester",
+          section: "A",
+          cohortId: DETAILS.cohortId,
+          phoneNumber: DETAILS.phoneNumber,
+          nationalId: DETAILS.nationalId,
+        }),
       }),
     ]);
   });
 
-  it("can finish on another browser from non-authoritative user metadata", async () => {
+  it("does not copy personal identity data into cross-device metadata", async () => {
     const fixture = build();
 
-    await fixture.service.completeSupabaseRegistration(
-      { ...IDENTITY, registration: DETAILS },
-      {}
-    );
-
-    expect(fixture.creates).toHaveLength(1);
+    await expect(
+      fixture.service.completeSupabaseRegistration(
+        { ...IDENTITY, registration: METADATA },
+        {}
+      )
+    ).rejects.toMatchObject({ code: "REGISTRATION_DETAILS_REQUIRED" });
+    expect(fixture.creates).toHaveLength(0);
   });
 
   it("lets same-device form data override stale non-authoritative metadata", async () => {
@@ -106,7 +194,7 @@ describe("public Supabase registration completion", () => {
     await fixture.service.completeSupabaseRegistration(
       {
         ...IDENTITY,
-        registration: { ...DETAILS, fullName: "Old Name" },
+        registration: { ...METADATA, fullName: "Old Name" },
       },
       { ...DETAILS, fullName: "Current Name" }
     );

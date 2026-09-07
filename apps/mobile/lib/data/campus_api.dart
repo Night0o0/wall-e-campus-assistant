@@ -44,10 +44,52 @@ class RegistrationResult {
   final bool emailConfirmationRequired;
 }
 
+class RegistrationOption {
+  const RegistrationOption({
+    required this.cohortId,
+    required this.cohortName,
+    required this.faculty,
+    required this.department,
+    required this.level,
+    required this.semesterLabel,
+    required this.section,
+    required this.groupName,
+    required this.academicYear,
+  });
+
+  final String cohortId;
+  final String cohortName;
+  final String faculty;
+  final String department;
+  final int level;
+  final String semesterLabel;
+  final String section;
+  final String groupName;
+  final String academicYear;
+
+  factory RegistrationOption.fromJson(Map<String, dynamic> json) {
+    return RegistrationOption(
+      cohortId: json['cohortId']?.toString() ?? '',
+      cohortName: json['cohortName']?.toString() ?? '',
+      faculty: json['faculty']?.toString() ?? '',
+      department: json['department']?.toString() ?? '',
+      level: int.tryParse(json['level']?.toString() ?? '') ?? 0,
+      semesterLabel: json['semesterLabel']?.toString() ?? '',
+      section: json['section']?.toString() ?? '',
+      groupName: json['groupName']?.toString() ?? '',
+      academicYear: json['academicYear']?.toString() ?? '',
+    );
+  }
+}
+
 abstract class CampusGateway {
   Future<AuthSession> login(String identifier, String password);
 
   Future<AuthSession?> restoreSession();
+
+  Future<List<RegistrationOption>> getRegistrationOptions(
+    String organizationCode,
+  );
 
   Future<RegistrationResult> registerStudent({
     required String organizationCode,
@@ -55,7 +97,18 @@ abstract class CampusGateway {
     required String fullName,
     required String email,
     required String password,
+    required String cohortId,
+    required String phoneNumber,
+    required String nationalId,
+    required String dateOfBirth,
   });
+
+  Future<void> verifyStudentRegistration({
+    required String email,
+    required String code,
+  });
+
+  Future<void> resendStudentRegistrationOtp(String email);
 
   Future<Map<String, dynamic>> get(
     String path,
@@ -138,10 +191,24 @@ class CampusApi implements CampusGateway {
     final normalized = identifier.trim().toLowerCase();
 
     if (supabaseConfigured) {
-      final response = await Supabase.instance.client.auth.signInWithPassword(
-        email: normalized,
-        password: password,
-      );
+      late final AuthResponse response;
+      try {
+        response = await Supabase.instance.client.auth.signInWithPassword(
+          email: normalized,
+          password: password,
+        );
+      } on AuthException catch (error) {
+        final message = error.message.toLowerCase();
+        if (message.contains('invalid login credentials') ||
+            message.contains('invalid credentials')) {
+          throw const ApiException(
+            'Email or password is incorrect.',
+            statusCode: 401,
+            code: 'INVALID_CREDENTIALS',
+          );
+        }
+        throw ApiException(error.message);
+      }
       final accessToken = response.session?.accessToken;
       if (accessToken == null) {
         throw const ApiException('Sign in did not create a session.');
@@ -185,23 +252,50 @@ class CampusApi implements CampusGateway {
   }
 
   @override
+  Future<List<RegistrationOption>> getRegistrationOptions(
+    String organizationCode,
+  ) async {
+    final response = await _send(
+      'GET',
+      '/auth/registration-options',
+      query: {'organizationCode': organizationCode.trim().toUpperCase()},
+      mobileClient: true,
+    );
+    final rawOptions = response['options'];
+    if (rawOptions is! List) return const [];
+    return rawOptions
+        .whereType<Map>()
+        .map((value) => RegistrationOption.fromJson(_map(value)))
+        .where((option) => option.cohortId.isNotEmpty)
+        .toList();
+  }
+
+  @override
   Future<RegistrationResult> registerStudent({
     required String organizationCode,
     required String universityId,
     required String fullName,
     required String email,
     required String password,
+    required String cohortId,
+    required String phoneNumber,
+    required String nationalId,
+    required String dateOfBirth,
   }) async {
     final normalizedEmail = email.trim().toLowerCase();
-    final registration = jsonEncode({
+    final registration = <String, dynamic>{
       'organizationCode': organizationCode.trim().toUpperCase(),
       'universityId': universityId.trim(),
       'fullName': fullName.trim(),
-    });
+      'cohortId': cohortId,
+      'phoneNumber': phoneNumber.trim(),
+      'nationalId': nationalId.trim(),
+      'dateOfBirth': dateOfBirth,
+    };
 
     if (!supabaseConfigured) {
       await _send('POST', '/auth/register', body: {
-        ...jsonDecode(registration) as Map<String, dynamic>,
+        ...registration,
         'email': normalizedEmail,
         'password': password,
       });
@@ -210,26 +304,117 @@ class CampusApi implements CampusGateway {
 
     await _secureStorage.write(
       key: _registrationStorageKey,
-      value: registration,
+      value: jsonEncode({...registration, 'email': normalizedEmail}),
     );
-    final response = await Supabase.instance.client.auth.signUp(
-      email: normalizedEmail,
-      password: password,
-      emailRedirectTo: Uri(
-        scheme: _deepLinkScheme,
-        host: _registrationDeepLinkHost,
-        path: '/complete',
-      ).toString(),
-      data: {
-        'registration': jsonDecode(registration) as Map<String, dynamic>,
-      },
-    );
+    late final AuthResponse response;
+    try {
+      response = await Supabase.instance.client.auth.signUp(
+        email: normalizedEmail,
+        password: password,
+        emailRedirectTo: Uri(
+          scheme: _deepLinkScheme,
+          host: _registrationDeepLinkHost,
+          path: '/complete',
+        ).toString(),
+        // Keep personal identity data out of Supabase user metadata. The full
+        // pending registration is encrypted in this device's secure storage.
+        data: {
+          'registration': {
+            'organizationCode': registration['organizationCode'],
+            'universityId': registration['universityId'],
+            'fullName': registration['fullName'],
+            'cohortId': registration['cohortId'],
+          },
+        },
+      );
+    } on AuthException catch (error) {
+      final message = error.message.toLowerCase();
+      if (message.contains('already registered') ||
+          message.contains('already exists')) {
+        await _secureStorage.delete(key: _registrationStorageKey);
+        throw const ApiException(
+          'Email already exists.',
+          statusCode: 409,
+          code: 'EMAIL_ALREADY_EXISTS',
+        );
+      }
+      throw ApiException(error.message);
+    }
+    if (response.user?.identities?.isEmpty == true) {
+      await _secureStorage.delete(key: _registrationStorageKey);
+      throw const ApiException(
+        'Email already exists.',
+        statusCode: 409,
+        code: 'EMAIL_ALREADY_EXISTS',
+      );
+    }
     final accessToken = response.session?.accessToken;
     if (accessToken != null) await _completePendingRegistration(accessToken);
 
     return RegistrationResult(
       emailConfirmationRequired: accessToken == null,
     );
+  }
+
+  @override
+  Future<void> verifyStudentRegistration({
+    required String email,
+    required String code,
+  }) async {
+    if (!supabaseConfigured) {
+      throw const ApiException(
+        'Email verification is not configured for this app.',
+      );
+    }
+
+    final normalizedEmail = email.trim().toLowerCase();
+    var session = Supabase.instance.client.auth.currentSession;
+    final currentEmail =
+        Supabase.instance.client.auth.currentUser?.email?.toLowerCase();
+
+    // If verification succeeded but completing the campus registration failed
+    // because the network dropped, retain and reuse that proven Supabase
+    // session. OTPs are one-time, so asking the student to spend it twice would
+    // make a recoverable backend failure look like an invalid code.
+    if (session == null || currentEmail != normalizedEmail) {
+      try {
+        final response = await Supabase.instance.client.auth.verifyOTP(
+          type: OtpType.email,
+          email: normalizedEmail,
+          token: code.trim(),
+        );
+        session = response.session;
+      } on AuthException catch (error) {
+        throw ApiException(error.message);
+      }
+    }
+
+    if (session == null) {
+      throw const ApiException(
+        'The verification code did not create a session. Request a new code.',
+      );
+    }
+
+    await _completePendingRegistration(session.accessToken);
+    await Supabase.instance.client.auth.signOut();
+  }
+
+  @override
+  Future<void> resendStudentRegistrationOtp(String email) async {
+    if (!supabaseConfigured) {
+      throw const ApiException(
+        'Email verification is not configured for this app.',
+      );
+    }
+
+    try {
+      await Supabase.instance.client.auth.resend(
+        type: OtpType.signup,
+        email: email.trim().toLowerCase(),
+      );
+    } on AuthException catch (error) {
+      throw ApiException(error.message);
+    }
   }
 
   @override
@@ -261,7 +446,15 @@ class CampusApi implements CampusGateway {
     Map<String, dynamic>? registration;
     if (raw != null) {
       registration = jsonDecode(raw) as Map<String, dynamic>;
-    } else {
+      final intendedEmail = registration.remove('email')?.toString();
+      final sessionEmail =
+          Supabase.instance.client.auth.currentUser?.email?.toLowerCase();
+      if (intendedEmail != null &&
+          intendedEmail.toLowerCase() != sessionEmail) {
+        registration = null;
+      }
+    }
+    if (registration == null) {
       final metadata = Supabase.instance.client.auth.currentUser?.userMetadata;
       final candidate = metadata?['registration'];
       if (candidate is Map) {
@@ -419,6 +612,7 @@ class CampusApi implements CampusGateway {
     AuthSession? session,
     Map<String, String>? query,
     Map<String, dynamic>? body,
+    bool mobileClient = false,
   }) async {
     final uri = Uri.parse('$baseUrl$path').replace(queryParameters: query);
 
@@ -427,7 +621,9 @@ class CampusApi implements CampusGateway {
       request.headers[HttpHeaders.contentTypeHeader] =
           ContentType.json.mimeType;
       request.headers[HttpHeaders.acceptHeader] = ContentType.json.mimeType;
-      request.headers['X-Client-Platform'] = 'mobile';
+      if (mobileClient || session != null || path.startsWith('/auth/')) {
+        request.headers['X-Client-Platform'] = 'mobile';
+      }
       if (session != null) {
         request.headers[HttpHeaders.authorizationHeader] =
             'Bearer ${session.token}';

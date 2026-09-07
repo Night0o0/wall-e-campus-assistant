@@ -4,6 +4,16 @@ import { asyncHandler } from "../utils/asyncHandler.js";
 
 const authService = new AuthService();
 
+export const getRegistrationOptions = asyncHandler(
+  async (req: Request, res: Response) => {
+    const query = req.validatedQuery as { organizationCode: string };
+    const result = await authService.getRegistrationOptions(
+      query.organizationCode
+    );
+    res.status(200).json(result);
+  }
+);
+
 export const register = asyncHandler(async (req: Request, res: Response) => {
   const user = await authService.register(req.body);
 
