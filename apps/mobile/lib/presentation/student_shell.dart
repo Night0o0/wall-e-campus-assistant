@@ -37,6 +37,8 @@ class StudentShell extends StatefulWidget {
 class _StudentShellState extends State<StudentShell> {
   int _index = 0;
   bool _showProfile = false;
+  bool _showNotifications = false;
+  int _unreadNotifications = 0;
 
   List<Widget> get _pages => [
         _TimetablePage(api: widget.api, session: widget.session),
@@ -44,13 +46,35 @@ class _StudentShellState extends State<StudentShell> {
         _ScanQrPage(api: widget.api, session: widget.session),
         _MaterialPage(api: widget.api, session: widget.session),
         _AssignmentsPage(api: widget.api, session: widget.session),
-        _InboxPage(api: widget.api, session: widget.session),
       ];
+
+  @override
+  void initState() {
+    super.initState();
+    _refreshUnreadCount();
+  }
+
+  Future<void> _refreshUnreadCount() async {
+    try {
+      final response = await widget.api.get(
+        '/notifications/unread-count',
+        widget.session,
+      );
+      if (mounted) {
+        setState(
+            () => _unreadNotifications = _integer(response['unreadCount']));
+      }
+    } catch (_) {
+      // The inbox itself still exposes retry UI; a badge failure must not stop
+      // the rest of the student shell from loading.
+    }
+  }
 
   void _select(int index) {
     setState(() {
       _index = index;
       _showProfile = false;
+      _showNotifications = false;
     });
   }
 
@@ -71,20 +95,48 @@ class _StudentShellState extends State<StudentShell> {
                     _StudentHeader(
                       name: widget.session.name,
                       profileSelected: _showProfile,
-                      onProfile: () => setState(() => _showProfile = true),
+                      notificationsSelected: _showNotifications,
+                      unreadNotifications: _unreadNotifications,
+                      onNotifications: () => setState(() {
+                        _showNotifications = true;
+                        _showProfile = false;
+                      }),
+                      onProfile: () => setState(() {
+                        _showProfile = true;
+                        _showNotifications = false;
+                      }),
                     ),
                     Expanded(
                       child: AnimatedSwitcher(
                         duration: const Duration(milliseconds: 180),
                         child: KeyedSubtree(
-                          key: ValueKey(_showProfile ? 'profile' : _index),
-                          child: _showProfile
-                              ? _ProfilePage(
+                          key: ValueKey(
+                            _showProfile
+                                ? 'profile'
+                                : _showNotifications
+                                    ? 'notifications'
+                                    : _index,
+                          ),
+                          child: _showNotifications
+                              ? _InboxPage(
                                   api: widget.api,
                                   session: widget.session,
-                                  onLogout: widget.onLogout,
+                                  onUnreadChanged: (value) {
+                                    if (mounted &&
+                                        value != _unreadNotifications) {
+                                      setState(
+                                        () => _unreadNotifications = value,
+                                      );
+                                    }
+                                  },
                                 )
-                              : _pages[_index],
+                              : _showProfile
+                                  ? _ProfilePage(
+                                      api: widget.api,
+                                      session: widget.session,
+                                      onLogout: widget.onLogout,
+                                    )
+                                  : _pages[_index],
                         ),
                       ),
                     ),
@@ -104,11 +156,17 @@ class _StudentHeader extends StatelessWidget {
   const _StudentHeader({
     required this.name,
     required this.profileSelected,
+    required this.notificationsSelected,
+    required this.unreadNotifications,
+    required this.onNotifications,
     required this.onProfile,
   });
 
   final String name;
   final bool profileSelected;
+  final bool notificationsSelected;
+  final int unreadNotifications;
+  final VoidCallback onNotifications;
   final VoidCallback onProfile;
 
   @override
@@ -132,6 +190,64 @@ class _StudentHeader extends StatelessWidget {
               color: AppColors.ink,
               fontSize: 18,
               fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Material(
+            color: Colors.transparent,
+            child: InkWell(
+              key: const ValueKey('student-notifications'),
+              onTap: onNotifications,
+              borderRadius: BorderRadius.circular(10),
+              child: Ink(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  gradient:
+                      notificationsSelected ? AppColors.primaryGradient : null,
+                  color: notificationsSelected
+                      ? null
+                      : Colors.white.withValues(alpha: .07),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    const Center(
+                      child: Icon(
+                        Icons.notifications_none_rounded,
+                        color: AppColors.ink,
+                        size: 20,
+                      ),
+                    ),
+                    if (unreadNotifications > 0)
+                      Positioned(
+                        right: -5,
+                        top: -6,
+                        child: Container(
+                          constraints: const BoxConstraints(minWidth: 19),
+                          height: 19,
+                          padding: const EdgeInsets.symmetric(horizontal: 5),
+                          alignment: Alignment.center,
+                          decoration: const BoxDecoration(
+                            color: AppColors.danger,
+                            borderRadius: BorderRadius.all(Radius.circular(10)),
+                          ),
+                          child: Text(
+                            unreadNotifications > 99
+                                ? '99+'
+                                : '$unreadNotifications',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 9,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
             ),
           ),
           const Spacer(),
@@ -182,7 +298,6 @@ class _StudentBottomNav extends StatelessWidget {
     ('Scan QR', Icons.qr_code_2_rounded),
     ('Material', Icons.menu_book_outlined),
     ('Work', Icons.assignment_outlined),
-    ('Inbox', Icons.notifications_none_rounded),
   ];
 
   @override
@@ -412,7 +527,9 @@ class _TimetablePageState extends State<_TimetablePage> {
 
   Future<void> _refresh() async {
     final next = widget.api.get('/students/me/schedule', widget.session);
-    setState(() => _future = next);
+    setState(() {
+      _future = next;
+    });
     await next;
   }
 
@@ -788,7 +905,9 @@ class _AttendancePageState extends State<_AttendancePage> {
 
   Future<void> _refresh() async {
     final next = _load();
-    setState(() => _future = next);
+    setState(() {
+      _future = next;
+    });
     await next;
   }
 
@@ -1442,7 +1561,9 @@ class _MaterialPageState extends State<_MaterialPage> {
 
   Future<void> _refresh() async {
     final next = widget.api.get('/materials/my', widget.session);
-    setState(() => _future = next);
+    setState(() {
+      _future = next;
+    });
     await next;
   }
 
@@ -1643,7 +1764,9 @@ class _AssignmentsPageState extends State<_AssignmentsPage> {
 
   Future<void> _refresh() async {
     final next = widget.api.get('/assignments', widget.session);
-    setState(() => _future = next);
+    setState(() {
+      _future = next;
+    });
     await next;
   }
 
@@ -1745,10 +1868,15 @@ class _AssignmentCard extends StatelessWidget {
 }
 
 class _InboxPage extends StatefulWidget {
-  const _InboxPage({required this.api, required this.session});
+  const _InboxPage({
+    required this.api,
+    required this.session,
+    required this.onUnreadChanged,
+  });
 
   final CampusGateway api;
   final AuthSession session;
+  final ValueChanged<int> onUnreadChanged;
 
   @override
   State<_InboxPage> createState() => _InboxPageState();
@@ -1756,6 +1884,7 @@ class _InboxPage extends StatefulWidget {
 
 class _InboxPageState extends State<_InboxPage> {
   late Future<Map<String, dynamic>> _future;
+  int? _lastReportedUnread;
 
   @override
   void initState() {
@@ -1765,7 +1894,9 @@ class _InboxPageState extends State<_InboxPage> {
 
   Future<void> _refresh() async {
     final next = widget.api.get('/notifications', widget.session);
-    setState(() => _future = next);
+    setState(() {
+      _future = next;
+    });
     await next;
   }
 
@@ -1791,6 +1922,43 @@ class _InboxPageState extends State<_InboxPage> {
             .showSnackBar(SnackBar(content: Text(error.message)));
       }
     }
+  }
+
+  Future<void> _openNotification(
+    (String, String, String, String, String, IconData, Color, bool) item,
+  ) async {
+    if (item.$8 && item.$1.isNotEmpty) await _markRead(item.$1);
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        icon: Icon(item.$6, color: item.$7, size: 30),
+        title: Text(item.$2),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(item.$4),
+            const SizedBox(height: 16),
+            Text(
+              item.$5,
+              style: const TextStyle(color: AppColors.muted, fontSize: 12),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              item.$3,
+              style: const TextStyle(color: AppColors.muted, fontSize: 11),
+            ),
+          ],
+        ),
+        actions: [
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Done'),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -1828,6 +1996,12 @@ class _InboxPageState extends State<_InboxPage> {
           );
         }).toList();
         final unread = _integer(data['unreadCount']);
+        if (_lastReportedUnread != unread) {
+          _lastReportedUnread = unread;
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) widget.onUnreadChanged(unread);
+          });
+        }
 
         return RefreshIndicator(
           onRefresh: _refresh,
@@ -1865,9 +2039,7 @@ class _InboxPageState extends State<_InboxPage> {
                 ...items.map(
                   (item) => _NotificationCard(
                     item: item,
-                    onTap: item.$8 && item.$1.isNotEmpty
-                        ? () => _markRead(item.$1)
-                        : null,
+                    onTap: () => _openNotification(item),
                   ),
                 ),
             ],
@@ -2005,139 +2177,36 @@ class _ProfilePageState extends State<_ProfilePage> {
     return {'user': values[0]['user'], 'profile': values[1]['profile']};
   }
 
-  Future<void> _editProfile(Map<String, dynamic> profile) async {
-    final values = <String, TextEditingController>{
-      'faculty': TextEditingController(text: '${profile['faculty'] ?? ''}'),
-      'department':
-          TextEditingController(text: '${profile['department'] ?? ''}'),
-      'level': TextEditingController(text: '${profile['level'] ?? ''}'),
-      'semester': TextEditingController(text: '${profile['semester'] ?? ''}'),
-      'section': TextEditingController(text: '${profile['section'] ?? ''}'),
-      'groupName': TextEditingController(text: '${profile['groupName'] ?? ''}'),
-      'academicYear':
-          TextEditingController(text: '${profile['academicYear'] ?? ''}'),
-      'phoneNumber':
-          TextEditingController(text: '${profile['phoneNumber'] ?? ''}'),
-      'nationalId':
-          TextEditingController(text: '${profile['nationalId'] ?? ''}'),
-      'dateOfBirth':
-          TextEditingController(text: _profileDate(profile['dateOfBirth'])),
-    };
-    var saving = false;
-    String? formError;
+  Future<void> _refresh() async {
+    final next = _load();
+    setState(() {
+      _future = next;
+    });
+    await next;
+  }
 
-    await showDialog<void>(
+  Future<void> _editProfile(Map<String, dynamic> profile) async {
+    final updated = await showDialog<bool>(
       context: context,
-      builder: (dialogContext) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          title: const Row(
-            children: [
-              Icon(Icons.edit_rounded, color: AppColors.blue),
-              SizedBox(width: 10),
-              Text('Edit profile'),
-            ],
-          ),
-          content: SizedBox(
-            width: 360,
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  _ProfileInput('Faculty', values['faculty']!),
-                  _ProfileInput('Department', values['department']!),
-                  _ProfileInput('Level', values['level']!, number: true),
-                  _ProfileInput('Semester', values['semester']!),
-                  _ProfileInput('Section', values['section']!),
-                  _ProfileInput('Group', values['groupName']!),
-                  _ProfileInput('Academic year', values['academicYear']!),
-                  _ProfileInput('Phone number', values['phoneNumber']!,
-                      phone: true),
-                  _ProfileInput('National ID', values['nationalId']!,
-                      number: true),
-                  _ProfileInput(
-                    'Date of birth (YYYY-MM-DD)',
-                    values['dateOfBirth']!,
-                  ),
-                  if (formError != null)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 6),
-                      child: Text(
-                        formError!,
-                        style: const TextStyle(
-                          color: AppColors.orange,
-                          fontSize: 12,
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: saving ? null : () => Navigator.pop(dialogContext),
-              child: const Text('Cancel'),
-            ),
-            FilledButton.icon(
-              key: const ValueKey('profile-save'),
-              onPressed: saving
-                  ? null
-                  : () async {
-                      final level = int.tryParse(values['level']!.text.trim());
-                      if (level == null) {
-                        setDialogState(
-                            () => formError = 'Level must be a whole number.');
-                        return;
-                      }
-                      final body = <String, dynamic>{'level': level};
-                      for (final key
-                          in values.keys.where((key) => key != 'level')) {
-                        final value = values[key]!.text.trim();
-                        if (value.isNotEmpty) body[key] = value;
-                      }
-                      setDialogState(() {
-                        saving = true;
-                        formError = null;
-                      });
-                      try {
-                        await widget.api.patch(
-                          '/students/me/profile',
-                          widget.session,
-                          body,
-                        );
-                        if (!mounted || !dialogContext.mounted) return;
-                        Navigator.pop(dialogContext);
-                        final next = _load();
-                        setState(() => _future = next);
-                        await next;
-                        if (mounted) {
-                          ScaffoldMessenger.of(this.context).showSnackBar(
-                            const SnackBar(content: Text('Profile updated.')),
-                          );
-                        }
-                      } on ApiException catch (error) {
-                        setDialogState(() {
-                          saving = false;
-                          formError = error.message;
-                        });
-                      }
-                    },
-              icon: saving
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.save_rounded),
-              label: Text(saving ? 'Saving…' : 'Save'),
-            ),
-          ],
-        ),
+      builder: (_) => _ProfileEditorDialog(
+        profile: profile,
+        api: widget.api,
+        session: widget.session,
       ),
     );
+    if (updated != true || !mounted) return;
 
-    for (final controller in values.values) {
-      controller.dispose();
+    try {
+      await _refresh();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Profile updated.')),
+        );
+      }
+    } catch (_) {
+      // The refreshed Future is already displayed by FutureBuilder, including
+      // its normal retry action. Avoid turning that handled state into an
+      // unhandled callback exception as well.
     }
   }
 
@@ -2152,7 +2221,7 @@ class _ProfilePageState extends State<_ProfilePage> {
         if (snapshot.hasError) {
           return _StudentLoadError(
             error: snapshot.error,
-            onRetry: () async => setState(() => _future = _load()),
+            onRetry: _refresh,
           );
         }
         final data = snapshot.data ?? const <String, dynamic>{};
@@ -2292,6 +2361,170 @@ class _ProfilePageState extends State<_ProfilePage> {
           ],
         );
       },
+    );
+  }
+}
+
+class _ProfileEditorDialog extends StatefulWidget {
+  const _ProfileEditorDialog({
+    required this.profile,
+    required this.api,
+    required this.session,
+  });
+
+  final Map<String, dynamic> profile;
+  final CampusGateway api;
+  final AuthSession session;
+
+  @override
+  State<_ProfileEditorDialog> createState() => _ProfileEditorDialogState();
+}
+
+class _ProfileEditorDialogState extends State<_ProfileEditorDialog> {
+  late final Map<String, TextEditingController> values;
+  bool saving = false;
+  String? formError;
+
+  @override
+  void initState() {
+    super.initState();
+    final profile = widget.profile;
+    values = <String, TextEditingController>{
+      'faculty': TextEditingController(text: '${profile['faculty'] ?? ''}'),
+      'department':
+          TextEditingController(text: '${profile['department'] ?? ''}'),
+      'level': TextEditingController(text: '${profile['level'] ?? ''}'),
+      'semester': TextEditingController(text: '${profile['semester'] ?? ''}'),
+      'section': TextEditingController(text: '${profile['section'] ?? ''}'),
+      'groupName': TextEditingController(text: '${profile['groupName'] ?? ''}'),
+      'academicYear':
+          TextEditingController(text: '${profile['academicYear'] ?? ''}'),
+      'phoneNumber':
+          TextEditingController(text: '${profile['phoneNumber'] ?? ''}'),
+      'nationalId':
+          TextEditingController(text: '${profile['nationalId'] ?? ''}'),
+      'dateOfBirth':
+          TextEditingController(text: _profileDate(profile['dateOfBirth'])),
+    };
+  }
+
+  @override
+  void dispose() {
+    for (final controller in values.values) {
+      controller.dispose();
+    }
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    final level = int.tryParse(values['level']!.text.trim());
+    if (level == null) {
+      setState(() => formError = 'Level must be a whole number.');
+      return;
+    }
+
+    final body = <String, dynamic>{'level': level};
+    for (final key in values.keys.where((key) => key != 'level')) {
+      final value = values[key]!.text.trim();
+      if (value.isNotEmpty) body[key] = value;
+    }
+
+    setState(() {
+      saving = true;
+      formError = null;
+    });
+    try {
+      await widget.api.patch(
+        '/students/me/profile',
+        widget.session,
+        body,
+      );
+      if (mounted) Navigator.of(context).pop(true);
+    } on ApiException catch (error) {
+      if (!mounted) return;
+      setState(() {
+        saving = false;
+        formError = error.message;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        saving = false;
+        formError = 'The profile could not be saved. Try again.';
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Row(
+        children: [
+          Icon(Icons.edit_rounded, color: AppColors.blue),
+          SizedBox(width: 10),
+          Text('Edit profile'),
+        ],
+      ),
+      content: SizedBox(
+        width: 360,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _ProfileInput('Faculty', values['faculty']!),
+              _ProfileInput('Department', values['department']!),
+              _ProfileInput('Level', values['level']!, number: true),
+              _ProfileInput('Semester', values['semester']!),
+              _ProfileInput('Section', values['section']!),
+              _ProfileInput('Group', values['groupName']!),
+              _ProfileInput('Academic year', values['academicYear']!),
+              _ProfileInput(
+                'Phone number',
+                values['phoneNumber']!,
+                phone: true,
+              ),
+              _ProfileInput(
+                'National ID',
+                values['nationalId']!,
+                number: true,
+              ),
+              _ProfileInput(
+                'Date of birth (YYYY-MM-DD)',
+                values['dateOfBirth']!,
+              ),
+              if (formError != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 6),
+                  child: Text(
+                    formError!,
+                    style: const TextStyle(
+                      color: AppColors.orange,
+                      fontSize: 12,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: saving ? null : () => Navigator.of(context).pop(false),
+          child: const Text('Cancel'),
+        ),
+        FilledButton.icon(
+          key: const ValueKey('profile-save'),
+          onPressed: saving ? null : _save,
+          icon: saving
+              ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Icon(Icons.save_rounded),
+          label: Text(saving ? 'Saving…' : 'Save'),
+        ),
+      ],
     );
   }
 }

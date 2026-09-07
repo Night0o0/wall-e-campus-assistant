@@ -9,13 +9,42 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:wall_e_mobile/data/campus_api.dart';
 
 class FakeCampusApi implements CampusGateway {
-  FakeCampusApi({this.restoredSession, this.restoreError});
+  FakeCampusApi({
+    this.restoredSession,
+    this.restoreError,
+    this.registrationNeedsOtp = false,
+  });
 
   String? changedPassword;
   String? recoveredPassword;
   bool didLogout = false;
   AuthSession? restoredSession;
   ApiException? restoreError;
+  final bool registrationNeedsOtp;
+  String? verifiedRegistrationEmail;
+  String? verifiedRegistrationCode;
+  int registrationOtpResends = 0;
+  int unreadNotifications = 1;
+
+  @override
+  Future<List<RegistrationOption>> getRegistrationOptions(
+    String organizationCode,
+  ) async {
+    if (organizationCode.trim().toUpperCase() != 'NCTU') return const [];
+    return const [
+      RegistrationOption(
+        cohortId: '14f02be0-0b00-4c5f-9dcf-f0f6737de001',
+        cohortName: 'Mechatronics L2 — A',
+        faculty: 'Faculty of Engineering',
+        department: 'Mechatronics',
+        level: 2,
+        semesterLabel: 'First Semester',
+        section: 'A',
+        groupName: '',
+        academicYear: '2026/2027',
+      ),
+    ];
+  }
 
   @override
   Future<void> logout() async {
@@ -58,8 +87,28 @@ class FakeCampusApi implements CampusGateway {
     required String fullName,
     required String email,
     required String password,
+    required String cohortId,
+    required String phoneNumber,
+    required String nationalId,
+    required String dateOfBirth,
   }) async {
-    return const RegistrationResult(emailConfirmationRequired: false);
+    return RegistrationResult(
+      emailConfirmationRequired: registrationNeedsOtp,
+    );
+  }
+
+  @override
+  Future<void> verifyStudentRegistration({
+    required String email,
+    required String code,
+  }) async {
+    verifiedRegistrationEmail = email;
+    verifiedRegistrationCode = code;
+  }
+
+  @override
+  Future<void> resendStudentRegistrationOtp(String email) async {
+    registrationOtpResends += 1;
   }
 
   @override
@@ -183,12 +232,15 @@ class FakeCampusApi implements CampusGateway {
             'title': 'Welcome to Leornian',
             'body': 'Your campus pages are ready.',
             'type': 'ACCOUNT_NOTICE',
-            'isRead': false,
+            'isRead': unreadNotifications == 0,
             'createdAt': '2026-08-18T09:00:00.000Z',
           }
         ],
-        'unreadCount': 1,
+        'unreadCount': unreadNotifications,
       };
+    }
+    if (path == '/notifications/unread-count') {
+      return {'unreadCount': unreadNotifications};
     }
     if (path == '/auth/profile') {
       return {
@@ -220,6 +272,9 @@ class FakeCampusApi implements CampusGateway {
     AuthSession session, [
     Map<String, dynamic>? body,
   ]) async {
+    if (path == '/notifications/read-all' || path.endsWith('/read')) {
+      unreadNotifications = 0;
+    }
     return {};
   }
 

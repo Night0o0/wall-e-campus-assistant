@@ -71,6 +71,69 @@ export class UserRepository {
         });
     }
 
+    async findRegistrationOptionsByOrganizationCode(code: string) {
+        return prisma.organization.findUnique({
+            where: { code },
+            select: {
+                id: true,
+                name: true,
+                code: true,
+                academicTerms: {
+                    where: { isCurrent: true },
+                    select: { name: true, academicYear: true, semester: true },
+                    orderBy: { startsOn: "desc" },
+                    take: 1,
+                },
+                cohorts: {
+                    where: {
+                        isActive: true,
+                        department: { isActive: true },
+                        lectureSchedules: { some: { isActive: true } },
+                    },
+                    select: {
+                        id: true,
+                        name: true,
+                        academicYear: true,
+                        level: true,
+                        section: true,
+                        groupName: true,
+                        department: { select: { id: true, code: true, name: true } },
+                        lectureSchedules: {
+                            where: { isActive: true },
+                            select: { faculty: true, department: true, semester: true },
+                            orderBy: { createdAt: "asc" },
+                        },
+                    },
+                    orderBy: [
+                        { department: { name: "asc" } },
+                        { level: "asc" },
+                        { section: "asc" },
+                        { groupName: "asc" },
+                    ],
+                },
+            },
+        });
+    }
+
+    async findRegistrationCohort(id: string, organizationId: string) {
+        return prisma.cohort.findFirst({
+            where: {
+                id,
+                organizationId,
+                isActive: true,
+                department: { isActive: true },
+                lectureSchedules: { some: { isActive: true } },
+            },
+            include: {
+                department: true,
+                lectureSchedules: {
+                    where: { isActive: true },
+                    orderBy: { createdAt: "asc" },
+                },
+            },
+        });
+    }
+
     /** The university's own name, for a message addressed to one of its students. */
     async findOrganizationName(id: string): Promise<string | null> {
         const organization = await prisma.organization.findUnique({
@@ -150,15 +213,32 @@ export class UserRepository {
         isVerified?: boolean;
         jobTitle?: string;
         office?: string;
+        studentProfile?: {
+            faculty: string;
+            department: string;
+            level: number;
+            semester: string;
+            section: string;
+            groupName?: string;
+            academicYear: string;
+            cohortId: string;
+            phoneNumber: string;
+            nationalId: string;
+            dateOfBirth: Date;
+            status: "COMPLETED";
+            completedAt: Date;
+        };
     }) {
-        const { jobTitle, office, ...user } = data;
+        const { jobTitle, office, studentProfile, ...user } = data;
 
         return prisma.user.create({
             data: {
                 ...user,
                 // Every student starts with an empty INCOMPLETE academic profile,
                 // so the row is there the moment they log in to fill it.
-                ...(data.role === "STUDENT" ? { studentProfile: { create: {} } } : {}),
+                ...(data.role === "STUDENT"
+                    ? { studentProfile: { create: studentProfile ?? {} } }
+                    : {}),
                 // Both university staff roles carry the profile that holds their
                 // title. Creating one without it leaves the directory and
                 // timetable with an account that cannot describe its job.

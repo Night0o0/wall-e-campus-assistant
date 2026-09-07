@@ -25,12 +25,33 @@ export const studentRegistrationDetailsSchema = z.object({
   universityId: z.string().trim().min(4).max(50),
   fullName: z.string().trim().min(3).max(120),
   organizationCode: z.string().trim().min(2).max(50),
+  cohortId: z.string().uuid(),
+  phoneNumber: z
+    .string()
+    .trim()
+    .regex(/^\+?[\d\s-]{7,20}$/, "Phone number must be 7-20 digits, optionally starting with +"),
+  nationalId: z.string().trim().regex(/^\d{14}$/, "National ID must be 14 digits"),
+  dateOfBirth: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "Date of birth must be in YYYY-MM-DD format")
+    .refine((value) => {
+      const date = new Date(`${value}T00:00:00.000Z`);
+      return !Number.isNaN(date.getTime()) && date < new Date() && date > new Date("1900-01-01T00:00:00.000Z");
+    }, "Date of birth is invalid"),
 });
+
+export const registrationOptionsQuerySchema = z.object({
+  organizationCode: z.string().trim().min(2).max(50),
+});
+
+export type RegistrationOptionsQuery = z.infer<
+  typeof registrationOptionsQuerySchema
+>;
 
 // Every field is optional at the transport because a confirmation callback may
 // happen on another device. AuthService merges this body with the verified
-// identity's non-authoritative user_metadata, then validates the complete set
-// with studentRegistrationDetailsSchema before creating anything.
+// identity's non-authoritative user_metadata, then validates the complete set.
+// Personal data stays out of Supabase metadata and is supplied by the device.
 export const completeSupabaseRegistrationSchema =
   studentRegistrationDetailsSchema.partial().strict();
 

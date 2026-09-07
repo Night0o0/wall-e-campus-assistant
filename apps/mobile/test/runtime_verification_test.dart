@@ -168,9 +168,15 @@ void main() {
 
     // Timetable is the landing tab, so record it without a tap.
     await _visit(tester, 'STUDENT', 'Timetable', alreadyOpen: true);
-    for (final tab in ['Attendance', 'Material', 'Work', 'Inbox', 'Scan QR']) {
+    for (final tab in ['Attendance', 'Material', 'Work', 'Scan QR']) {
       await _visit(tester, 'STUDENT', tab);
     }
+    await _visit(
+      tester,
+      'STUDENT',
+      'Notifications',
+      tapTarget: find.byKey(const ValueKey('student-notifications')),
+    );
     await _visit(
       tester,
       'STUDENT',
