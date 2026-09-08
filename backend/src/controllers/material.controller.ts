@@ -19,6 +19,21 @@ export const getMyMaterials = asyncHandler(
   }
 );
 
+/**
+ * GET /api/materials/audiences
+ *
+ * The academic audiences the signed-in instructor may publish to, built from
+ * their own teaching. The publish form's dropdowns are populated from this, and
+ * the create endpoint validates against the same set — the client can only ever
+ * offer what the server will accept.
+ */
+export const getTeachableAudiences = asyncHandler(
+  async (req: Request, res: Response) => {
+    const result = await materialService.listTeachableAudiences(req.user!);
+    res.status(200).json(result);
+  }
+);
+
 /** GET /api/materials — the staff-side listing. */
 export const getMaterials = asyncHandler(
   async (req: Request, res: Response) => {

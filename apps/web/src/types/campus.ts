@@ -184,6 +184,22 @@ export interface CourseMaterial {
   createdAt: string
 }
 
+/**
+ * One publishable target for an instructor: a course, and an academic audience
+ * they teach. Built server-side from their teaching assignments and returned
+ * with no day or time — an audience is "IT, level 3, semester 2, section A of
+ * Algorithms", not a specific weekly lecture slot. The publish form's dependent
+ * dropdowns are derived entirely from a list of these.
+ */
+export interface TeachableAudience {
+  course: CourseSummary
+  faculty: string
+  department: string
+  level: number
+  semester: number
+  section: string | null
+}
+
 export interface Department {
   id: string
   code: string

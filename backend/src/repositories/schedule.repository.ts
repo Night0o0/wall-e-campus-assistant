@@ -140,6 +140,42 @@ export class ScheduleRepository {
     return { data, total };
   }
 
+  /**
+   * The distinct academic audiences an instructor teaches, with no day/time.
+   *
+   * Course material is targeted at a course and an academic audience, not at a
+   * lecture occurrence — but a lecture row is the only place this schema records
+   * that an instructor teaches a given faculty/department/level/semester/section
+   * of a course. So the set of audiences an instructor may publish to is exactly
+   * the set of addresses across their own active lectures, collapsed so the two
+   * weekly slots of one course to one cohort become a single publishable target.
+   *
+   * Only active lectures count: a deactivated lecture no longer represents a
+   * standing teaching assignment. The projection deliberately omits dayOfWeek,
+   * startTime, endTime and room — the caller must not be able to reintroduce a
+   * single occurrence into what is meant to be an occurrence-independent target.
+   */
+  async findInstructorAudiences(organizationId: string, instructorId: string) {
+    return prisma.lectureSchedule.findMany({
+      where: { organizationId, instructorId, isActive: true },
+      select: {
+        faculty: true,
+        department: true,
+        level: true,
+        semester: true,
+        section: true,
+        course: { select: { id: true, courseCode: true, courseName: true } },
+      },
+      orderBy: [
+        { faculty: "asc" },
+        { department: "asc" },
+        { level: "asc" },
+        { semester: "asc" },
+        { section: "asc" },
+      ],
+    });
+  }
+
   /** The unpaginated week, in reading order — used by the personal timetables. */
   async findTimetable(filter: ScheduleFilter) {
     return prisma.lectureSchedule.findMany({

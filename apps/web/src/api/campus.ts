@@ -21,6 +21,7 @@ import type {
   StudentMaterials,
   StudentProfile,
   StudentTimetable,
+  TeachableAudience,
 } from '../types/campus'
 
 /**
@@ -343,17 +344,29 @@ export const materialsApi = {
       .then((r) => (Array.isArray(r.data) ? r.data : r.data.data)),
 
   /**
-   * An INSTRUCTOR publishes by naming one of their OWN lectures: the service copies
-   * the academic address off it, which is simultaneously the proof they teach
-   * that cohort. Naming a cohort directly is refused for an INSTRUCTOR and is the
-   * super admin's form of the same call.
+   * The audiences the signed-in instructor may publish to, built from their own
+   * teaching assignments — a course and, for that course, the faculty,
+   * department, level, semester and sections they teach, with no day or time.
+   * The publish form's dependent dropdowns are populated from this, and the
+   * create endpoint re-checks the same set server-side.
+   */
+  teachableAudiences: () =>
+    api
+      .get<{ audiences: TeachableAudience[] }>('/materials/audiences')
+      .then((r) => r.data.audiences ?? []),
+
+  /**
+   * Material is addressed to a course and an academic audience — never to a
+   * single lecture occurrence. An INSTRUCTOR may only name an audience they
+   * teach (the server checks the submission against their teaching assignments
+   * and copies the stored address from the authorized side); a super admin may
+   * name any audience directly.
    */
   create: (data: {
     courseId: string
     title: string
     driveUrl: string
-    scheduleId?: string
-    cohort?: {
+    audience: {
       faculty: string
       department: string
       level: number

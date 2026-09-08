@@ -15,6 +15,7 @@ import {
   deactivateMaterial,
   getMaterials,
   getMyMaterials,
+  getTeachableAudiences,
   updateMaterial,
 } from "../controllers/material.controller.js";
 
@@ -37,6 +38,17 @@ router.get("/my", requireRole("STUDENT"), requireApproved, getMyMaterials);
 
 const isStaff = requireRole("INSTRUCTOR", "UNIVERSITY_ADMIN", "SYSTEM_OWNER");
 
+/**
+ * The academic audiences the caller may publish to, built from their own
+ * teaching assignments. This is what the publish form's dependent dropdowns are
+ * populated from, so an instructor is only ever offered a course and audience
+ * they teach — and the create endpoint re-checks the same set server-side.
+ *
+ * Mounted before "/" so the literal path is matched ahead of any parameterised
+ * one, exactly like "/my".
+ */
+router.get("/audiences", isStaff, getTeachableAudiences);
+
 router.get("/", isStaff, validateQuery(materialQuerySchema), getMaterials);
 
 /**
@@ -44,10 +56,10 @@ router.get("/", isStaff, validateQuery(materialQuerySchema), getMaterials);
  *
  * Open to a plain INSTRUCTOR, because keeping a course's folder current is the
  * instructor's own work — the whole point of the feature is that nobody has to
- * go through the university to update a link. Which cohort they may address is
+ * go through the university to update a link. Which audience they may address is
  * the constrained part, and it is constrained inside MaterialService: an
- * instructor publishes against one of their own lectures, and only a super
- * admin may name an academic address directly.
+ * instructor may only name a course and audience drawn from their own teaching
+ * assignments, and only a super admin may name an academic audience directly.
  */
 router.post("/", isStaff, validate(createMaterialSchema), createMaterial);
 
