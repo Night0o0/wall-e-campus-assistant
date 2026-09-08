@@ -52,7 +52,7 @@ const OTHER_COURSE = {
 
 /**
  * The one audience INSTRUCTOR teaches — CS201, level 2, semester 1, section B.
- * The shape mirrors ScheduleRepository.findInstructorAudiences: the academic
+ * The shape mirrors ScheduleRepository.findPublishableScopes: the academic
  * address with the course, and no day or time.
  */
 const TAUGHT_AUDIENCE = {
@@ -124,13 +124,16 @@ const build = (options: {
   }
 
   class FakeSchedules extends ScheduleRepository {
-    override async findInstructorAudiences(
+    // Stands in for the offering/teaching-assignment-gated derivation: the real
+    // query only returns a course's audience while the instructor holds an
+    // active teaching assignment for it, so the doubles hand back the already
+    // authorized scopes. Only INSTRUCTOR, in ORG_A, is authorized for anything;
+    // everyone else — OTHER_INSTRUCTOR, a cross-tenant caller — gets nothing, so
+    // no scope matches and publishing is refused.
+    override async findPublishableScopes(
       organizationId: string,
       instructorId: string
     ) {
-      // Only INSTRUCTOR, in ORG_A, teaches anything. Everyone else — including
-      // OTHER_INSTRUCTOR and a cross-tenant caller — teaches nothing, so no
-      // audience matches and publishing is refused.
       if (organizationId !== ORG_A || instructorId !== INSTRUCTOR.id) {
         return [] as never;
       }

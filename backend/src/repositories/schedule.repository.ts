@@ -141,23 +141,53 @@ export class ScheduleRepository {
   }
 
   /**
-   * The distinct academic audiences an instructor teaches, with no day/time.
+   * The academic audiences an instructor may publish course material to, with
+   * no day or time.
    *
-   * Course material is targeted at a course and an academic audience, not at a
-   * lecture occurrence — but a lecture row is the only place this schema records
-   * that an instructor teaches a given faculty/department/level/semester/section
-   * of a course. So the set of audiences an instructor may publish to is exactly
-   * the set of addresses across their own active lectures, collapsed so the two
-   * weekly slots of one course to one cohort become a single publishable target.
+   * Course material is targeted at a course and an academic audience, never at a
+   * lecture occurrence. Authorization and audience come from two different
+   * places, deliberately:
    *
-   * Only active lectures count: a deactivated lecture no longer represents a
-   * standing teaching assignment. The projection deliberately omits dayOfWeek,
-   * startTime, endTime and room — the caller must not be able to reintroduce a
-   * single occurrence into what is meant to be an occurrence-independent target.
+   *   * COURSE authorization runs through CourseOffering/TeachingAssignment — a
+   *     scope is only publishable while the instructor still holds an ACTIVE
+   *     teaching assignment on an active offering of that course. That is the
+   *     normalized record of "this instructor teaches this course", so a
+   *     lingering timetable row for a course they have been unassigned from
+   *     yields nothing.
+   *
+   *   * The AUDIENCE (faculty, department, level, semester, section) is read off
+   *     the instructor's active lectures, because that is the only place this
+   *     schema currently carries the full free-text address. A future
+   *     normalization can move it onto the offering/cohort and drop this join.
+   *
+   * The projection omits dayOfWeek, startTime, endTime and room so no caller can
+   * reintroduce a single occurrence into what must be occurrence-independent;
+   * the service deduplicates, so two weekly slots of one course to one cohort
+   * collapse to a single option.
    */
-  async findInstructorAudiences(organizationId: string, instructorId: string) {
+  async findPublishableScopes(organizationId: string, instructorId: string) {
     return prisma.lectureSchedule.findMany({
-      where: { organizationId, instructorId, isActive: true },
+      where: {
+        organizationId,
+        instructorId,
+        isActive: true,
+        // The course must be one the instructor is actively assigned to teach,
+        // proven through an active offering + teaching assignment rather than
+        // through the lecture row alone.
+        course: {
+          is: {
+            offerings: {
+              some: {
+                organizationId,
+                isActive: true,
+                teachingAssignments: {
+                  some: { instructorId, isActive: true },
+                },
+              },
+            },
+          },
+        },
+      },
       select: {
         faculty: true,
         department: true,
