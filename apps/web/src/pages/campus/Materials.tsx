@@ -9,12 +9,12 @@ import { Input, Select } from '../../components/ui/Field'
 import { Skeleton } from '../../components/ui/Skeleton'
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog'
 import { useToast } from '../../components/ui/Toast'
-import { campusAdminApi, coursesApi, materialsApi } from '../../api/campus'
+import { coursesApi, materialsApi } from '../../api/campus'
 import { getErrorMessage } from '../../lib/api'
 import { useAuth } from '../../context/AuthContext'
 import type {
   CourseMaterial,
-  LectureSchedule,
+  CourseSummary,
   StudentMaterials,
 } from '../../types/campus'
 
@@ -320,6 +320,22 @@ export function Materials() {
   )
 }
 
+/**
+ * The publish form.
+ *
+ * An instructor no longer picks a lecture occurrence. Material belongs to a
+ * course and an academic audience, not to a Tuesday-10:00 slot, so the form is
+ * built from the audiences the server says this instructor teaches — a course,
+ * and for that course the faculty, department, level, semester and sections of
+ * their teaching assignments. The dropdowns are dependent: choosing a course
+ * narrows the faculties to those it is taught in, choosing a faculty narrows
+ * the departments, and so on down to the section. There is no free-text entry
+ * for an academic field, and the submitted audience is re-checked server-side —
+ * the dropdowns are a convenience, never the authorization.
+ *
+ * A super admin administers the whole university and may address any cohort, so
+ * they keep the explicit form.
+ */
 function PublishModal({
   open,
   isSuperAdmin,
@@ -333,25 +349,30 @@ function PublishModal({
 }) {
   const toast = useToast()
 
-  const [form, setForm] = useState({
-    scheduleId: '',
+  const emptyForm = {
     courseId: '',
     title: '',
     driveUrl: '',
     faculty: '',
     department: '',
-    level: '2',
-    semester: '1',
+    level: '',
+    semester: '',
     section: '',
-  })
+  }
+  const [form, setForm] = useState(emptyForm)
 
-  // An instructor publishes against one of their own lectures, so the picker is
-  // their teaching timetable — which is also the proof they teach the cohort.
-  const { data: lectures = [] } = useQuery({
-    queryKey: ['campus', 'my-teaching-schedule'],
-    queryFn: campusAdminApi.myTeachingSchedule,
+  // The audiences this instructor may publish to — a course and, for it, the
+  // faculty/department/level/semester/section they teach, with no day or time.
+  // This is what every dependent dropdown below is derived from.
+  const audiencesQuery = useQuery({
+    queryKey: ['campus', 'material-audiences'],
+    queryFn: materialsApi.teachableAudiences,
     enabled: open && !isSuperAdmin,
   })
+  const audiences = useMemo(
+    () => audiencesQuery.data ?? [],
+    [audiencesQuery.data]
+  )
 
   const { data: courses } = useQuery({
     queryKey: ['campus', 'courses', 'all'],
@@ -359,9 +380,39 @@ function PublishModal({
     enabled: open && isSuperAdmin,
   })
 
-  const selectedLecture: LectureSchedule | undefined = lectures.find(
-    (lecture) => lecture.id === form.scheduleId
-  )
+  /**
+   * The dependent option lists for the instructor form.
+   *
+   * Each list is the distinct values that remain once every choice ABOVE it has
+   * been applied, so an option can only ever narrow to an audience the server
+   * would accept. A choice lower in the chain that a higher change has
+   * invalidated is dropped on submit by the same filter, and cleared eagerly in
+   * the change handlers below.
+   */
+  const options = useMemo(() => {
+    const distinct = <T,>(values: T[]) => [...new Set(values)]
+
+    const forCourse = audiences.filter((a) => a.course.id === form.courseId)
+    const forFaculty = forCourse.filter((a) => a.faculty === form.faculty)
+    const forDept = forFaculty.filter((a) => a.department === form.department)
+    const forLevel = forDept.filter((a) => String(a.level) === form.level)
+    const forSemester = forLevel.filter((a) => String(a.semester) === form.semester)
+
+    const courseMap = new Map(audiences.map((a) => [a.course.id, a.course]))
+
+    return {
+      courses: [...courseMap.values()].sort((a, b) =>
+        a.courseCode.localeCompare(b.courseCode)
+      ),
+      faculties: distinct(forCourse.map((a) => a.faculty)).sort(),
+      departments: distinct(forFaculty.map((a) => a.department)).sort(),
+      levels: distinct(forDept.map((a) => a.level)).sort((a, b) => a - b),
+      semesters: distinct(forLevel.map((a) => a.semester)).sort((a, b) => a - b),
+      sections: distinct(
+        forSemester.map((a) => a.section).filter((s): s is string => s !== null)
+      ).sort(),
+    }
+  }, [audiences, form.courseId, form.faculty, form.department, form.level, form.semester])
 
   const publish = useMutation({
     mutationFn: () => {
@@ -370,44 +421,34 @@ function PublishModal({
           courseId: form.courseId,
           title: form.title,
           driveUrl: form.driveUrl,
-          cohort: {
+          audience: {
             faculty: form.faculty,
             department: form.department,
-            level: Number(form.level),
-            semester: Number(form.semester),
+            // The level and semester selects show these defaults but only write
+            // to state on change, so coalesce to the same values shown.
+            level: Number(form.level || '2'),
+            semester: Number(form.semester || '1'),
             section: form.section || null,
           },
         })
       }
 
-      if (!selectedLecture) {
-        throw new Error('Pick one of your lectures first')
-      }
-
       return materialsApi.create({
-        // The course comes from the lecture, not from a second dropdown that
-        // could disagree with it — and it is `course.id`, because the lecture
-        // projection has no flat courseId. Sending undefined here is a 400 from
-        // the validator, which is exactly what an instructor used to get.
-        courseId: selectedLecture.course.id,
+        courseId: form.courseId,
         title: form.title,
         driveUrl: form.driveUrl,
-        scheduleId: selectedLecture.id,
+        audience: {
+          faculty: form.faculty,
+          department: form.department,
+          level: Number(form.level),
+          semester: Number(form.semester),
+          section: form.section,
+        },
       })
     },
     onSuccess: () => {
       toast.success('Link published')
-      setForm({
-        scheduleId: '',
-        courseId: '',
-        title: '',
-        driveUrl: '',
-        faculty: '',
-        department: '',
-        level: '2',
-        semester: '1',
-        section: '',
-      })
+      setForm(emptyForm)
       onSaved()
     },
     onError: (caught) => toast.error(getErrorMessage(caught)),
@@ -417,6 +458,17 @@ function PublishModal({
     event.preventDefault()
     publish.mutate()
   }
+
+  // The instructor form needs a complete audience; the super admin's level and
+  // semester default in their own selects, so only the course is gated there.
+  const instructorReady =
+    Boolean(form.courseId) &&
+    Boolean(form.faculty) &&
+    Boolean(form.department) &&
+    Boolean(form.level) &&
+    Boolean(form.semester) &&
+    Boolean(form.section)
+  const canSubmit = isSuperAdmin ? Boolean(form.courseId) : instructorReady
 
   return (
     <Modal
@@ -464,7 +516,7 @@ function PublishModal({
               />
               <Select
                 label="Level"
-                value={form.level}
+                value={form.level || '2'}
                 onChange={(event) => setForm({ ...form, level: event.target.value })}
               >
                 {[1, 2, 3, 4, 5, 6, 7].map((value) => (
@@ -475,7 +527,7 @@ function PublishModal({
               </Select>
               <Select
                 label="Semester"
-                value={form.semester}
+                value={form.semester || '1'}
                 onChange={(event) =>
                   setForm({ ...form, semester: event.target.value })
                 }
@@ -493,42 +545,15 @@ function PublishModal({
             />
           </>
         ) : (
-          <>
-            <Select
-              label="Which of your lectures is this for?"
-              required
-              hint="The cohort is copied from the lecture — that is what proves you teach it."
-              value={form.scheduleId}
-              onChange={(event) =>
-                setForm({ ...form, scheduleId: event.target.value })
-              }
-            >
-              <option value="">Choose a lecture…</option>
-              {lectures
-                .filter((lecture) => lecture.isActive)
-                .map((lecture) => (
-                  <option key={lecture.id} value={lecture.id}>
-                    {lecture.course.courseCode} · Level {lecture.level}
-                    {lecture.section ? ` · Section ${lecture.section}` : ''} ·{' '}
-                    {lecture.dayOfWeek.toLowerCase()} {lecture.startTime}
-                  </option>
-                ))}
-            </Select>
-
-            {selectedLecture && (
-              <div className="rounded-lg bg-slate-50 p-3 text-sm text-slate-600">
-                Publishing to{' '}
-                <span className="font-medium text-slate-900">
-                  {selectedLecture.department}, level {selectedLecture.level},
-                  semester {selectedLecture.semester}
-                  {selectedLecture.section
-                    ? `, section ${selectedLecture.section}`
-                    : ' — every section'}
-                </span>
-                .
-              </div>
-            )}
-          </>
+          <InstructorAudienceFields
+            form={form}
+            setForm={setForm}
+            options={options}
+            emptyForm={emptyForm}
+            loading={audiencesQuery.isLoading}
+            error={audiencesQuery.isError ? getErrorMessage(audiencesQuery.error) : null}
+            empty={!audiencesQuery.isLoading && !audiencesQuery.isError && audiences.length === 0}
+          />
         )}
 
         <Input
@@ -552,12 +577,206 @@ function PublishModal({
           <Button type="button" variant="ghost" onClick={onClose}>
             Cancel
           </Button>
-          <Button type="submit" loading={publish.isPending}>
+          <Button type="submit" loading={publish.isPending} disabled={!canSubmit}>
             Publish
           </Button>
         </div>
       </form>
     </Modal>
+  )
+}
+
+type PublishForm = {
+  courseId: string
+  title: string
+  driveUrl: string
+  faculty: string
+  department: string
+  level: string
+  semester: string
+  section: string
+}
+
+/**
+ * The instructor's dependent audience dropdowns.
+ *
+ * Course → Faculty → Department → Level → Semester → Section, each offering only
+ * the values that remain once the choices above it are applied. Changing a field
+ * clears everything below it, so a stale lower choice can never survive into a
+ * submission the server would reject.
+ */
+function InstructorAudienceFields({
+  form,
+  setForm,
+  options,
+  emptyForm,
+  loading,
+  error,
+  empty,
+}: {
+  form: PublishForm
+  setForm: (form: PublishForm) => void
+  options: {
+    courses: CourseSummary[]
+    faculties: string[]
+    departments: string[]
+    levels: number[]
+    semesters: number[]
+    sections: string[]
+  }
+  emptyForm: PublishForm
+  loading: boolean
+  error: string | null
+  empty: boolean
+}) {
+  if (loading) {
+    return <Skeleton className="h-40" />
+  }
+
+  if (error) {
+    return (
+      <div className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">
+        Could not load the courses you teach: {error}
+      </div>
+    )
+  }
+
+  if (empty) {
+    return (
+      <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+        You have no teaching assignments yet, so there is no audience to publish
+        to. Ask your department to assign you to a course first.
+      </div>
+    )
+  }
+
+  const semesterLabel = (value: number) =>
+    value === 1 ? 'First semester' : value === 2 ? 'Second semester' : `Semester ${value}`
+
+  return (
+    <div className="space-y-4">
+      <Select
+        label="Course"
+        required
+        hint="Only the courses you teach are listed."
+        value={form.courseId}
+        onChange={(event) =>
+          // Reset every dependent field: a new course invalidates them all.
+          setForm({
+            ...emptyForm,
+            title: form.title,
+            driveUrl: form.driveUrl,
+            courseId: event.target.value,
+          })
+        }
+      >
+        <option value="">Choose a course…</option>
+        {options.courses?.map((course) => (
+          <option key={course.id} value={course.id}>
+            {course.courseCode} — {course.courseName}
+          </option>
+        ))}
+      </Select>
+
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <Select
+          label="Faculty"
+          required
+          disabled={!form.courseId}
+          value={form.faculty}
+          onChange={(event) =>
+            setForm({
+              ...form,
+              faculty: event.target.value,
+              department: '',
+              level: '',
+              semester: '',
+              section: '',
+            })
+          }
+        >
+          <option value="">Choose a faculty…</option>
+          {options.faculties.map((faculty) => (
+            <option key={faculty} value={faculty}>
+              {faculty}
+            </option>
+          ))}
+        </Select>
+
+        <Select
+          label="Department"
+          required
+          disabled={!form.faculty}
+          value={form.department}
+          onChange={(event) =>
+            setForm({
+              ...form,
+              department: event.target.value,
+              level: '',
+              semester: '',
+              section: '',
+            })
+          }
+        >
+          <option value="">Choose a department…</option>
+          {options.departments.map((department) => (
+            <option key={department} value={department}>
+              {department}
+            </option>
+          ))}
+        </Select>
+
+        <Select
+          label="Level"
+          required
+          disabled={!form.department}
+          value={form.level}
+          onChange={(event) =>
+            setForm({ ...form, level: event.target.value, semester: '', section: '' })
+          }
+        >
+          <option value="">Choose a level…</option>
+          {options.levels.map((level) => (
+            <option key={level} value={level}>
+              Level {level}
+            </option>
+          ))}
+        </Select>
+
+        <Select
+          label="Semester"
+          required
+          disabled={!form.level}
+          value={form.semester}
+          onChange={(event) =>
+            setForm({ ...form, semester: event.target.value, section: '' })
+          }
+        >
+          <option value="">Choose a semester…</option>
+          {options.semesters.map((semester) => (
+            <option key={semester} value={semester}>
+              {semesterLabel(semester)}
+            </option>
+          ))}
+        </Select>
+      </div>
+
+      <Select
+        label="Section / group"
+        required
+        hint="Only the sections you teach for this cohort are listed."
+        disabled={!form.semester}
+        value={form.section}
+        onChange={(event) => setForm({ ...form, section: event.target.value })}
+      >
+        <option value="">Choose a section…</option>
+        {options.sections.map((section) => (
+          <option key={section} value={section}>
+            Section {section}
+          </option>
+        ))}
+      </Select>
+    </div>
   )
 }
 

@@ -140,6 +140,97 @@ export class ScheduleRepository {
     return { data, total };
   }
 
+  /**
+   * The academic audiences an instructor may publish course material to, with
+   * no day or time.
+   *
+   * Course material is targeted at a course and an academic audience, never at a
+   * lecture occurrence. Authorization and audience come from two different
+   * places, deliberately:
+   *
+   *   * AUTHORIZATION runs through the lecture's OWN teaching assignment. It is
+   *     not enough that the instructor teaches the same course somewhere — this
+   *     exact lecture must hang off an active TeachingAssignment of theirs, on
+   *     an active offering, in this organization. Binding to the lecture's own
+   *     `teachingAssignment` is what stops a stale or unrelated schedule for
+   *     another cohort of the same course from becoming publishable, and a
+   *     legacy row with a null `teachingAssignmentId` grants nothing.
+   *
+   *   * The COURSE of the returned scope is the offering's course reached
+   *     through that assignment — the authoritative course — not the lecture's
+   *     own `courseId`.
+   *
+   *   * The AUDIENCE (faculty, department, level, semester, section) is read off
+   *     the lecture, because that is the only place this schema currently
+   *     carries the full free-text address. A future normalization can move it
+   *     onto the offering/cohort and drop this reliance.
+   *
+   * The projection omits dayOfWeek, startTime, endTime and room so no caller can
+   * reintroduce a single occurrence into what must be occurrence-independent;
+   * the service deduplicates, so two weekly slots of one course to one cohort
+   * collapse to a single option.
+   */
+  async findPublishableScopes(organizationId: string, instructorId: string) {
+    const rows = await prisma.lectureSchedule.findMany({
+      where: {
+        organizationId,
+        instructorId,
+        isActive: true,
+        // Non-null and matching: the lecture's own assignment must be an active
+        // one of this instructor, on an active offering, in this organization.
+        // A null teachingAssignmentId cannot satisfy a relation filter, so
+        // legacy rows are excluded rather than falling back to schedule-only.
+        teachingAssignmentId: { not: null },
+        teachingAssignment: {
+          is: {
+            instructorId,
+            isActive: true,
+            organizationId,
+            offering: {
+              is: { isActive: true, organizationId },
+            },
+          },
+        },
+      },
+      select: {
+        faculty: true,
+        department: true,
+        level: true,
+        semester: true,
+        section: true,
+        // The authoritative course comes through the assignment's offering, not
+        // the lecture's own courseId.
+        teachingAssignment: {
+          select: {
+            offering: {
+              select: {
+                course: { select: { id: true, courseCode: true, courseName: true } },
+              },
+            },
+          },
+        },
+      },
+      orderBy: [
+        { faculty: "asc" },
+        { department: "asc" },
+        { level: "asc" },
+        { semester: "asc" },
+        { section: "asc" },
+      ],
+    });
+
+    return rows.map((row) => ({
+      // The where clause guarantees teachingAssignment (and its offering.course)
+      // is present, so this narrowing is safe.
+      course: row.teachingAssignment!.offering.course,
+      faculty: row.faculty,
+      department: row.department,
+      level: row.level,
+      semester: row.semester,
+      section: row.section,
+    }));
+  }
+
   /** The unpaginated week, in reading order — used by the personal timetables. */
   async findTimetable(filter: ScheduleFilter) {
     return prisma.lectureSchedule.findMany({

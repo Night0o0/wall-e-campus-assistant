@@ -64,19 +64,29 @@ const driveUrlField = z
   });
 
 /**
- * The cohort a link is addressed to.
+ * The academic audience a link is addressed to.
  *
- * `scheduleId` is the ordinary way in: an instructor picks one of their own
- * lectures and the service copies the academic address off it. That is what
- * makes "my second-year mechatronics group" a single choice rather than five
- * free-text fields to retype, and it is also what proves the instructor teaches
- * the cohort they are publishing to.
+ * Course material belongs to a course and an authorized academic audience —
+ * a faculty, department, level, semester and (optionally) a section — never to
+ * a single lecture occurrence on a particular day and time. The same shape is
+ * sent by everyone who may publish; who is allowed to name which audience is
+ * the authorization decision, and it is made in the service, not here:
  *
- * The explicit form exists for a super admin, who administers the whole
- * university and may legitimately publish for a cohort they do not teach. It is
- * rejected for a plain INSTRUCTOR inside the service — see CourseMaterialService.
+ *   * An INSTRUCTOR may only name an audience they actually teach. The value
+ *     they send is checked against the set of audiences derived from their own
+ *     active lectures (a lecture row IS the teaching assignment in this schema),
+ *     and the stored record is copied from that authorized audience rather than
+ *     from the request — so editing the HTTP body cannot widen the scope.
+ *
+ *   * A super admin administers the whole university and may name any audience
+ *     directly, including a section-less one that covers every section.
+ *
+ * Academic fields are never free-typed on the instructor's side: the client
+ * offers only the values the audiences endpoint returned. The bounds below are
+ * a structural backstop — anything outside them is a 400 before the
+ * authorization check is even reached.
  */
-const explicitCohort = z.object({
+const academicAudience = z.object({
   faculty: z.string().trim().min(2).max(100),
   department: z.string().trim().min(2).max(100),
   level: z.number().int().min(1).max(7),
@@ -85,18 +95,14 @@ const explicitCohort = z.object({
   section: z.string().trim().min(1).max(20).nullish(),
 });
 
-export const createMaterialSchema = z
-  .object({
-    courseId: z.string().uuid("courseId must be a valid id"),
-    title: z.string().trim().min(2, "Give the link a name").max(120),
-    driveUrl: driveUrlField,
-    scheduleId: z.string().uuid("scheduleId must be a valid id").optional(),
-    cohort: explicitCohort.optional(),
-  })
-  .refine((data) => Boolean(data.scheduleId) !== Boolean(data.cohort), {
-    message: "Provide either scheduleId or cohort, not both",
-    path: ["scheduleId"],
-  });
+export type MaterialAudienceInput = z.infer<typeof academicAudience>;
+
+export const createMaterialSchema = z.object({
+  courseId: z.string().uuid("courseId must be a valid id"),
+  title: z.string().trim().min(2, "Give the link a name").max(120),
+  driveUrl: driveUrlField,
+  audience: academicAudience,
+});
 
 export type CreateMaterialInput = z.infer<typeof createMaterialSchema>;
 

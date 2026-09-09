@@ -15,8 +15,12 @@ import {
  *
  * Two properties carry the feature. A student sees their own cohort's folders
  * and cannot ask for anybody else's, because the cohort is never a parameter.
- * And an instructor publishes to cohorts they actually teach, because the
- * academic address is copied off one of their own lectures rather than typed.
+ * And an instructor publishes only to audiences they actually teach: the
+ * submitted faculty/department/level/semester/section is checked against the
+ * set derived from their own active lectures, and the record is written from
+ * the matched authorized audience rather than from the request body — so
+ * material is targeted at a course and academic audience, never at a single
+ * lecture occurrence, and the audience cannot be widened by editing the request.
  */
 
 const ORG_A = "org-a";
@@ -38,7 +42,7 @@ const COURSE = {
   courseName: "Data Structures",
 };
 
-/** A second real course, taught by nobody in SCHEDULE. */
+/** A second real course, taught by nobody in TAUGHT_AUDIENCE. */
 const OTHER_COURSE = {
   id: "11111111-1111-4111-8111-111111111111",
   organizationId: ORG_A,
@@ -46,16 +50,22 @@ const OTHER_COURSE = {
   courseName: "Electronics",
 };
 
-const SCHEDULE = {
-  id: "8f14e45f-ceea-467a-9575-9c1f9c1f9c1f",
-  organizationId: ORG_A,
-  courseId: COURSE.id,
-  instructorId: INSTRUCTOR.id,
+/**
+ * The one audience INSTRUCTOR teaches — CS201, level 2, semester 1, section B.
+ * The shape mirrors ScheduleRepository.findPublishableScopes: the academic
+ * address with the course, and no day or time.
+ */
+const TAUGHT_AUDIENCE = {
   faculty: "Faculty of Engineering",
   department: "Mechatronics",
   level: 2,
   semester: 1,
   section: "B",
+  course: {
+    id: COURSE.id,
+    courseCode: COURSE.courseCode,
+    courseName: COURSE.courseName,
+  },
 };
 
 const COMPLETE_PROFILE = {
@@ -71,6 +81,8 @@ const build = (options: {
   profile?: Record<string, unknown> | null;
   cohortRows?: Record<string, unknown>[];
   existing?: Record<string, unknown> | null;
+  /** Audiences INSTRUCTOR teaches; defaults to the single TAUGHT_AUDIENCE. */
+  audiences?: Record<string, unknown>[];
 } = {}) => {
   const created: Record<string, unknown>[] = [];
   const updated: { id: string; data: Record<string, unknown> }[] = [];
@@ -112,8 +124,20 @@ const build = (options: {
   }
 
   class FakeSchedules extends ScheduleRepository {
-    override async findById(id: string) {
-      return (id === SCHEDULE.id ? SCHEDULE : null) as never;
+    // Stands in for the offering/teaching-assignment-gated derivation: the real
+    // query only returns a course's audience while the instructor holds an
+    // active teaching assignment for it, so the doubles hand back the already
+    // authorized scopes. Only INSTRUCTOR, in ORG_A, is authorized for anything;
+    // everyone else — OTHER_INSTRUCTOR, a cross-tenant caller — gets nothing, so
+    // no scope matches and publishing is refused.
+    override async findPublishableScopes(
+      organizationId: string,
+      instructorId: string
+    ) {
+      if (organizationId !== ORG_A || instructorId !== INSTRUCTOR.id) {
+        return [] as never;
+      }
+      return (options.audiences ?? [TAUGHT_AUDIENCE]) as never;
     }
   }
 
@@ -160,29 +184,46 @@ describe("the Drive link policy", () => {
         courseId: COURSE.id,
         title: "Lectures",
         driveUrl: "https://evil.test/x",
-        scheduleId: SCHEDULE.id,
+        audience: {
+          faculty: "Faculty of Engineering",
+          department: "Mechatronics",
+          level: 2,
+          semester: 1,
+          section: "B",
+        },
       })
     ).toThrow();
   });
 
-  it("requires exactly one way of naming the cohort", () => {
+  it("requires an audience", () => {
+    // Material must name a course and an academic audience; there is no other
+    // way to say who a link is for.
+    expect(() =>
+      createMaterialSchema.parse({
+        courseId: COURSE.id,
+        title: "Lectures",
+        driveUrl: "https://drive.google.com/drive/folders/abc",
+      })
+    ).toThrow();
+  });
+
+  it("rejects a structurally invalid audience", () => {
     const base = {
       courseId: COURSE.id,
       title: "Lectures",
       driveUrl: "https://drive.google.com/drive/folders/abc",
     };
 
-    expect(() => createMaterialSchema.parse(base)).toThrow();
-
+    // Semester is 1 or 2, level is 1-7 — an out-of-range combination is a 400
+    // from the validator before any authorization check is reached.
     expect(() =>
       createMaterialSchema.parse({
         ...base,
-        scheduleId: SCHEDULE.id,
-        cohort: {
+        audience: {
           faculty: "Faculty of Engineering",
           department: "Mechatronics",
-          level: 2,
-          semester: 1,
+          level: 9,
+          semester: 3,
         },
       })
     ).toThrow();
@@ -202,16 +243,25 @@ describe("the Drive link policy", () => {
 });
 
 describe("publishing material", () => {
+  /** The audience INSTRUCTOR actually teaches, as the client would send it. */
+  const TAUGHT = {
+    faculty: "Faculty of Engineering",
+    department: "Mechatronics",
+    level: 2,
+    semester: 1,
+    section: "B",
+  };
+
   const input = (overrides: Record<string, unknown> = {}) =>
     createMaterialSchema.parse({
       courseId: COURSE.id,
       title: "Lectures",
       driveUrl: "https://drive.google.com/drive/folders/abc",
-      scheduleId: SCHEDULE.id,
+      audience: TAUGHT,
       ...overrides,
     });
 
-  it("copies the cohort off the instructor's own lecture", async () => {
+  it("writes the audience off the instructor's own teaching", async () => {
     const { service, created } = build();
 
     await service.create(input(), INSTRUCTOR);
@@ -228,48 +278,96 @@ describe("publishing material", () => {
     });
   });
 
-  it("refuses an instructor publishing against somebody else's lecture", async () => {
+  it("takes the stored audience from teaching, not from the request body", async () => {
+    // The submitted strings only SELECT which taught audience is meant — the
+    // record is written from the authorized side, so casing or whitespace a
+    // caller sends cannot end up addressing anyone. The student lookup matches
+    // case-insensitively anyway, but this proves the request text is discarded.
     const { service, created } = build();
 
-    // 404 rather than 403, so this cannot be used to discover which lectures
-    // exist and who teaches them.
+    await service.create(
+      input({
+        audience: { ...TAUGHT, faculty: "  faculty OF engineering ", section: " b " },
+      }),
+      INSTRUCTOR
+    );
+
+    expect(created[0]).toMatchObject({
+      faculty: "Faculty of Engineering",
+      section: "B",
+    });
+  });
+
+  it("refuses an instructor publishing to an audience they do not teach", async () => {
+    const { service, created } = build();
+
+    // OTHER_INSTRUCTOR teaches nothing, so no audience matches. A 403 rather
+    // than a 404: the course exists and is theirs to see, but this cohort is
+    // not one they teach.
     await expect(service.create(input(), OTHER_INSTRUCTOR)).rejects.toMatchObject({
-      statusCode: 404,
+      statusCode: 403,
     });
 
     expect(created).toEqual([]);
   });
 
-  it("refuses an instructor naming a cohort directly", async () => {
+  it("refuses an instructor addressing a cohort adjacent to one they teach", async () => {
     const { service, created } = build();
 
-    // This is the parameter through which an instructor could address a year
-    // they have nothing to do with, so it is closed to them entirely.
+    // INSTRUCTOR teaches CS201 level 2 section B. Level 3 of the same course,
+    // or section C, is a different audience they were never assigned — a
+    // hand-edited request body must not reach it.
     await expect(
-      service.create(
-        input({
-          scheduleId: undefined,
-          cohort: {
-            faculty: "Faculty of Engineering",
-            department: "Mechatronics",
-            level: 4,
-            semester: 1,
-          },
-        }),
-        INSTRUCTOR
-      )
+      service.create(input({ audience: { ...TAUGHT, level: 3 } }), INSTRUCTOR)
+    ).rejects.toMatchObject({ statusCode: 403 });
+
+    await expect(
+      service.create(input({ audience: { ...TAUGHT, section: "C" } }), INSTRUCTOR)
     ).rejects.toMatchObject({ statusCode: 403 });
 
     expect(created).toEqual([]);
   });
 
-  it("lets a super admin name a cohort, defaulting the section to every section", async () => {
+  it("refuses an instructor addressing a course they do not teach", async () => {
+    const { service, created } = build();
+
+    // EE101 is a real course in this university, but no lecture of it is taught
+    // by INSTRUCTOR — so borrowing the audience of a course they do teach in
+    // order to publish to one they do not is refused.
+    await expect(
+      service.create(input({ courseId: OTHER_COURSE.id }), INSTRUCTOR)
+    ).rejects.toMatchObject({ statusCode: 403 });
+
+    expect(created).toEqual([]);
+  });
+
+  it("lets a super admin name an audience directly", async () => {
+    const { service, created } = build();
+
+    // A super admin is not scoped to their own teaching; an audience they were
+    // never assigned is accepted as-is.
+    await service.create(
+      input({
+        audience: {
+          faculty: "Faculty of Engineering",
+          department: "Mechatronics",
+          level: 4,
+          semester: 1,
+          section: "A",
+        },
+      }),
+      SUPER_ADMIN
+    );
+
+    expect(created[0]).toMatchObject({ level: 4, section: "A" });
+  });
+
+  it("defaults a super admin's omitted section to every section", async () => {
     const { service, created } = build();
 
     await service.create(
       input({
-        scheduleId: undefined,
-        cohort: {
+        audience: {
           faculty: "Faculty of Engineering",
           department: "Mechatronics",
           level: 4,
@@ -282,35 +380,55 @@ describe("publishing material", () => {
     expect(created[0]).toMatchObject({ level: 4, section: null });
   });
 
-  it("refuses a lecture that is not for the course being published to", async () => {
-    const { service, created } = build();
-
-    // Both the course and the lecture are real and both belong to this
-    // university — but the lecture teaches CS201, and the link is being
-    // published to EE101. Without this check, "pick one of your lectures" would
-    // let an instructor borrow the cohort of a lecture they teach in order to
-    // address a course they do not.
-    await expect(
-      service.create(
-        createMaterialSchema.parse({
-          courseId: OTHER_COURSE.id,
-          title: "Lectures",
-          driveUrl: "https://drive.google.com/drive/folders/abc",
-          scheduleId: SCHEDULE.id,
-        }),
-        INSTRUCTOR
-      )
-    ).rejects.toMatchObject({ statusCode: 400 });
-
-    expect(created).toEqual([]);
-  });
-
   it("404s on a course from another university", async () => {
     const { service } = build();
 
     await expect(
       service.create(input(), { ...INSTRUCTOR, organizationId: ORG_B })
     ).rejects.toMatchObject({ statusCode: 404 });
+  });
+});
+
+describe("the audiences an instructor may publish to", () => {
+  it("collapses lectures of one course and cohort into a single audience", async () => {
+    // Two weekly slots — the same course to the same cohort — are one
+    // publishable audience, with no day or time.
+    const { service } = build({
+      audiences: [
+        TAUGHT_AUDIENCE,
+        { ...TAUGHT_AUDIENCE },
+        {
+          ...TAUGHT_AUDIENCE,
+          level: 3,
+          section: "A",
+          course: {
+            id: OTHER_COURSE.id,
+            courseCode: OTHER_COURSE.courseCode,
+            courseName: OTHER_COURSE.courseName,
+          },
+        },
+      ],
+    });
+
+    const { audiences } = await service.listTeachableAudiences(INSTRUCTOR);
+
+    expect(audiences).toHaveLength(2);
+    expect(audiences[0]).toMatchObject({
+      course: { id: COURSE.id },
+      level: 2,
+      section: "B",
+    });
+    // Never a day, time or room — an audience is occurrence-independent.
+    expect(audiences[0]).not.toHaveProperty("dayOfWeek");
+    expect(audiences[0]).not.toHaveProperty("startTime");
+  });
+
+  it("is empty for someone who teaches nothing", async () => {
+    const { service } = build();
+
+    const { audiences } = await service.listTeachableAudiences(OTHER_INSTRUCTOR);
+
+    expect(audiences).toEqual([]);
   });
 });
 
