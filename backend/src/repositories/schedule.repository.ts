@@ -148,17 +148,22 @@ export class ScheduleRepository {
    * lecture occurrence. Authorization and audience come from two different
    * places, deliberately:
    *
-   *   * COURSE authorization runs through CourseOffering/TeachingAssignment — a
-   *     scope is only publishable while the instructor still holds an ACTIVE
-   *     teaching assignment on an active offering of that course. That is the
-   *     normalized record of "this instructor teaches this course", so a
-   *     lingering timetable row for a course they have been unassigned from
-   *     yields nothing.
+   *   * AUTHORIZATION runs through the lecture's OWN teaching assignment. It is
+   *     not enough that the instructor teaches the same course somewhere — this
+   *     exact lecture must hang off an active TeachingAssignment of theirs, on
+   *     an active offering, in this organization. Binding to the lecture's own
+   *     `teachingAssignment` is what stops a stale or unrelated schedule for
+   *     another cohort of the same course from becoming publishable, and a
+   *     legacy row with a null `teachingAssignmentId` grants nothing.
+   *
+   *   * The COURSE of the returned scope is the offering's course reached
+   *     through that assignment — the authoritative course — not the lecture's
+   *     own `courseId`.
    *
    *   * The AUDIENCE (faculty, department, level, semester, section) is read off
-   *     the instructor's active lectures, because that is the only place this
-   *     schema currently carries the full free-text address. A future
-   *     normalization can move it onto the offering/cohort and drop this join.
+   *     the lecture, because that is the only place this schema currently
+   *     carries the full free-text address. A future normalization can move it
+   *     onto the offering/cohort and drop this reliance.
    *
    * The projection omits dayOfWeek, startTime, endTime and room so no caller can
    * reintroduce a single occurrence into what must be occurrence-independent;
@@ -166,24 +171,23 @@ export class ScheduleRepository {
    * collapse to a single option.
    */
   async findPublishableScopes(organizationId: string, instructorId: string) {
-    return prisma.lectureSchedule.findMany({
+    const rows = await prisma.lectureSchedule.findMany({
       where: {
         organizationId,
         instructorId,
         isActive: true,
-        // The course must be one the instructor is actively assigned to teach,
-        // proven through an active offering + teaching assignment rather than
-        // through the lecture row alone.
-        course: {
+        // Non-null and matching: the lecture's own assignment must be an active
+        // one of this instructor, on an active offering, in this organization.
+        // A null teachingAssignmentId cannot satisfy a relation filter, so
+        // legacy rows are excluded rather than falling back to schedule-only.
+        teachingAssignmentId: { not: null },
+        teachingAssignment: {
           is: {
-            offerings: {
-              some: {
-                organizationId,
-                isActive: true,
-                teachingAssignments: {
-                  some: { instructorId, isActive: true },
-                },
-              },
+            instructorId,
+            isActive: true,
+            organizationId,
+            offering: {
+              is: { isActive: true, organizationId },
             },
           },
         },
@@ -194,7 +198,17 @@ export class ScheduleRepository {
         level: true,
         semester: true,
         section: true,
-        course: { select: { id: true, courseCode: true, courseName: true } },
+        // The authoritative course comes through the assignment's offering, not
+        // the lecture's own courseId.
+        teachingAssignment: {
+          select: {
+            offering: {
+              select: {
+                course: { select: { id: true, courseCode: true, courseName: true } },
+              },
+            },
+          },
+        },
       },
       orderBy: [
         { faculty: "asc" },
@@ -204,6 +218,17 @@ export class ScheduleRepository {
         { section: "asc" },
       ],
     });
+
+    return rows.map((row) => ({
+      // The where clause guarantees teachingAssignment (and its offering.course)
+      // is present, so this narrowing is safe.
+      course: row.teachingAssignment!.offering.course,
+      faculty: row.faculty,
+      department: row.department,
+      level: row.level,
+      semester: row.semester,
+      section: row.section,
+    }));
   }
 
   /** The unpaginated week, in reading order — used by the personal timetables. */
