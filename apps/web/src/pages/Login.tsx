@@ -6,6 +6,7 @@ import { getErrorMessage } from '../lib/api'
 import { routeAfterLogin } from '../lib/navigation'
 import { Button } from '../components/ui/Button'
 import { Input } from '../components/ui/Field'
+import { AndroidBetaDownload } from '../components/AndroidBetaDownload'
 
 export function Login() {
   const { user, isLoading: isRestoringSession, login } = useAuth()
@@ -157,6 +158,11 @@ export function Login() {
               Forgot your password?
             </Link>
           </p>
+
+          {/* Students sign in on the Android app; the public beta lives behind a
+              configured Firebase App Distribution invite link and hides itself
+              when that link is unset. */}
+          <AndroidBetaDownload />
         </div>
       </div>
     </div>
