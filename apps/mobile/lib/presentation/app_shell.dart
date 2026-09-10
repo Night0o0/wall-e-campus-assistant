@@ -181,27 +181,18 @@ class _PendingApproval extends StatelessWidget {
                         border: Border.all(
                             color: AppColors.orange.withValues(alpha: .25)),
                       ),
-                      child: Row(
+                      child: const Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          const Icon(Icons.schedule_rounded,
-                              color: AppColors.orange),
-                          const SizedBox(width: 10),
-                          const Text(
+                          Icon(Icons.schedule_rounded, color: AppColors.orange),
+                          SizedBox(width: 10),
+                          Text(
                             'Pending university approval',
                             style: TextStyle(
                               color: AppColors.ink,
                               fontWeight: FontWeight.w700,
                             ),
                           ),
-                          if (checking) ...[
-                            const SizedBox(width: 10),
-                            const SizedBox(
-                              width: 14,
-                              height: 14,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            ),
-                          ],
                         ],
                       ),
                     ),
