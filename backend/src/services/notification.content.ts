@@ -147,3 +147,100 @@ export const accountRejectedContent = (
   title: "Your registration was not approved",
   body: `Your registration at ${organizationName} was not approved and the account has been closed. Contact your department if you believe this is a mistake.`,
 });
+
+/* ---------------------------- Material & schedule -------------------------- */
+
+/**
+ * Wording and machine payload for the event notifications generated when staff
+ * publish material or change the timetable. Like the account decisions these
+ * are not reminders — nothing schedules them — but unlike them they fan out to
+ * a whole cohort, so `data.type` carries the deep-link target the client routes
+ * on. Values are plain (strings, numbers, null) so they survive being flattened
+ * to FCM's string-only data map.
+ */
+
+export const materialPublishedContent = (input: {
+  courseName: string;
+  title: string;
+}): RenderedNotification => ({
+  title: "New course material",
+  body: `${input.title} was published for ${input.courseName}.`,
+});
+
+export const materialPublishedPayload = (input: {
+  materialId: string;
+  courseId: string;
+  courseCode: string;
+  courseName: string;
+  title: string;
+}) => ({
+  kind: "COURSE_MATERIAL",
+  type: NotificationType.COURSE_MATERIAL_PUBLISHED,
+  route: "materials",
+  materialId: input.materialId,
+  courseId: input.courseId,
+  courseCode: input.courseCode,
+  courseName: input.courseName,
+  title: input.title,
+});
+
+const scheduleWhen = (input: { dayOfWeek: string; startTime: string; room: string }) =>
+  `${input.dayOfWeek.charAt(0)}${input.dayOfWeek.slice(1).toLowerCase()} ${input.startTime}, room ${input.room}`;
+
+export const scheduleCreatedContent = (input: {
+  courseName: string;
+  dayOfWeek: string;
+  startTime: string;
+  room: string;
+}): RenderedNotification => ({
+  title: "New lecture on your timetable",
+  body: `${input.courseName} — ${scheduleWhen(input)}.`,
+});
+
+export const scheduleUpdatedContent = (input: {
+  courseName: string;
+  dayOfWeek: string;
+  startTime: string;
+  room: string;
+}): RenderedNotification => ({
+  title: "Timetable updated",
+  body: `${input.courseName} has changed — now ${scheduleWhen(input)}.`,
+});
+
+export const scheduleCancelledContent = (input: {
+  courseName: string;
+}): RenderedNotification => ({
+  title: "Lecture cancelled",
+  body: `${input.courseName} has been removed from your timetable.`,
+});
+
+export const schedulePayload = (input: {
+  type: NotificationType;
+  scheduleId: string;
+  courseId: string;
+  courseCode: string;
+  courseName: string;
+  dayOfWeek: string;
+  startTime: string;
+  endTime: string;
+  room: string;
+}) => ({
+  kind: "SCHEDULE",
+  type: input.type,
+  route: "timetable",
+  scheduleId: input.scheduleId,
+  courseId: input.courseId,
+  courseCode: input.courseCode,
+  courseName: input.courseName,
+  dayOfWeek: input.dayOfWeek,
+  startTime: input.startTime,
+  endTime: input.endTime,
+  room: input.room,
+});
+
+/** The machine payload attached to an account decision, for client routing. */
+export const accountDecisionPayload = (type: NotificationType) => ({
+  kind: "ACCOUNT",
+  type,
+  route: "home",
+});

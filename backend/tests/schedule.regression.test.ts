@@ -36,6 +36,10 @@ vi.mock("../src/repositories/student.repository.js", () => ({
   StudentRepository: class {
     findByUserId = mocks.findByUserId;
     findCohort = vi.fn().mockResolvedValue([]);
+    // The schedule service now also notifies the cohort of created/changed/
+    // cancelled lectures. This regression suite only cares that the timetable
+    // behavior is unchanged, so the audience is empty and nothing is generated.
+    findApprovedAudience = vi.fn().mockResolvedValue([]);
   },
 }));
 

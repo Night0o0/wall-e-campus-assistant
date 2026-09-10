@@ -25,6 +25,15 @@ class AuthSession {
   final String identifier;
   final String organizationId;
   final bool isVerified;
+
+  AuthSession copyWith({bool? isVerified}) => AuthSession(
+        token: token,
+        id: id,
+        name: name,
+        identifier: identifier,
+        organizationId: organizationId,
+        isVerified: isVerified ?? this.isVerified,
+      );
 }
 
 class ApiException implements Exception {

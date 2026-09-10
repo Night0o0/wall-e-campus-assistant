@@ -106,7 +106,17 @@ const build = (options: {
 
     override async create(data: Record<string, unknown>) {
       created.push(data);
-      return { id: "new-material", ...data } as never;
+      // The real repository returns the row with its course relation; the
+      // publish path reads course.courseCode/courseName to notify the cohort.
+      return {
+        id: "new-material",
+        ...data,
+        course: {
+          id: COURSE.id,
+          courseCode: COURSE.courseCode,
+          courseName: COURSE.courseName,
+        },
+      } as never;
     }
 
     override async update(id: string, data: Record<string, unknown>) {
@@ -149,15 +159,29 @@ const build = (options: {
     }
   }
 
+  // A stub event notifier: publishing a material now also notifies the cohort,
+  // but that path is covered by campus-events.notifier.test.ts. Here it must
+  // simply not reach the database, and its calls are recorded so the publish
+  // path can be shown to trigger exactly one notification.
+  const materialEvents: unknown[] = [];
+  const events = {
+    async materialPublished(event: unknown) {
+      materialEvents.push(event);
+      return 0;
+    },
+  } as unknown as import("../src/services/campus-events.notifier.js").CampusEventNotifier;
+
   return {
     created,
     updated,
     cohortQueries,
+    materialEvents,
     service: new MaterialService(
       new FakeMaterials(),
       new FakeCourses(),
       new FakeSchedules(),
-      new FakeStudents()
+      new FakeStudents(),
+      events
     ),
   };
 };
@@ -262,7 +286,7 @@ describe("publishing material", () => {
     });
 
   it("writes the audience off the instructor's own teaching", async () => {
-    const { service, created } = build();
+    const { service, created, materialEvents } = build();
 
     await service.create(input(), INSTRUCTOR);
 
@@ -270,6 +294,19 @@ describe("publishing material", () => {
       organizationId: ORG_A,
       courseId: COURSE.id,
       addedById: INSTRUCTOR.id,
+      faculty: "Faculty of Engineering",
+      department: "Mechatronics",
+      level: 2,
+      semester: 1,
+      section: "B",
+    });
+
+    // Publishing notifies the cohort exactly once, with the STORED audience.
+    expect(materialEvents).toHaveLength(1);
+    expect(materialEvents[0]).toMatchObject({
+      materialId: "new-material",
+      organizationId: ORG_A,
+      courseId: COURSE.id,
       faculty: "Faculty of Engineering",
       department: "Mechatronics",
       level: 2,

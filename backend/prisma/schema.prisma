@@ -133,6 +133,10 @@ enum NotificationType {
   ASSIGNMENT_PUBLISHED
   ASSIGNMENT_DUE_SOON
   GRADE_PUBLISHED
+  COURSE_MATERIAL_PUBLISHED
+  SCHEDULE_CREATED
+  SCHEDULE_UPDATED
+  SCHEDULE_CANCELLED
 }
 
 /**
@@ -721,6 +725,15 @@ model Notification {
   /// The exact start instant of the lecture occurrence being reminded about.
   occurrenceStartsAt DateTime?
 
+  /// Stable idempotency key for notifications that are NOT lecture reminders —
+  /// account decisions, material publications and schedule changes. The lecture
+  /// reminders' unique key is (userId, lectureScheduleId, occurrenceStartsAt,
+  /// type), which relies on a non-null lectureScheduleId; event notifications
+  /// have none, and two rows of NULLs would not collide, so they carry an
+  /// explicit per-recipient key instead (e.g. "material-published:<id>:<user>").
+  /// NULL for lecture reminders — Postgres lets a unique index hold many NULLs.
+  eventKey String?
+
   type  NotificationType
   title String
   body  String
@@ -747,6 +760,9 @@ model Notification {
   /// the generator: the same person can hold only one reminder of one type for
   /// one occurrence of one lecture, however often the generator runs.
   @@unique([userId, lectureScheduleId, occurrenceStartsAt, type], name: "notification_occurrence_identity")
+  /// Idempotency for event notifications. NULL for lecture reminders (many
+  /// allowed); non-null keys make a retry or a repeated request a no-op insert.
+  @@unique([eventKey], name: "notification_event_identity")
   /// The worker's claim query.
   @@index([status, scheduledFor])
   /// The inbox and the unread badge.

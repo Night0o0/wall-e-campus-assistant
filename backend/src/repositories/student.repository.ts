@@ -109,6 +109,59 @@ export class StudentRepository {
   }
 
   /**
+   * The students an event notification (material published, schedule change)
+   * may be addressed to: ACTIVE and APPROVED students whose stored academic
+   * profile matches the audience, within the given tenant.
+   *
+   * Two differences from `findCohort`, both required by the event rules:
+   *
+   *   * Approval matters here. A reminder generator addresses a whole timetabled
+   *     cohort, but an event notification must reach only students who have been
+   *     let in — so `isVerified` and an ACTIVE account are part of the query.
+   *
+   *   * `section` is optional. A material with no section targets every section
+   *     of the faculty/department/level, so a null section drops the section
+   *     filter entirely; a non-null one narrows to that section (schedules
+   *     always carry one).
+   *
+   * Semester is still not comparable in SQL (free text vs. 1/2), so the caller
+   * narrows on it with parseSemesterNumber — exactly as the reminder generator
+   * does — and `semester` is returned for that.
+   */
+  async findApprovedAudience(criteria: {
+    organizationId: string;
+    faculty: string;
+    department: string;
+    level: number;
+    section: string | null;
+  }) {
+    const sameText = (value: string): Prisma.StringFilter => ({
+      equals: value.trim(),
+      mode: "insensitive",
+    });
+
+    return prisma.studentProfile.findMany({
+      where: {
+        faculty: sameText(criteria.faculty),
+        department: sameText(criteria.department),
+        level: criteria.level,
+        ...(criteria.section ? { section: sameText(criteria.section) } : {}),
+        user: {
+          organizationId: criteria.organizationId,
+          role: "STUDENT",
+          isActive: true,
+          isVerified: true,
+          accountStatus: "ACTIVE",
+        },
+      },
+      select: {
+        semester: true,
+        user: { select: { id: true, organizationId: true } },
+      },
+    });
+  }
+
+  /**
    * The same cohort, with the columns a roster export prints.
    *
    * Deliberately a separate method rather than a widened `findCohort`: the

@@ -18,12 +18,70 @@ import { ScheduleCriteria, cohortMatches, resolveCohort } from "../utils/cohort.
 import { badRequest, conflict, notFound } from "../utils/AppError.js";
 import { paginate } from "../utils/pagination.js";
 import { LectureNotificationService } from "./lecture-notification.service.js";
+import { CampusEventNotifier, ScheduleEvent } from "./campus-events.notifier.js";
+import { logger } from "../utils/logger.js";
 
 const scheduleRepo = new ScheduleRepository();
 const courseRepo = new CourseRepository();
 const userRepo = new UserRepository();
 const studentRepo = new StudentRepository();
 const lectureNotifications = new LectureNotificationService();
+const eventNotifier = new CampusEventNotifier();
+
+/** The fields whose change makes a schedule update worth telling a cohort about. */
+const MEANINGFUL_SCHEDULE_FIELDS = [
+  "courseId",
+  "dayOfWeek",
+  "startTime",
+  "endTime",
+  "room",
+  "faculty",
+  "department",
+  "level",
+  "semester",
+  "section",
+  "instructorId",
+] as const;
+
+/**
+ * Builds the cohort event from a schedule the repository returned. Reads only
+ * server-held values, so the resulting audience can never be one a request
+ * tried to name.
+ */
+const toScheduleEvent = (schedule: ScheduleWithRelations): ScheduleEvent => ({
+  scheduleId: schedule.id,
+  organizationId: schedule.organizationId,
+  courseId: schedule.courseId,
+  courseCode: schedule.course.courseCode,
+  courseName: schedule.course.courseName,
+  faculty: schedule.faculty,
+  department: schedule.department,
+  level: schedule.level,
+  semester: schedule.semester,
+  section: schedule.section,
+  dayOfWeek: schedule.dayOfWeek,
+  startTime: schedule.startTime,
+  endTime: schedule.endTime,
+  room: schedule.room,
+});
+
+/**
+ * Cohort notifications are best effort: the timetable write has already
+ * committed, and a notification failure must not fail the request or undo it.
+ */
+const notifySchedule = async (
+  kind: "created" | "updated" | "cancelled",
+  schedule: ScheduleWithRelations
+) => {
+  try {
+    const event = toScheduleEvent(schedule);
+    if (kind === "created") await eventNotifier.scheduleCreated(event);
+    else if (kind === "updated") await eventNotifier.scheduleUpdated(event);
+    else await eventNotifier.scheduleCancelled(event);
+  } catch (error) {
+    logger.error("schedule.notify_failed", { scheduleId: schedule.id, kind, error });
+  }
+};
 
 /**
  * Just enough of the authenticated user to make an authorization decision.
@@ -62,6 +120,10 @@ export class ScheduleService {
     });
 
     const created = await scheduleRepo.create({ ...input, organizationId });
+
+    if (created.isActive) {
+      await notifySchedule("created", created);
+    }
 
     return this.present(created);
   }
@@ -108,7 +170,24 @@ export class ScheduleService {
     // them again from the details it has now.
     await lectureNotifications.resetForSchedule(id);
 
+    // Tell the cohort only about a change worth telling them about: a moved,
+    // renamed, re-roomed or re-timed lecture, not an incidental re-save. A
+    // deactivating update is a cancellation, notified as such.
+    if (!updated.isActive && existing.isActive) {
+      await notifySchedule("cancelled", updated);
+    } else if (updated.isActive && this.meaningfullyChanged(existing, updated)) {
+      await notifySchedule("updated", updated);
+    }
+
     return this.present(updated);
+  }
+
+  /** Whether any cohort-visible field of a schedule actually changed. */
+  private meaningfullyChanged(
+    before: ScheduleWithRelations,
+    after: ScheduleWithRelations
+  ): boolean {
+    return MEANINGFUL_SCHEDULE_FIELDS.some((field) => before[field] !== after[field]);
   }
 
   /**
@@ -129,6 +208,8 @@ export class ScheduleService {
       id,
       "The lecture was cancelled"
     );
+
+    await notifySchedule("cancelled", deactivated);
 
     return this.present(deactivated);
   }

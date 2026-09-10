@@ -153,11 +153,12 @@ export class UserRepository {
      * approval" screen that will never change. Notify-then-update can tell them
      * they are in while they are not. Both rows commit, or neither does.
      *
-     * The notification is written already SENT rather than PENDING. It is not a
-     * scheduled reminder and there is nothing for the delivery worker to claim —
-     * the student sees it the next time the client reads /api/notifications,
-     * which is the delivery path. Push, when a provider is configured, is an
-     * extra channel for it rather than the thing that makes it real.
+     * The notification is written PENDING and due now, not pre-marked SENT.
+     * SENT was the bug: it meant the delivery worker never claimed the row, so
+     * an approval could never be pushed once an FCM provider existed. As PENDING
+     * it is the source of truth in the inbox AND eligible for dispatch — the
+     * worker delivers it (push when configured) and marks it SENT. `eventKey`
+     * makes a re-issued decision a no-op insert rather than a duplicate.
      */
     async updateWithNotification(
         id: string,
@@ -167,6 +168,8 @@ export class UserRepository {
             type: NotificationType;
             title: string;
             body: string;
+            eventKey: string;
+            data?: Prisma.InputJsonValue;
         }
     ) {
         return prisma.$transaction(async (tx) => {
@@ -181,12 +184,13 @@ export class UserRepository {
                     type: notice.type,
                     title: notice.title,
                     body: notice.body,
+                    data: notice.data,
+                    eventKey: notice.eventKey,
                     // No lecture, so no occurrence. Both columns are nullable
                     // for exactly this case — see NotificationType in
                     // schema.prisma.
                     scheduledFor: now,
-                    sentAt: now,
-                    status: "SENT"
+                    status: "PENDING"
                 }
             });
 

@@ -101,6 +101,19 @@ export class NotificationDispatcher {
         })),
       });
 
+      // A provider that pruned dead handsets tells us so; retire them before
+      // marking the row, so the next send does not retry a gone device. This
+      // never changes the delivery outcome — the record stands regardless.
+      if (result.invalidTokens && result.invalidTokens.length > 0) {
+        const pruned = await this.devices.deactivateTokens(result.invalidTokens);
+        if (pruned > 0) {
+          logger.info("notification_worker.tokens_pruned", {
+            notificationId: notification.id,
+            pruned,
+          });
+        }
+      }
+
       if (result.delivered) {
         await this.notifications.markSent(notification.id, now);
         return "sent";

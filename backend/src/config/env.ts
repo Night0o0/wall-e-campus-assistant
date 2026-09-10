@@ -159,9 +159,17 @@ const envSchema = z.object({
     .default(15 * 60_000),
 
   // Delivery back end. "log" writes the notification to the server log and is
-  // the pilot default; "none" stores it in-app only. Firebase goes here when
-  // the Flutter client is wired up.
-  PUSH_PROVIDER: z.enum(["log", "none"]).default("log"),
+  // the pilot default; "none" stores it in-app only; "firebase" delivers real
+  // pushes through Firebase Cloud Messaging (FirebaseAdminPushProvider). The
+  // in-app notification/outbox is the source of truth in every case — push is
+  // an extra channel layered over it.
+  PUSH_PROVIDER: z.enum(["log", "none", "firebase"]).default("log"),
+
+  // Firebase Admin service-account credentials for PUSH_PROVIDER=firebase. This
+  // is a SECRET (it contains a private key): it is read from the environment
+  // only, never committed, and never logged. Accepts the raw service-account
+  // JSON or that JSON base64-encoded (Render env fields dislike newlines).
+  FIREBASE_SERVICE_ACCOUNT: z.string().min(1).optional(),
 
   // Exposes /api/notifications/dev/*, which can conjure reminders on demand.
   // Ignored in production — see `devToolsEnabled` below.
@@ -337,6 +345,24 @@ if (parsed.data.MAIL_PROVIDER === "smtp" && !parsed.data.SMTP_HOST) {
 if (Boolean(parsed.data.SMTP_USER) !== Boolean(parsed.data.SMTP_PASSWORD)) {
   console.error(
     "\n❌ SMTP_USER and SMTP_PASSWORD must be configured together.\n"
+  );
+  process.exit(1);
+}
+
+/**
+ * Push through Firebase needs a credential. Without it the provider could not
+ * authenticate to FCM, and a "firebase" instance that silently degraded to
+ * in-app-only would hide a misconfiguration. Fail at boot, where somebody is
+ * watching, exactly like the SMTP guard above.
+ */
+if (
+  parsed.data.PUSH_PROVIDER === "firebase" &&
+  !parsed.data.FIREBASE_SERVICE_ACCOUNT
+) {
+  console.error(
+    "\n❌ PUSH_PROVIDER is \"firebase\" but FIREBASE_SERVICE_ACCOUNT is not set.\n" +
+      "   Provide the Firebase Admin service-account JSON (raw or base64) in the\n" +
+      "   FIREBASE_SERVICE_ACCOUNT environment variable. Never commit it.\n"
   );
   process.exit(1);
 }

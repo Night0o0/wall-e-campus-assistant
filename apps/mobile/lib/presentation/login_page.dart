@@ -2,15 +2,22 @@ import 'package:flutter/material.dart';
 
 import '../core/app_theme.dart';
 import '../data/campus_api.dart';
+import '../data/push_service.dart';
 import 'app_shell.dart';
 import 'brand_logo.dart';
 import 'register_page.dart';
 
 class LoginPage extends StatefulWidget {
-  const LoginPage({required this.api, this.initialError, super.key});
+  const LoginPage({
+    required this.api,
+    this.initialError,
+    this.pushService,
+    super.key,
+  });
 
   final CampusGateway api;
   final String? initialError;
+  final PushService? pushService;
 
   @override
   State<LoginPage> createState() => _LoginPageState();
@@ -57,7 +64,11 @@ class _LoginPageState extends State<LoginPage> {
       if (!mounted) return;
       Navigator.of(context).pushReplacement(
         MaterialPageRoute<void>(
-          builder: (_) => AppShell(session: session, api: widget.api),
+          builder: (_) => AppShell(
+            session: session,
+            api: widget.api,
+            pushService: widget.pushService,
+          ),
         ),
       );
     } on ApiException catch (error) {
