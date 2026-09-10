@@ -186,11 +186,16 @@ class _PendingApproval extends StatelessWidget {
                         children: [
                           Icon(Icons.schedule_rounded, color: AppColors.orange),
                           SizedBox(width: 10),
-                          Text(
-                            'Pending university approval',
-                            style: TextStyle(
-                              color: AppColors.ink,
-                              fontWeight: FontWeight.w700,
+                          // Flexible so the label wraps on a narrow surface
+                          // instead of overflowing; at normal width it is
+                          // unchanged (fits on one line).
+                          Flexible(
+                            child: Text(
+                              'Pending university approval',
+                              style: TextStyle(
+                                color: AppColors.ink,
+                                fontWeight: FontWeight.w700,
+                              ),
                             ),
                           ),
                         ],

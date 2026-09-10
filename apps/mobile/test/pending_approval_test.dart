@@ -55,9 +55,17 @@ Future<void> _dispose(WidgetTester tester) async {
   await tester.pump();
 }
 
+/// Render at a phone-sized surface (the real target) rather than the 800x600
+/// test default, so the layout is exercised at the width it is designed for.
+Future<void> _usePhoneSurface(WidgetTester tester) async {
+  await tester.binding.setSurfaceSize(const Size(390, 844));
+  addTearDown(() => tester.binding.setSurfaceSize(null));
+}
+
 void main() {
   testWidgets('shows the pending screen and stays there while unapproved',
       (tester) async {
+    await _usePhoneSurface(tester);
     final api = _ApprovingApi();
     await tester.pumpWidget(MaterialApp(
       home: AppShell(session: _pendingSession, api: api),
@@ -80,6 +88,7 @@ void main() {
 
   testWidgets('transitions into the student shell once approved, no re-login',
       (tester) async {
+    await _usePhoneSurface(tester);
     final api = _ApprovingApi();
     await tester.pumpWidget(MaterialApp(
       home: AppShell(session: _pendingSession, api: api),
