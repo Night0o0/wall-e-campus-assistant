@@ -44,6 +44,23 @@ export interface NotificationDraft {
   scheduledFor: Date;
 }
 
+/**
+ * An event notification — account decision, material publication, schedule
+ * change. Unlike a reminder it hangs off no lecture and no occurrence; its
+ * idempotency is the per-recipient `eventKey`. Written PENDING and due now, so
+ * the same delivery worker that sends reminders also pushes these — the row is
+ * the source of truth and push is the extra channel over it.
+ */
+export interface EventNotificationDraft {
+  organizationId: string;
+  userId: string;
+  eventKey: string;
+  type: NotificationType;
+  title: string;
+  body: string;
+  data: Prisma.InputJsonValue;
+}
+
 export interface NotificationListFilter {
   userId: string;
   organizationId: string;
@@ -66,6 +83,41 @@ export class NotificationRepository {
 
     const { count } = await prisma.notification.createMany({
       data: drafts,
+      skipDuplicates: true,
+    });
+
+    return count;
+  }
+
+  /**
+   * Idempotent insert of event notifications. `skipDuplicates` leans on the
+   * unique index over `eventKey`, so a retry or a repeated request (the same
+   * material published twice, an approval re-issued) is a no-op in the database
+   * rather than a duplicate in someone's inbox. Written PENDING and due now.
+   */
+  async createEventNotifications(drafts: EventNotificationDraft[]) {
+    if (drafts.length === 0) {
+      return 0;
+    }
+
+    const now = new Date();
+
+    const { count } = await prisma.notification.createMany({
+      data: drafts.map((draft) => ({
+        organizationId: draft.organizationId,
+        userId: draft.userId,
+        eventKey: draft.eventKey,
+        type: draft.type,
+        title: draft.title,
+        body: draft.body,
+        data: draft.data,
+        // No lecture, no occurrence: event notifications are addressed by
+        // eventKey, and deliberately do not touch lectureScheduleId so the
+        // schedule-reminder sweeps (delete/cancel by schedule) never disturb
+        // them.
+        scheduledFor: now,
+        status: NotificationStatus.PENDING,
+      })),
       skipDuplicates: true,
     });
 

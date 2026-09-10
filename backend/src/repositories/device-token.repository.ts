@@ -34,6 +34,23 @@ export class DeviceTokenRepository {
     });
   }
 
+  /**
+   * Retire tokens the push provider reported as permanently gone
+   * (unregistered/invalid). Not owner-scoped: the provider is authoritative
+   * that these handsets no longer exist, so there is nobody to scope to, and
+   * leaving them active would retry a dead device on every future send.
+   */
+  async deactivateTokens(tokens: string[]) {
+    if (tokens.length === 0) return 0;
+
+    const { count } = await prisma.deviceToken.updateMany({
+      where: { token: { in: tokens }, isActive: true },
+      data: { isActive: false },
+    });
+
+    return count;
+  }
+
   /** Scoped to the owner, so one user cannot unregister another user's device. */
   async deactivate(token: string, userId: string, organizationId: string) {
     const { count } = await prisma.deviceToken.updateMany({

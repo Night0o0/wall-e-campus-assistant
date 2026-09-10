@@ -5,6 +5,23 @@ plugins {
     id "dev.flutter.flutter-gradle-plugin"
 }
 
+// Firebase Cloud Messaging is wired only when the project has been given its
+// google-services.json (see docs/ANDROID_BETA_DISTRIBUTION.md / PR notes for
+// the exact Console step and path: apps/mobile/android/app/google-services.json).
+// Applying the plugin without that file fails the build, so a build without
+// Firebase config — including CI and any contributor who has not set it up —
+// simply skips it and ships an app whose push layer is inert but whose in-app
+// inbox is unaffected.
+def googleServicesConfig = file("google-services.json")
+if (googleServicesConfig.exists()) {
+    apply plugin: "com.google.gms.google-services"
+} else {
+    logger.warn(
+        "google-services.json not found at ${googleServicesConfig.path}; " +
+        "Firebase push is disabled for this build."
+    )
+}
+
 def releaseValue = { String name, String fallback = null ->
     def envValue = System.getenv(name)
     if (envValue != null && !envValue.trim().isEmpty()) return envValue.trim()
@@ -53,6 +70,9 @@ android {
     ndkVersion = "28.2.13676358"
 
     compileOptions {
+        // flutter_local_notifications relies on Java 8+ APIs (java.time), which
+        // require core library desugaring to run on older Android versions.
+        coreLibraryDesugaringEnabled true
         sourceCompatibility = JavaVersion.VERSION_1_8
         targetCompatibility = JavaVersion.VERSION_1_8
     }
@@ -108,4 +128,9 @@ android {
 
 flutter {
     source = "../.."
+}
+
+dependencies {
+    // Backs coreLibraryDesugaringEnabled above (flutter_local_notifications).
+    coreLibraryDesugaring "com.android.tools:desugar_jdk_libs:2.1.4"
 }

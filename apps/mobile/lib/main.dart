@@ -5,6 +5,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'core/app_theme.dart';
 import 'data/campus_api.dart';
+import 'data/push_service.dart';
+import 'data/push_service_firebase.dart';
 import 'presentation/app_shell.dart';
 import 'presentation/login_page.dart';
 import 'presentation/password_recovery_page.dart';
@@ -17,13 +19,18 @@ Future<void> main() async {
       publishableKey: CampusApi.supabasePublishableKey,
     );
   }
-  runApp(const WallEApp());
+  final api = CampusApi();
+  // Firebase is optional: this returns null (and push is simply disabled) on a
+  // build with no google-services.json, so the app always launches.
+  final pushService = await createFirebasePushService(api);
+  runApp(WallEApp(api: api, pushService: pushService));
 }
 
 class WallEApp extends StatefulWidget {
-  const WallEApp({this.api, super.key});
+  const WallEApp({this.api, this.pushService, super.key});
 
   final CampusGateway? api;
+  final PushService? pushService;
 
   @override
   State<WallEApp> createState() => _WallEAppState();
@@ -84,15 +91,16 @@ class _WallEAppState extends State<WallEApp> {
       debugShowCheckedModeBanner: false,
       title: 'Leornian',
       theme: AppTheme.light,
-      home: _LaunchGate(api: api),
+      home: _LaunchGate(api: api, pushService: widget.pushService),
     );
   }
 }
 
 class _LaunchGate extends StatefulWidget {
-  const _LaunchGate({required this.api});
+  const _LaunchGate({required this.api, this.pushService});
 
   final CampusGateway api;
+  final PushService? pushService;
 
   @override
   State<_LaunchGate> createState() => _LaunchGateState();
@@ -125,10 +133,14 @@ class _LaunchGateState extends State<_LaunchGate> {
 
         final session = snapshot.data;
         if (session != null) {
-          return AppShell(session: session, api: widget.api);
+          return AppShell(
+            session: session,
+            api: widget.api,
+            pushService: widget.pushService,
+          );
         }
 
-        return LoginPage(api: widget.api);
+        return LoginPage(api: widget.api, pushService: widget.pushService);
       },
     );
   }

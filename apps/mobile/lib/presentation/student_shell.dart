@@ -8,6 +8,7 @@ import 'package:mobile_scanner/mobile_scanner.dart';
 
 import '../core/app_theme.dart';
 import '../data/campus_api.dart';
+import '../data/push_service.dart';
 import 'brand_logo.dart';
 import 'external_links.dart';
 
@@ -23,12 +24,14 @@ class StudentShell extends StatefulWidget {
     required this.api,
     required this.session,
     required this.onLogout,
+    this.pushService,
     super.key,
   });
 
   final CampusGateway api;
   final AuthSession session;
   final VoidCallback onLogout;
+  final PushService? pushService;
 
   @override
   State<StudentShell> createState() => _StudentShellState();
@@ -39,6 +42,7 @@ class _StudentShellState extends State<StudentShell> {
   bool _showProfile = false;
   bool _showNotifications = false;
   int _unreadNotifications = 0;
+  bool _pushDenied = false;
 
   List<Widget> get _pages => [
         _TimetablePage(api: widget.api, session: widget.session),
@@ -52,6 +56,88 @@ class _StudentShellState extends State<StudentShell> {
   void initState() {
     super.initState();
     _refreshUnreadCount();
+    _startPush();
+  }
+
+  /// After login, prime and (once) request push permission, then register the
+  /// device. Deferred a frame so a dialog has a mounted context. Everything is
+  /// best effort — the inbox and badge above do not depend on any of it.
+  void _startPush() {
+    final push = widget.pushService;
+    if (push == null) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      final outcome = await push.start(
+        session: widget.session,
+        explain: _showPushExplanation,
+        onRoute: _handlePushRoute,
+      );
+      if (mounted && outcome.denied) {
+        setState(() => _pushDenied = true);
+      }
+    });
+  }
+
+  /// The branded, pre-permission explanation. Returns whether the student wants
+  /// to continue to the OS prompt.
+  Future<bool> _showPushExplanation() async {
+    if (!mounted) return false;
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: _card,
+        title: const Row(
+          children: [
+            LeornianLogo(size: 30),
+            SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                'Stay in the loop',
+                style: TextStyle(
+                    color: AppColors.ink, fontWeight: FontWeight.w800),
+              ),
+            ),
+          ],
+        ),
+        content: const Text(
+          'Turn on notifications to hear the moment your account is approved, '
+          'new course material is posted, and your timetable changes. You can '
+          'change this anytime in system settings.',
+          style: TextStyle(color: AppColors.muted, height: 1.5),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Not now'),
+          ),
+          FilledButton(
+            key: const ValueKey('push-enable'),
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Enable'),
+          ),
+        ],
+      ),
+    );
+    return result ?? false;
+  }
+
+  /// A notification tap routes to the page it is about.
+  void _handlePushRoute(PushRoute route) {
+    if (!mounted) return;
+    setState(() {
+      _showProfile = false;
+      _showNotifications = false;
+      switch (route.destination) {
+        case PushDestination.materials:
+          _index = 3;
+        case PushDestination.assignments:
+          _index = 4;
+        case PushDestination.timetable:
+          _index = 0;
+        case PushDestination.home:
+        case PushDestination.other:
+          _index = 0;
+      }
+    });
   }
 
   Future<void> _refreshUnreadCount() async {
@@ -106,6 +192,12 @@ class _StudentShellState extends State<StudentShell> {
                         _showNotifications = false;
                       }),
                     ),
+                    if (_pushDenied)
+                      _PushDisabledBanner(
+                        onOpenSettings: () =>
+                            widget.pushService?.openSettings(),
+                        onDismiss: () => setState(() => _pushDenied = false),
+                      ),
                     Expanded(
                       child: AnimatedSwitcher(
                         duration: const Duration(milliseconds: 180),
@@ -279,6 +371,51 @@ class _StudentHeader extends StatelessWidget {
                 ),
               ),
             ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Shown when the student declined notification permission: the inbox still
+/// works, and this offers a one-tap route to the OS settings to turn it back on.
+class _PushDisabledBanner extends StatelessWidget {
+  const _PushDisabledBanner({
+    required this.onOpenSettings,
+    required this.onDismiss,
+  });
+
+  final VoidCallback onOpenSettings;
+  final VoidCallback onDismiss;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 10, 8, 10),
+      color: AppColors.orange.withValues(alpha: .12),
+      child: Row(
+        children: [
+          const Icon(Icons.notifications_off_outlined,
+              color: AppColors.orange, size: 18),
+          const SizedBox(width: 10),
+          const Expanded(
+            child: Text(
+              'Notifications are off. Turn them on to hear about approvals, '
+              'material and timetable changes.',
+              style: TextStyle(color: AppColors.ink, fontSize: 11.5),
+            ),
+          ),
+          TextButton(
+            key: const ValueKey('push-open-settings'),
+            onPressed: onOpenSettings,
+            child: const Text('Settings'),
+          ),
+          IconButton(
+            onPressed: onDismiss,
+            icon: const Icon(Icons.close_rounded,
+                color: AppColors.muted, size: 18),
+            visualDensity: VisualDensity.compact,
           ),
         ],
       ),

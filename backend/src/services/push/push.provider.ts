@@ -1,4 +1,5 @@
 import { env } from "../../config/env.js";
+import { FirebaseAdminPushProvider } from "./firebase.provider.js";
 
 /**
  * The seam between "a reminder is due" and "a phone buzzes".
@@ -32,6 +33,13 @@ export interface PushResult {
   /** False marks the notification FAILED; throwing schedules a retry instead. */
   delivered: boolean;
   detail?: string;
+  /**
+   * Tokens the provider was told are permanently gone (unregistered/invalid).
+   * The dispatcher deactivates these so a dead handset is not retried forever.
+   * Never a reason to fail the notification — the row is delivered to whoever
+   * remains and to the in-app inbox regardless.
+   */
+  invalidTokens?: string[];
 }
 
 export interface PushNotificationProvider {
@@ -72,10 +80,19 @@ let provider: PushNotificationProvider | null = null;
 
 export const getPushProvider = (): PushNotificationProvider => {
   if (!provider) {
-    provider =
-      env.PUSH_PROVIDER === "log"
-        ? new LoggingPushProvider()
-        : new InAppOnlyPushProvider();
+    switch (env.PUSH_PROVIDER) {
+      case "firebase":
+        // Imported lazily so a deployment that never enables Firebase does not
+        // pay for firebase-admin at startup, and so the module (which reads the
+        // credential) is only touched when it is actually configured.
+        provider = new FirebaseAdminPushProvider();
+        break;
+      case "log":
+        provider = new LoggingPushProvider();
+        break;
+      default:
+        provider = new InAppOnlyPushProvider();
+    }
   }
 
   return provider;

@@ -11,3 +11,8 @@ GeneratedPluginRegistrant.java
 key.properties
 **/*.keystore
 **/*.jks
+
+# Firebase client config is provisioned per environment and must not be
+# committed. Push is wired only when this file is present locally / in CD.
+google-services.json
+app/google-services.json

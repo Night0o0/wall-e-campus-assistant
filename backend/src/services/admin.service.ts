@@ -5,6 +5,7 @@ import { AdminRepository } from "../repositories/admin.repository.js";
 import { UserRepository } from "../repositories/user.repository.js";
 import {
   accountApprovedContent,
+  accountDecisionPayload,
   accountRejectedContent,
 } from "./notification.content.js";
 import {
@@ -252,6 +253,10 @@ export class AdminService {
       type: decision.type,
       title: content.title,
       body: content.body,
+      // One decision per student, so the recipient IS the identity — a
+      // re-issued approval is a no-op insert rather than a second inbox row.
+      eventKey: `${decision.type === "ACCOUNT_APPROVED" ? "account-approved" : "account-rejected"}:${studentId}`,
+      data: accountDecisionPayload(decision.type),
     });
   }
 

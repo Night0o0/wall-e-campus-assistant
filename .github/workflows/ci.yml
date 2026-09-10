@@ -126,6 +126,8 @@ jobs:
           test/password_lifecycle_test.dart
           test/runtime_verification_test.dart
           test/wall_e_app_test.dart
+          test/push_service_test.dart
+          test/pending_approval_test.dart
 
       - run: flutter build apk --debug
 
